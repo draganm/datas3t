@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -30,7 +31,7 @@ func (c *AdminClient) CreateDB(ctx context.Context, name string) (err error) {
 		}
 	}()
 
-	u := c.u.JoinPath("api", "database", name)
+	u := c.u.JoinPath("api", "db", name)
 	req, err := http.NewRequestWithContext(ctx, "PUT", u.String(), nil)
 	if err != nil {
 		return fmt.Errorf("could not create request: %w", err)
@@ -49,5 +50,39 @@ func (c *AdminClient) CreateDB(ctx context.Context, name string) (err error) {
 	}
 
 	return nil
+
+}
+
+func (c *AdminClient) ListDBs(ctx context.Context) (dbs []string, err error) {
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("ListDBs: %w", err)
+		}
+	}()
+
+	u := c.u.JoinPath("api", "db")
+	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("could not create request: %w", err)
+	}
+
+	res, err := c.hc.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("could not perform request: %w", err)
+	}
+
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		d, _ := io.ReadAll(res.Body)
+		return nil, fmt.Errorf("got unexpected status %s: %s", res.Status, string(d))
+	}
+
+	err = json.NewDecoder(res.Body).Decode(&dbs)
+	if err != nil {
+		return nil, fmt.Errorf("could not decode response: %w", err)
+	}
+
+	return dbs, nil
 
 }

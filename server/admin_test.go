@@ -37,24 +37,24 @@ var _ = BeforeSuite(func() {
 		Creds:  credentials.NewStaticV4("minioadmin", "minioadmin", ""),
 		Secure: false,
 	})
-	Expect(err).To(BeNil())
+	Expect(err).NotTo(HaveOccurred())
 
 	bucketName = mustCreateRandomName()
 
 	err = minioClient.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{})
-	Expect(err).To(BeNil())
+	Expect(err).NotTo(HaveOccurred())
 
 	DeferCleanup(func() {
 		err := minioClient.RemoveBucketWithOptions(ctx, bucketName, minio.RemoveBucketOptions{
 			ForceDelete: true,
 		})
-		Expect(err).To(BeNil())
+		Expect(err).NotTo(HaveOccurred())
 	})
 })
 
 func mustCreateRandomName() string {
 	bucketNameUUID, err := uuid.NewV4()
-	Expect(err).To(BeNil())
+	Expect(err).NotTo(HaveOccurred())
 	return bucketNameUUID.String()
 }
 
@@ -81,14 +81,14 @@ var _ = Describe("server admin api", func() {
 				HostnameImmutable: true,
 			},
 		)
-		Expect(err).To(BeNil())
+		Expect(err).NotTo(HaveOccurred())
 
 		hs = httptest.NewServer(srv.Admin)
 
 		time.Sleep(1 * time.Second)
 
 		cl, err = client.NewAdminClient(hs.URL)
-		Expect(err).To(BeNil())
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 	AfterEach(func() {
@@ -100,8 +100,22 @@ var _ = Describe("server admin api", func() {
 		BeforeEach(func() {
 			err = cl.CreateDB(ctx, "test")
 		})
-		It("works", func() {
-			Expect(err).To(BeNil())
+		It("should not return error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		When("I list the DBs", func() {
+			var dbs []string
+
+			BeforeEach(func() {
+				var err error
+				dbs, err = cl.ListDBs(ctx)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should contain the new database", func() {
+				Expect(dbs).To(Equal([]string{"test"}))
+			})
 		})
 	})
 

@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -16,6 +17,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/go-chi/chi"
 	"github.com/go-logr/logr"
+	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slices"
 )
 
 type Server struct {
@@ -100,7 +103,9 @@ func OpenServer(ctx context.Context, log logr.Logger, cf S3Config) (*Server, err
 		return nil, fmt.Errorf("could not iterate over keys: %w", err)
 	}
 
-	adminRouter.Put("/api/database/{name}", s.handleCreateDB)
+	adminRouter.Put("/api/db/{name}", s.handleCreateDB)
+
+	adminRouter.Get("/api/db", s.handleListDBs)
 
 	return s, nil
 
@@ -175,5 +180,17 @@ func (s *Server) handleCreateDB(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 
 	w.WriteHeader(http.StatusCreated)
+
+}
+
+func (s *Server) handleListDBs(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	dbs := maps.Keys(s.databases)
+	s.mu.Unlock()
+
+	slices.Sort(dbs)
+
+	w.Header().Set("content-type", "application/json")
+	json.NewEncoder(w).Encode(dbs)
 
 }
