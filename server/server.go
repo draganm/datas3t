@@ -15,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/draganm/datas3t/server/s3util"
 	"github.com/go-chi/chi"
 	"github.com/go-logr/logr"
 	"golang.org/x/exp/maps"
@@ -91,7 +92,7 @@ func OpenServer(ctx context.Context, log logr.Logger, cf S3Config) (*Server, err
 		databases:  map[string]bool{},
 	}
 
-	err = s.iterateOverKeys(ctx, cf.Prefix, func(key string) error {
+	err = s3util.IterateOverKeysWithPrefix(ctx, s.client, s.bucketName, cf.Prefix, func(key string) error {
 		parts := strings.Split(key, "/")
 		if len(parts) != 2 {
 			return nil
@@ -108,40 +109,6 @@ func OpenServer(ctx context.Context, log logr.Logger, cf S3Config) (*Server, err
 	adminRouter.Get("/api/db", s.handleListDBs)
 
 	return s, nil
-
-}
-
-func (s *Server) iterateOverKeys(ctx context.Context, prefix string, fn func(key string) error) error {
-	hasNextPage := true
-	var continuationToken *string
-
-	for hasNextPage {
-
-		res, err := s.client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
-			MaxKeys:           10_1000,
-			Bucket:            aws.String(s.bucketName),
-			Prefix:            aws.String(prefix),
-			ContinuationToken: continuationToken,
-		})
-		if err != nil {
-			return fmt.Errorf("could not get object list: %w", err)
-		}
-
-		for _, o := range res.Contents {
-			name := *o.Key
-			name = strings.TrimPrefix(name, prefix+"/")
-			err = fn(name)
-			if err != nil {
-				return err
-			}
-		}
-
-		continuationToken = res.NextContinuationToken
-		hasNextPage = continuationToken != nil
-
-	}
-
-	return nil
 
 }
 
