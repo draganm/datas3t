@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -22,6 +23,8 @@ func NewAdminClient(baseURL string) (*AdminClient, error) {
 
 	return &AdminClient{u: u, hc: http.DefaultClient}, nil
 }
+
+var ErrAlreadyExists = errors.New("already exists")
 
 func (c *AdminClient) CreateDB(ctx context.Context, name string) (err error) {
 
@@ -43,6 +46,10 @@ func (c *AdminClient) CreateDB(ctx context.Context, name string) (err error) {
 	}
 
 	defer res.Body.Close()
+
+	if res.StatusCode == http.StatusConflict {
+		return ErrAlreadyExists
+	}
 
 	if res.StatusCode != http.StatusCreated {
 		d, _ := io.ReadAll(res.Body)

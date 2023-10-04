@@ -104,6 +104,15 @@ var _ = Describe("server admin api", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
+		When("I create the same db again", func() {
+			BeforeEach(func() {
+				err = cl.CreateDB(ctx, "test")
+			})
+			It("should return error", func() {
+				Expect(err).To(MatchError(client.ErrAlreadyExists))
+			})
+		})
+
 		When("I list the DBs", func() {
 			var dbs []string
 

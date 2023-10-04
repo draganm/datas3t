@@ -176,8 +176,17 @@ func (s *Server) handleCreateDB(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.mu.Lock()
-	s.databases[dbName] = true
+	_, exists := s.databases[dbName]
+	if !exists {
+		s.databases[dbName] = true
+	}
 	s.mu.Unlock()
+
+	if exists {
+		http.Error(w, "database already exists", http.StatusConflict)
+		log.Error(err, "refusing to create existing db")
+		return
+	}
 
 	w.WriteHeader(http.StatusCreated)
 
