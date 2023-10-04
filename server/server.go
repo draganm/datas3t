@@ -15,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/draganm/datas3t/server/db"
 	"github.com/draganm/datas3t/server/s3util"
 	"github.com/go-chi/chi"
 	"github.com/go-logr/logr"
@@ -30,7 +31,8 @@ type Server struct {
 	prefix     string
 	log        logr.Logger
 	mu         *sync.Mutex
-	databases  map[string]bool
+	databases  map[string]*db.DB
+	ctx        context.Context
 }
 
 type S3Config struct {
@@ -89,7 +91,8 @@ func OpenServer(ctx context.Context, log logr.Logger, cf S3Config) (*Server, err
 		prefix:     cf.Prefix,
 		log:        log,
 		mu:         &sync.Mutex{},
-		databases:  map[string]bool{},
+		databases:  map[string]*db.DB{},
+		ctx:        ctx,
 	}
 
 	err = s3util.IterateOverKeysWithPrefix(ctx, s.client, s.bucketName, cf.Prefix, func(key string) error {
@@ -105,7 +108,7 @@ func OpenServer(ctx context.Context, log logr.Logger, cf S3Config) (*Server, err
 	}
 
 	adminRouter.Put("/api/db/{name}", s.handleCreateDB)
-
+	adminRouter.Post("/api/db/{name}/uploadUrl/{id}", s.handleUploadURL)
 	adminRouter.Get("/api/db", s.handleListDBs)
 
 	return s, nil
@@ -128,7 +131,19 @@ func (s *Server) handleCreateDB(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbInfoPath := path.Join(s.dbPrefix(dbName), "datas3t")
+	s.mu.Lock()
+	_, exists := s.databases[dbName]
+	s.mu.Unlock()
+
+	if exists {
+		http.Error(w, "database already exists", http.StatusConflict)
+		log.Error(errors.New("db exists"), "refusing to create existing db")
+		return
+	}
+
+	prefix := s.dbPrefix("name")
+
+	dbInfoPath := path.Join(prefix, "datas3t")
 
 	_, err := s.client.PutObject(r.Context(), &s3.PutObjectInput{
 		Bucket: &s.bucketName,
@@ -138,22 +153,21 @@ func (s *Server) handleCreateDB(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
-		log.Error(err, "bad params")
+		log.Error(err, "could not put db marker object")
+		return
+	}
+
+	db, err := db.OpenDB(context.Background(), s.log, s.client, s.bucketName, prefix)
+
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		log.Error(err, "could start db")
 		return
 	}
 
 	s.mu.Lock()
-	_, exists := s.databases[dbName]
-	if !exists {
-		s.databases[dbName] = true
-	}
+	s.databases[dbName] = db
 	s.mu.Unlock()
-
-	if exists {
-		http.Error(w, "database already exists", http.StatusConflict)
-		log.Error(err, "refusing to create existing db")
-		return
-	}
 
 	w.WriteHeader(http.StatusCreated)
 
@@ -168,5 +182,31 @@ func (s *Server) handleListDBs(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("content-type", "application/json")
 	json.NewEncoder(w).Encode(dbs)
+
+}
+
+func (s *Server) handleUploadURL(w http.ResponseWriter, r *http.Request) {
+
+	dbName := chi.URLParam(r, "name")
+	log := s.log.WithValues("method", r.Method, "path", r.URL.Path, "dbName", dbName)
+
+	if !dbNameRegexp.MatchString(dbName) {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		log.Error(errors.New("invalid db name"), "bad params")
+		return
+	}
+
+	s.mu.Lock()
+	db, found := s.databases[dbName]
+	s.mu.Unlock()
+
+	if !found {
+		http.Error(w, "no such db", http.StatusNotFound)
+		log.Error(errors.New("db not found"), "not found")
+		return
+
+	}
+
+	db.HandleUploadURL(w, r)
 
 }

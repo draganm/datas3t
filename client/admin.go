@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 )
 
 type AdminClient struct {
@@ -91,5 +92,39 @@ func (c *AdminClient) ListDBs(ctx context.Context) (dbs []string, err error) {
 	}
 
 	return dbs, nil
+
+}
+
+func (c *AdminClient) GetUploadURL(ctx context.Context, dbName string, id uint64) (ur string, err error) {
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("GetUploadURL: %w", err)
+		}
+	}()
+
+	u := c.u.JoinPath("api", "db", dbName, "uploadUrl", strconv.FormatUint(id, 10))
+	req, err := http.NewRequestWithContext(ctx, "POST", u.String(), nil)
+	if err != nil {
+		return "", fmt.Errorf("could not create request: %w", err)
+	}
+
+	res, err := c.hc.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("could not perform request: %w", err)
+	}
+
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		d, _ := io.ReadAll(res.Body)
+		return "", fmt.Errorf("got unexpected status %s: %s", res.Status, string(d))
+	}
+
+	d, err := io.ReadAll(res.Body)
+	if err != nil {
+		return "", fmt.Errorf("could not read whole URL: %w", err)
+	}
+
+	return string(d), nil
 
 }

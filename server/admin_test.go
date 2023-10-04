@@ -1,9 +1,12 @@
 package server_test
 
 import (
-	"context"
+	"bytes"
 	"fmt"
+	"io"
+	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -29,9 +32,7 @@ const minioEndpoint = "localhost:9000"
 var minioClient *minio.Client
 var bucketName string
 
-var ctx = context.Background()
-
-var _ = BeforeSuite(func() {
+var _ = BeforeSuite(func(ctx SpecContext) {
 	var err error
 	minioClient, err = minio.New(minioEndpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4("minioadmin", "minioadmin", ""),
@@ -44,7 +45,7 @@ var _ = BeforeSuite(func() {
 	err = minioClient.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{})
 	Expect(err).NotTo(HaveOccurred())
 
-	DeferCleanup(func() {
+	DeferCleanup(func(ctx SpecContext) {
 		err := minioClient.RemoveBucketWithOptions(ctx, bucketName, minio.RemoveBucketOptions{
 			ForceDelete: true,
 		})
@@ -65,7 +66,7 @@ var _ = Describe("server admin api", func() {
 	var hs *httptest.Server
 	var cl *client.AdminClient
 
-	BeforeEach(func() {
+	BeforeEach(func(ctx SpecContext) {
 		prefix = mustCreateRandomName()
 		var err error
 
@@ -95,9 +96,55 @@ var _ = Describe("server admin api", func() {
 		hs.Close()
 	})
 
+	Describe("upload", func() {
+		BeforeEach(func(ctx SpecContext) {
+			err := cl.CreateDB(ctx, "test")
+			Expect(err).ToNot(HaveOccurred())
+		})
+		Context("when I request an upload URL", func() {
+			var ur string
+			BeforeEach(func(ctx SpecContext) {
+				var err error
+				ur, err = cl.GetUploadURL(ctx, "test", 0)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should return a valid URL", func() {
+				_, err := url.Parse(ur)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			Context("when I upload the file to the URL", func() {
+				var statusCode int
+				BeforeEach(func(ctx SpecContext) {
+
+					data := []byte("foobar")
+					req, err := http.NewRequestWithContext(ctx, "PUT", ur, bytes.NewReader(data))
+					Expect(err).ToNot(HaveOccurred())
+
+					res, err := http.DefaultClient.Do(req)
+					Expect(err).ToNot(HaveOccurred())
+
+					defer res.Body.Close()
+					statusCode = res.StatusCode
+
+					_, err = io.ReadAll(res.Body)
+					Expect(err).ToNot(HaveOccurred())
+					GinkgoLogr.Info("url", ur)
+				})
+
+				It("should return 200 status code", func() {
+					Expect(statusCode).To(Equal(200))
+				})
+
+			})
+
+		})
+	})
+
 	Describe("create db", func() {
 		var err error
-		BeforeEach(func() {
+		BeforeEach(func(ctx SpecContext) {
 			err = cl.CreateDB(ctx, "test")
 		})
 		It("should not return error", func() {
@@ -105,7 +152,7 @@ var _ = Describe("server admin api", func() {
 		})
 
 		When("I create the same db again", func() {
-			BeforeEach(func() {
+			BeforeEach(func(ctx SpecContext) {
 				err = cl.CreateDB(ctx, "test")
 			})
 			It("should return error", func() {
@@ -116,7 +163,7 @@ var _ = Describe("server admin api", func() {
 		When("I list the DBs", func() {
 			var dbs []string
 
-			BeforeEach(func() {
+			BeforeEach(func(ctx SpecContext) {
 				var err error
 				dbs, err = cl.ListDBs(ctx)
 				Expect(err).NotTo(HaveOccurred())
