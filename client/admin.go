@@ -12,17 +12,27 @@ import (
 )
 
 type AdminClient struct {
-	u  *url.URL
-	hc *http.Client
+	u       *url.URL
+	hc      *http.Client
+	options Options
 }
 
-func NewAdminClient(baseURL string) (*AdminClient, error) {
+type Options struct {
+	APIToken      string
+	AdminAPIToken string
+}
+
+func NewClient(baseURL string, options Options) (*AdminClient, error) {
 	u, err := url.Parse(baseURL)
 	if err != nil {
 		return nil, fmt.Errorf("could not parse base URL: %w", err)
 	}
 
-	return &AdminClient{u: u, hc: http.DefaultClient}, nil
+	return &AdminClient{
+		u:       u,
+		hc:      http.DefaultClient,
+		options: options,
+	}, nil
 }
 
 var ErrAlreadyExists = errors.New("already exists")
@@ -35,7 +45,7 @@ func (c *AdminClient) CreateDB(ctx context.Context, name string) (err error) {
 		}
 	}()
 
-	u := c.u.JoinPath("api", "db", name)
+	u := c.u.JoinPath("api", "admin", "db", name)
 	req, err := http.NewRequestWithContext(ctx, "PUT", u.String(), nil)
 	if err != nil {
 		return fmt.Errorf("could not create request: %w", err)
@@ -68,7 +78,7 @@ func (c *AdminClient) ListDBs(ctx context.Context) (dbs []string, err error) {
 		}
 	}()
 
-	u := c.u.JoinPath("api", "db")
+	u := c.u.JoinPath("api", "admin", "db")
 	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("could not create request: %w", err)

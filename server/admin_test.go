@@ -84,11 +84,11 @@ var _ = Describe("server admin api", func() {
 		)
 		Expect(err).NotTo(HaveOccurred())
 
-		hs = httptest.NewServer(srv.AdminAPI)
+		hs = httptest.NewServer(srv.API)
 
 		time.Sleep(1 * time.Second)
 
-		cl, err = client.NewAdminClient(hs.URL)
+		cl, err = client.NewClient(hs.URL, client.Options{})
 		Expect(err).NotTo(HaveOccurred())
 	})
 

@@ -10,14 +10,14 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/draganm/datas3t/server"
+	"github.com/draganm/datas3t/client"
+	"github.com/draganm/datas3t/cmd/datas3t/listdbs"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/zapr"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/negroni"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"golang.org/x/sync/errgroup"
 )
 
 func main() {
@@ -41,100 +41,54 @@ func main() {
 
 	log := zapr.NewLogger(logger)
 
-	serverConfig := server.S3Config{}
-
-	httpConfig := struct {
-		addr      string
-		adminAddr string
-	}{}
-
-	authConfig := struct {
+	cfg := struct {
+		apiURL        string
 		apiToken      string
 		adminAPIToken string
 	}{}
 
 	app := &cli.App{
 		Flags: []cli.Flag{
+
 			&cli.StringFlag{
-				Name:        "addr",
-				Value:       ":5000",
-				EnvVars:     []string{"ADDR"},
-				Destination: &httpConfig.addr,
-			},
-			&cli.StringFlag{
-				Name:        "admin-addr",
-				Value:       ":5001",
-				EnvVars:     []string{"ADMIN_ADDR"},
-				Destination: &httpConfig.adminAddr,
-			},
-			&cli.StringFlag{
-				Name:        "aws-endpoint-url-s3",
-				EnvVars:     []string{"AWS_ENDPOINT_URL_S3"},
-				Destination: &serverConfig.S3Endpoint,
-			},
-			&cli.BoolFlag{
-				Usage:       "when aws-endpoint-url-s3 is set, configure if the bucket name will be pre-pended to the hostname",
-				Name:        "hostname-immutable",
-				EnvVars:     []string{"HOSTNAME_IMMUTABLE"},
-				Destination: &serverConfig.HostnameImmutable,
-			},
-			&cli.StringFlag{
-				Name:        "aws-access-key-id",
-				EnvVars:     []string{"AWS_ACCESS_KEY_ID"},
-				Destination: &serverConfig.AccessKeyID,
-			},
-			&cli.StringFlag{
-				Name:        "aws-secret-access-key",
-				EnvVars:     []string{"AWS_SECRET_ACCESS_KEY"},
-				Destination: &serverConfig.SecretAccessKey,
-			},
-			&cli.StringFlag{
-				Name:        "bucket-name",
-				EnvVars:     []string{"BUCKET_NAME"},
+				Name:        "api-url",
+				EnvVars:     []string{"API_URL"},
 				Required:    true,
-				Destination: &serverConfig.BucketName,
-			},
-			&cli.StringFlag{
-				Name:        "prefix",
-				EnvVars:     []string{"PREFIX"},
-				Required:    true,
-				Destination: &serverConfig.Prefix,
+				Destination: &cfg.apiURL,
 			},
 			&cli.StringFlag{
 				Name:        "api-token",
 				EnvVars:     []string{"API_TOKEN"},
-				Required:    true,
-				Destination: &authConfig.apiToken,
+				Destination: &cfg.apiToken,
 			},
 			&cli.StringFlag{
 				Name:        "admin-api-token",
 				EnvVars:     []string{"ADMIN_API_TOKEN"},
-				Required:    true,
-				Destination: &authConfig.adminAPIToken,
+				Destination: &cfg.adminAPIToken,
 			},
 		},
 
-		Action: func(c *cli.Context) error {
+		Before: func(ctx *cli.Context) error {
 
-			eg, ctx := errgroup.WithContext(c.Context)
-			log := logr.FromContextOrDiscard(ctx)
-
-			server, err := server.OpenServer(ctx, log, serverConfig)
+			cl, err := client.NewClient(cfg.apiURL, client.Options{APIToken: cfg.apiToken, AdminAPIToken: cfg.adminAPIToken})
 			if err != nil {
-				return fmt.Errorf("could not open server: %w", err)
+				return fmt.Errorf("could not create client: %w", err)
 			}
 
-			// serve api
-			eg.Go(runHttp(
-				ctx,
-				log,
-				httpConfig.addr,
-				"api",
-				requireAuth(server.API, authConfig.apiToken),
-			))
+			ctx.Context = client.ContextWithClient(ctx.Context, cl)
 
-			return eg.Wait()
+			return nil
+
 		},
+		Commands: []*cli.Command{
+			listdbs.Command(),
+		},
+		// Action: func(c *cli.Context) error {
+
+		// 	ctx := c.Context
+
+		// 	return eg.Wait()
+		// },
 	}
 	err := app.RunContext(logr.NewContext(context.Background(), log), os.Args)
 	if err != nil {

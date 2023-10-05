@@ -25,7 +25,6 @@ import (
 
 type Server struct {
 	API        http.Handler
-	AdminAPI   http.Handler
 	client     *s3.Client
 	bucketName string
 	prefix     string
@@ -81,11 +80,9 @@ func OpenServer(ctx context.Context, log logr.Logger, cf S3Config) (*Server, err
 	client := s3.NewFromConfig(cfg)
 
 	apiRouter := chi.NewRouter()
-	adminRouter := chi.NewRouter()
 
 	s := &Server{
 		API:        apiRouter,
-		AdminAPI:   adminRouter,
 		client:     client,
 		bucketName: cf.BucketName,
 		prefix:     cf.Prefix,
@@ -107,9 +104,9 @@ func OpenServer(ctx context.Context, log logr.Logger, cf S3Config) (*Server, err
 		return nil, fmt.Errorf("could not iterate over keys: %w", err)
 	}
 
-	adminRouter.Put("/api/db/{name}", s.handleCreateDB)
-	adminRouter.Post("/api/db/{name}/uploadUrl/{id}", s.handleUploadURL)
-	adminRouter.Get("/api/db", s.handleListDBs)
+	apiRouter.Put("/api/admin/db/{name}", s.handleCreateDB)
+	apiRouter.Get("/api/admin/db", s.handleListDBs)
+	apiRouter.Post("/api/db/{name}/uploadUrl/{id}", s.handleUploadURL)
 
 	return s, nil
 
