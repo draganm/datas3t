@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/draganm/datas3t/server"
@@ -130,7 +131,7 @@ func main() {
 				log,
 				httpConfig.addr,
 				"api",
-				requireAuth(server.API, authConfig.apiToken),
+				requireAuth(server.API, authConfig.apiToken, authConfig.adminAPIToken),
 			))
 
 			return eg.Wait()
@@ -144,13 +145,25 @@ func main() {
 
 var bearerTokenRegexp = regexp.MustCompile(`^Bearer (.+)$`)
 
-func requireAuth(handler http.Handler, token string) http.Handler {
-	if token == "" {
+func requireAuth(handler http.Handler, apiToken, adminAPIToken string) http.Handler {
+	if apiToken == "" {
 		return handler
 	}
 	return negroni.New(
 		negroni.HandlerFunc(
 			func(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+
+				token := apiToken
+
+				if strings.HasPrefix(r.URL.Path, "/admin") {
+					token = adminAPIToken
+				}
+
+				if token == "" {
+					next(rw, r)
+					return
+				}
+
 				authHeader := r.Header.Get("autorization")
 				groups := bearerTokenRegexp.FindStringSubmatch(authHeader)
 
