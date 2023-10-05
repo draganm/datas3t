@@ -156,3 +156,44 @@ func (c *DataS3tClient) GetUploadURL(ctx context.Context, dbName string, id uint
 	return string(d), nil
 
 }
+
+func (c *DataS3tClient) GetLastID(ctx context.Context, dbName string) (lastID uint64, err error) {
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("GetLastID: %w", err)
+		}
+	}()
+
+	u := c.u.JoinPath("api", "db", dbName, "lastId")
+	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
+	if err != nil {
+		return 0, fmt.Errorf("could not create request: %w", err)
+	}
+
+	c.addAPIToken(req)
+
+	res, err := c.hc.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("could not perform request: %w", err)
+	}
+
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		d, _ := io.ReadAll(res.Body)
+		return 0, fmt.Errorf("got unexpected status %s: %s", res.Status, string(d))
+	}
+
+	d, err := io.ReadAll(res.Body)
+	if err != nil {
+		return 0, fmt.Errorf("could not read whole URL: %w", err)
+	}
+
+	lastID, err = strconv.ParseUint(string(d), 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("could not parse last ID %s: %w", string(d), err)
+	}
+
+	return lastID, nil
+
+}

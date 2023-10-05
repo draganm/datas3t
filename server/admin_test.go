@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -96,6 +97,46 @@ var _ = Describe("server admin api", func() {
 		hs.Close()
 	})
 
+	Describe("get last ID", func() {
+		BeforeEach(func(ctx SpecContext) {
+			err := cl.CreateDB(ctx, "test")
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		Context("when the DB is empty", func() {
+			It("should return max uint64", func(ctx SpecContext) {
+				id, err := cl.GetLastID(ctx, "test")
+				Expect(err).ToNot(HaveOccurred())
+				Expect(id).To(Equal(uint64(math.MaxUint64)))
+			})
+		})
+
+		Context("when DB has one object", func() {
+			BeforeEach(func(ctx SpecContext) {
+				ur, err := cl.GetUploadURL(ctx, "test", 0)
+				Expect(err).ToNot(HaveOccurred())
+
+				data := []byte("foobar")
+				req, err := http.NewRequestWithContext(ctx, "PUT", ur, bytes.NewReader(data))
+				Expect(err).ToNot(HaveOccurred())
+
+				res, err := http.DefaultClient.Do(req)
+				Expect(err).ToNot(HaveOccurred())
+
+				defer res.Body.Close()
+
+				Expect(res.StatusCode).To(Equal(http.StatusOK))
+
+			})
+
+			It("should return 0", func(ctx SpecContext) {
+				id, err := cl.GetLastID(ctx, "test")
+				Expect(err).ToNot(HaveOccurred())
+				Expect(id).To(Equal(uint64(0)))
+			})
+		})
+	})
+
 	Describe("upload", func() {
 		BeforeEach(func(ctx SpecContext) {
 			err := cl.CreateDB(ctx, "test")
@@ -130,7 +171,6 @@ var _ = Describe("server admin api", func() {
 
 					_, err = io.ReadAll(res.Body)
 					Expect(err).ToNot(HaveOccurred())
-					GinkgoLogr.Info("url", ur)
 				})
 
 				It("should return 200 status code", func() {
