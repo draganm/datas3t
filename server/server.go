@@ -24,8 +24,8 @@ import (
 )
 
 type Server struct {
-	Api        http.Handler
-	Admin      http.Handler
+	API        http.Handler
+	AdminAPI   http.Handler
 	client     *s3.Client
 	bucketName string
 	prefix     string
@@ -84,8 +84,8 @@ func OpenServer(ctx context.Context, log logr.Logger, cf S3Config) (*Server, err
 	adminRouter := chi.NewRouter()
 
 	s := &Server{
-		Api:        apiRouter,
-		Admin:      adminRouter,
+		API:        apiRouter,
+		AdminAPI:   adminRouter,
 		client:     client,
 		bucketName: cf.BucketName,
 		prefix:     cf.Prefix,

@@ -84,7 +84,7 @@ var _ = Describe("server admin api", func() {
 		)
 		Expect(err).NotTo(HaveOccurred())
 
-		hs = httptest.NewServer(srv.Admin)
+		hs = httptest.NewServer(srv.AdminAPI)
 
 		time.Sleep(1 * time.Second)
 

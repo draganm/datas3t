@@ -8,11 +8,15 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.40.0
 	github.com/go-chi/chi v1.5.5
 	github.com/go-logr/logr v1.2.4
+	github.com/go-logr/zapr v1.2.4
 	github.com/gofrs/uuid v4.4.0+incompatible
 	github.com/minio/minio-go/v7 v7.0.63
 	github.com/onsi/ginkgo/v2 v2.12.1
 	github.com/onsi/gomega v1.28.0
+	github.com/urfave/cli/v2 v2.25.7
+	go.uber.org/zap v1.26.0
 	golang.org/x/exp v0.0.0-20230905200255-921286631fa9
+	golang.org/x/sync v0.3.0
 )
 
 require (
@@ -31,6 +35,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.17.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.23.0 // indirect
 	github.com/aws/smithy-go v1.14.2 // indirect
+	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
 	github.com/google/go-cmp v0.5.9 // indirect
@@ -44,7 +49,11 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/rs/xid v1.5.0 // indirect
+	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
+	github.com/urfave/negroni v1.0.0 // indirect
+	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect
+	go.uber.org/multierr v1.10.0 // indirect
 	golang.org/x/crypto v0.13.0 // indirect
 	golang.org/x/net v0.15.0 // indirect
 	golang.org/x/sys v0.12.0 // indirect
