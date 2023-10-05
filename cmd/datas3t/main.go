@@ -8,6 +8,7 @@ import (
 	"github.com/draganm/datas3t/client"
 	"github.com/draganm/datas3t/cmd/datas3t/listdbs"
 	"github.com/draganm/datas3t/cmd/datas3t/mkdb"
+	"github.com/draganm/datas3t/cmd/datas3t/upload"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/zapr"
 	"github.com/urfave/cli/v2"
@@ -78,6 +79,7 @@ func main() {
 		Commands: []*cli.Command{
 			listdbs.Command(),
 			mkdb.Command(),
+			upload.Command(),
 		},
 	}
 	err := app.RunContext(logr.NewContext(context.Background(), log), os.Args)
