@@ -64,7 +64,7 @@ var _ = Describe("server admin api", func() {
 	var srv *server.Server
 	var prefix string
 	var hs *httptest.Server
-	var cl *client.AdminClient
+	var cl *client.DataS3tClient
 
 	BeforeEach(func(ctx SpecContext) {
 		prefix = mustCreateRandomName()

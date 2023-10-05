@@ -11,7 +11,7 @@ import (
 	"strconv"
 )
 
-type AdminClient struct {
+type DataS3tClient struct {
 	u       *url.URL
 	hc      *http.Client
 	options Options
@@ -22,13 +22,13 @@ type Options struct {
 	AdminAPIToken string
 }
 
-func NewClient(baseURL string, options Options) (*AdminClient, error) {
+func NewClient(baseURL string, options Options) (*DataS3tClient, error) {
 	u, err := url.Parse(baseURL)
 	if err != nil {
 		return nil, fmt.Errorf("could not parse base URL: %w", err)
 	}
 
-	return &AdminClient{
+	return &DataS3tClient{
 		u:       u,
 		hc:      http.DefaultClient,
 		options: options,
@@ -37,7 +37,19 @@ func NewClient(baseURL string, options Options) (*AdminClient, error) {
 
 var ErrAlreadyExists = errors.New("already exists")
 
-func (c *AdminClient) CreateDB(ctx context.Context, name string) (err error) {
+func (c *DataS3tClient) addAdminAPIToken(r *http.Request) {
+	if c.options.AdminAPIToken != "" {
+		r.Header.Set("authorization", fmt.Sprintf("Bearer %s", c.options.AdminAPIToken))
+	}
+}
+
+func (c *DataS3tClient) addAPIToken(r *http.Request) {
+	if c.options.APIToken != "" {
+		r.Header.Set("authorization", fmt.Sprintf("Bearer %s", c.options.APIToken))
+	}
+}
+
+func (c *DataS3tClient) CreateDB(ctx context.Context, name string) (err error) {
 
 	defer func() {
 		if err != nil {
@@ -50,6 +62,8 @@ func (c *AdminClient) CreateDB(ctx context.Context, name string) (err error) {
 	if err != nil {
 		return fmt.Errorf("could not create request: %w", err)
 	}
+
+	c.addAdminAPIToken(req)
 
 	res, err := c.hc.Do(req)
 	if err != nil {
@@ -71,7 +85,7 @@ func (c *AdminClient) CreateDB(ctx context.Context, name string) (err error) {
 
 }
 
-func (c *AdminClient) ListDBs(ctx context.Context) (dbs []string, err error) {
+func (c *DataS3tClient) ListDBs(ctx context.Context) (dbs []string, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("ListDBs: %w", err)
@@ -83,6 +97,8 @@ func (c *AdminClient) ListDBs(ctx context.Context) (dbs []string, err error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not create request: %w", err)
 	}
+
+	c.addAdminAPIToken(req)
 
 	res, err := c.hc.Do(req)
 	if err != nil {
@@ -105,7 +121,7 @@ func (c *AdminClient) ListDBs(ctx context.Context) (dbs []string, err error) {
 
 }
 
-func (c *AdminClient) GetUploadURL(ctx context.Context, dbName string, id uint64) (ur string, err error) {
+func (c *DataS3tClient) GetUploadURL(ctx context.Context, dbName string, id uint64) (ur string, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("GetUploadURL: %w", err)
@@ -117,6 +133,8 @@ func (c *AdminClient) GetUploadURL(ctx context.Context, dbName string, id uint64
 	if err != nil {
 		return "", fmt.Errorf("could not create request: %w", err)
 	}
+
+	c.addAPIToken(req)
 
 	res, err := c.hc.Do(req)
 	if err != nil {

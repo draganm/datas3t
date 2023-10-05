@@ -125,7 +125,6 @@ func main() {
 				return fmt.Errorf("could not open server: %w", err)
 			}
 
-			// serve api
 			eg.Go(runHttp(
 				ctx,
 				log,
@@ -149,13 +148,13 @@ func requireAuth(handler http.Handler, apiToken, adminAPIToken string) http.Hand
 	if apiToken == "" {
 		return handler
 	}
-	return negroni.New(
+	n := negroni.New(
 		negroni.HandlerFunc(
 			func(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 
 				token := apiToken
 
-				if strings.HasPrefix(r.URL.Path, "/admin") {
+				if strings.HasPrefix(r.URL.Path, "/api/admin") {
 					token = adminAPIToken
 				}
 
@@ -164,7 +163,7 @@ func requireAuth(handler http.Handler, apiToken, adminAPIToken string) http.Hand
 					return
 				}
 
-				authHeader := r.Header.Get("autorization")
+				authHeader := r.Header.Get("authorization")
 				groups := bearerTokenRegexp.FindStringSubmatch(authHeader)
 
 				renderNotAllowed := func() {
@@ -187,6 +186,8 @@ func requireAuth(handler http.Handler, apiToken, adminAPIToken string) http.Hand
 			},
 		),
 	)
+	n.UseHandler(handler)
+	return n
 }
 
 func runHttp(ctx context.Context, log logr.Logger, addr, name string, handler http.Handler) func() error {
