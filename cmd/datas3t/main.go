@@ -2,20 +2,15 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"net"
-	"net/http"
 	"os"
-	"regexp"
-	"time"
 
 	"github.com/draganm/datas3t/client"
 	"github.com/draganm/datas3t/cmd/datas3t/listdbs"
+	"github.com/draganm/datas3t/cmd/datas3t/mkdb"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/zapr"
 	"github.com/urfave/cli/v2"
-	"github.com/urfave/negroni"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -82,81 +77,11 @@ func main() {
 		},
 		Commands: []*cli.Command{
 			listdbs.Command(),
+			mkdb.Command(),
 		},
-		// Action: func(c *cli.Context) error {
-
-		// 	ctx := c.Context
-
-		// 	return eg.Wait()
-		// },
 	}
 	err := app.RunContext(logr.NewContext(context.Background(), log), os.Args)
 	if err != nil {
 		log.Error(err, "exiting")
-	}
-}
-
-var bearerTokenRegexp = regexp.MustCompile(`^Bearer (.+)$`)
-
-func requireAuth(handler http.Handler, token string) http.Handler {
-	if token == "" {
-		return handler
-	}
-	return negroni.New(
-		negroni.HandlerFunc(
-			func(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
-				authHeader := r.Header.Get("autorization")
-				groups := bearerTokenRegexp.FindStringSubmatch(authHeader)
-
-				renderNotAllowed := func() {
-					rw.Header().Set("WWW-Authenticate", "Bearer")
-					rw.WriteHeader(http.StatusUnauthorized)
-					rw.Write([]byte(`not allowed`))
-				}
-
-				if groups == nil {
-					renderNotAllowed()
-					return
-				}
-
-				if groups[1] != token {
-					renderNotAllowed()
-					return
-				}
-
-				next(rw, r)
-			},
-		),
-	)
-}
-
-func runHttp(ctx context.Context, log logr.Logger, addr, name string, handler http.Handler) func() error {
-
-	return func() error {
-		log := log.WithValues("name", name)
-		l, err := net.Listen("tcp", addr)
-		if err != nil {
-			return fmt.Errorf("could not listen for %s requests: %w", name, err)
-
-		}
-
-		s := &http.Server{
-			Handler: handler,
-		}
-
-		go func() {
-			<-ctx.Done()
-			shutdownContext, cancel := context.WithTimeout(context.Background(), time.Second)
-			defer cancel()
-			log.Info("graceful shutdown of the server")
-			err := s.Shutdown(shutdownContext)
-			if errors.Is(err, context.DeadlineExceeded) {
-				log.Info("server did not shut down gracefully, forcing close")
-				s.Close()
-			}
-		}()
-
-		log.Info("server started", "addr", l.Addr().String())
-		return s.Serve(l)
 	}
 }

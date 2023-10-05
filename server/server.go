@@ -43,6 +43,8 @@ type S3Config struct {
 	HostnameImmutable bool
 }
 
+const dbMarker = "datas3t"
+
 func OpenServer(ctx context.Context, log logr.Logger, cf S3Config) (*Server, error) {
 
 	optsFns := [](func(*config.LoadOptions) error){}
@@ -92,16 +94,32 @@ func OpenServer(ctx context.Context, log logr.Logger, cf S3Config) (*Server, err
 		ctx:        ctx,
 	}
 
+	foundDBs := []string{}
+
 	err = s3util.IterateOverKeysWithPrefix(ctx, s.client, s.bucketName, cf.Prefix, func(key string) error {
+		log.Info("listing", "key", key)
 		parts := strings.Split(key, "/")
 		if len(parts) != 2 {
 			return nil
+		}
+
+		if parts[1] == dbMarker {
+			foundDBs = append(foundDBs, parts[0])
 		}
 		return nil
 	})
 
 	if err != nil {
 		return nil, fmt.Errorf("could not iterate over keys: %w", err)
+	}
+
+	for _, name := range foundDBs {
+		db, err := db.OpenDB(ctx, log, client, s.bucketName, s.dbPrefix(name))
+		if err != nil {
+			return nil, fmt.Errorf("could not open db %s: %w", name, err)
+		}
+
+		s.databases[name] = db
 	}
 
 	apiRouter.Put("/api/admin/db/{name}", s.handleCreateDB)
@@ -138,9 +156,9 @@ func (s *Server) handleCreateDB(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prefix := s.dbPrefix("name")
+	prefix := s.dbPrefix(dbName)
 
-	dbInfoPath := path.Join(prefix, "datas3t")
+	dbInfoPath := path.Join(prefix, dbMarker)
 
 	_, err := s.client.PutObject(r.Context(), &s3.PutObjectInput{
 		Bucket: &s.bucketName,
