@@ -45,7 +45,6 @@ func main() {
 
 	app := &cli.App{
 		Flags: []cli.Flag{
-
 			&cli.StringFlag{
 				Name:        "api-url",
 				EnvVars:     []string{"API_URL"},
