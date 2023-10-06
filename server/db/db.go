@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -186,7 +187,7 @@ func (d *DB) HandleUploadURL(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseUint(idString, 10, 64)
 	if err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
-		log.Error(errors.New("invalid db name"), "bad params")
+		log.Error(errors.New("could not parse id"), "bad params")
 		return
 	}
 
@@ -209,5 +210,41 @@ func (d *DB) HandleUploadURL(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "text/plain")
 
 	w.Write([]byte(presigned.URL))
+
+}
+
+type downloadURLResponse struct {
+	URL string `json:"url"`
+}
+
+func (d *DB) HandleDownloadURL(w http.ResponseWriter, r *http.Request) {
+	idString := chi.URLParam(r, "id")
+	log := d.log.WithValues("method", r.Method, "path", r.URL.Path)
+
+	id, err := strconv.ParseUint(idString, 10, 64)
+	if err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		log.Error(errors.New("could not parse id"), "bad params")
+		return
+	}
+
+	key := d.keyForID(id)
+
+	log.Info("signing for key", "key", key)
+
+	presigned, err := d.presignClient.PresignGetObject(r.Context(), &s3.GetObjectInput{
+		Bucket: aws.String(d.bucket),
+		Key:    aws.String(key),
+	}, s3.WithPresignExpires(15*time.Minute))
+
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		log.Error(err, "could not presign url")
+		return
+	}
+
+	w.Header().Set("content-type", "application/json")
+
+	json.NewEncoder(w).Encode(downloadURLResponse{URL: presigned.URL})
 
 }

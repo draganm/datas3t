@@ -177,6 +177,26 @@ var _ = Describe("server admin api", func() {
 					Expect(statusCode).To(Equal(200))
 				})
 
+				Context("when I download the data", func() {
+					var err error
+					var data []byte
+					BeforeEach(func(ctx SpecContext) {
+						err = cl.Download(ctx, "test", 0, func(r io.Reader) error {
+							var err error
+							data, err = io.ReadAll(r)
+							return err
+						})
+
+					})
+					It("should not return an error", func() {
+						Expect(err).ToNot(HaveOccurred())
+					})
+
+					It("should  return the uploaded data", func() {
+						Expect(string(data)).To(Equal("foobar"))
+					})
+				})
+
 			})
 
 		})
