@@ -94,26 +94,18 @@ func OpenServer(ctx context.Context, log logr.Logger, cf S3Config) (*Server, err
 		ctx:        ctx,
 	}
 
-	foundDBs := []string{}
-
-	err = s3util.IterateOverKeysWithPrefix(ctx, s.client, s.bucketName, cf.Prefix, func(key string) error {
-		log.Info("listing", "key", key)
-		parts := strings.Split(key, "/")
-		if len(parts) != 2 {
-			return nil
-		}
-
-		if parts[1] == dbMarker {
-			foundDBs = append(foundDBs, parts[0])
-		}
-		return nil
-	})
-
+	foundDBs, err := s3util.GetCommonPrefixes(ctx, s.client, s.bucketName, s.prefix)
 	if err != nil {
-		return nil, fmt.Errorf("could not iterate over keys: %w", err)
+		return nil, fmt.Errorf("could not list dbs: %w", err)
+	}
+
+	for i, v := range foundDBs {
+		parts := strings.Split(v, "/")
+		foundDBs[i] = parts[1]
 	}
 
 	for _, name := range foundDBs {
+		log.Info("opening db", "name", name)
 		db, err := db.OpenDB(ctx, log, client, s.bucketName, s.dbPrefix(name))
 		if err != nil {
 			return nil, fmt.Errorf("could not open db %s: %w", name, err)
