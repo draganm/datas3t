@@ -3,7 +3,7 @@ FROM golang:1.21-alpine as builder
 WORKDIR /build
 ADD . /build/
 RUN mkdir /out
-RUN --mount=type=cache,target=/root/.cache/go-build go build -o /out .
+RUN --mount=type=cache,target=/root/.cache/go-build --mount=type=cache,target=/go/pkg/mod/ go build -o /out .
 
 FROM alpine
 RUN apk add --no-cache
