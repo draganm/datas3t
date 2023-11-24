@@ -137,6 +137,100 @@ var _ = Describe("server admin api", func() {
 		})
 	})
 
+	Describe("bulk upload", func() {
+		BeforeEach(func(ctx SpecContext) {
+			err := cl.CreateDB(ctx, "test")
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		Context("when I request an upload URL", func() {
+			var urls []string
+			BeforeEach(func(ctx SpecContext) {
+				var err error
+				urls, err = cl.GetBulkUploaddURLs(ctx, "test", 0, 1)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should return a valid URL", func() {
+				for _, u := range urls {
+					_, err := url.Parse(u)
+					Expect(err).ToNot(HaveOccurred())
+				}
+			})
+
+			Context("when I upload files to the URLs", func() {
+				BeforeEach(func(ctx SpecContext) {
+					{
+						data := []byte("foobar")
+						req, err := http.NewRequestWithContext(ctx, "PUT", urls[0], bytes.NewReader(data))
+						Expect(err).ToNot(HaveOccurred())
+
+						res, err := http.DefaultClient.Do(req)
+						Expect(err).ToNot(HaveOccurred())
+
+						defer res.Body.Close()
+						Expect(res.StatusCode).To(Equal(http.StatusOK))
+
+						_, err = io.ReadAll(res.Body)
+						Expect(err).ToNot(HaveOccurred())
+					}
+
+					{
+						data := []byte("barfoo")
+						req, err := http.NewRequestWithContext(ctx, "PUT", urls[1], bytes.NewReader(data))
+						Expect(err).ToNot(HaveOccurred())
+
+						res, err := http.DefaultClient.Do(req)
+						Expect(err).ToNot(HaveOccurred())
+
+						defer res.Body.Close()
+						Expect(res.StatusCode).To(Equal(http.StatusOK))
+
+						_, err = io.ReadAll(res.Body)
+						Expect(err).ToNot(HaveOccurred())
+					}
+
+				})
+
+				Context("when I bulk download the data", func() {
+					var data [][]byte
+					BeforeEach(func(ctx SpecContext) {
+						data = make([][]byte, 2)
+						urls, err := cl.GetBulkDownloadURLs(ctx, "test", 0, 1)
+						Expect(err).ToNot(HaveOccurred())
+						Expect(len(urls)).To(Equal(2))
+
+						res, err := http.Get(urls[0])
+						Expect(err).ToNot(HaveOccurred())
+						Expect(res.StatusCode).To(Equal(http.StatusOK))
+
+						defer res.Body.Close()
+
+						data[0], err = io.ReadAll(res.Body)
+						Expect(err).ToNot(HaveOccurred())
+
+						res, err = http.Get(urls[1])
+						Expect(err).ToNot(HaveOccurred())
+						Expect(res.StatusCode).To(Equal(http.StatusOK))
+
+						defer res.Body.Close()
+
+						data[1], err = io.ReadAll(res.Body)
+						Expect(err).ToNot(HaveOccurred())
+
+					})
+
+					It("should  return the uploaded data", func() {
+						Expect(data).To(Equal([][]byte{[]byte("foobar"), []byte("barfoo")}))
+					})
+				})
+
+			})
+
+		})
+
+	})
+
 	Describe("upload", func() {
 		BeforeEach(func(ctx SpecContext) {
 			err := cl.CreateDB(ctx, "test")

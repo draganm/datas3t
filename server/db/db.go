@@ -109,6 +109,55 @@ func (d *DB) HandleUploadURL(w http.ResponseWriter, r *http.Request) {
 
 }
 
+type bulkURLsResponse struct {
+	ID  uint64 `json:"id,string"`
+	URL string `json:"url"`
+}
+
+func (d *DB) HandleBulkUploadURLs(w http.ResponseWriter, r *http.Request) {
+	log := d.log.WithValues("method", r.Method, "path", r.URL.Path)
+
+	fromIDString := chi.URLParam(r, "fromID")
+	fromID, err := strconv.ParseUint(fromIDString, 10, 64)
+	if err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		log.Error(errors.New("could not parse fromID"), "bad params")
+		return
+	}
+
+	toIDString := chi.URLParam(r, "toID")
+	toID, err := strconv.ParseUint(toIDString, 10, 64)
+	if err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		log.Error(errors.New("could not parse toID"), "bad params")
+		return
+	}
+
+	w.Header().Set("content-type", "application/json")
+
+	enc := json.NewEncoder(w)
+
+	for id := fromID; id <= toID; id++ {
+		key := d.keyForID(id)
+
+		presigned, err := d.presignClient.PresignPutObject(r.Context(), &s3.PutObjectInput{
+			Bucket:      aws.String(d.bucket),
+			Key:         aws.String(key),
+			ContentType: aws.String("application/octet-stream"),
+		}, s3.WithPresignExpires(60*time.Minute))
+
+		if err != nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			log.Error(err, "could not presign url")
+			return
+		}
+
+		enc.Encode(bulkURLsResponse{ID: id, URL: presigned.URL})
+
+	}
+
+}
+
 type downloadURLResponse struct {
 	URL string `json:"url"`
 }
@@ -142,5 +191,48 @@ func (d *DB) HandleDownloadURL(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "application/json")
 
 	json.NewEncoder(w).Encode(downloadURLResponse{URL: presigned.URL})
+
+}
+
+func (d *DB) HandleBulkDownloadURLs(w http.ResponseWriter, r *http.Request) {
+	log := d.log.WithValues("method", r.Method, "path", r.URL.Path)
+
+	fromIDString := chi.URLParam(r, "fromID")
+	fromID, err := strconv.ParseUint(fromIDString, 10, 64)
+	if err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		log.Error(errors.New("could not parse fromID"), "bad params")
+		return
+	}
+
+	toIDString := chi.URLParam(r, "toID")
+	toID, err := strconv.ParseUint(toIDString, 10, 64)
+	if err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		log.Error(errors.New("could not parse toID"), "bad params")
+		return
+	}
+
+	w.Header().Set("content-type", "application/json")
+
+	enc := json.NewEncoder(w)
+
+	for id := fromID; id <= toID; id++ {
+		key := d.keyForID(id)
+
+		presigned, err := d.presignClient.PresignGetObject(r.Context(), &s3.GetObjectInput{
+			Bucket: aws.String(d.bucket),
+			Key:    aws.String(key),
+		}, s3.WithPresignExpires(60*time.Minute))
+
+		if err != nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			log.Error(err, "could not presign url")
+			return
+		}
+
+		enc.Encode(bulkURLsResponse{ID: id, URL: presigned.URL})
+
+	}
 
 }
