@@ -117,7 +117,9 @@ func OpenServer(ctx context.Context, log logr.Logger, cf S3Config) (*Server, err
 	apiRouter.Put("/api/admin/db/{name}", s.handleCreateDB)
 	apiRouter.Get("/api/admin/db", s.handleListDBs)
 	apiRouter.Post("/api/db/{name}/uploadUrl/{id}", s.handleUploadURL)
+	apiRouter.Post("/api/db/{name}/bulkUploadUrls/{fromID}/{toID}", s.handleBulkUploadURLs)
 	apiRouter.Post("/api/db/{name}/downloadUrl/{id}", s.handleDownloadURL)
+	apiRouter.Post("/api/db/{name}/bulkDownloadUrls/{fromID}/{toID}", s.handleBulkDownloadURLs)
 	apiRouter.Get("/api/db/{name}/lastId", s.handleLastID)
 
 	return s, nil
@@ -220,6 +222,32 @@ func (s *Server) handleUploadURL(w http.ResponseWriter, r *http.Request) {
 
 }
 
+func (s *Server) handleBulkUploadURLs(w http.ResponseWriter, r *http.Request) {
+
+	dbName := chi.URLParam(r, "name")
+	log := s.log.WithValues("method", r.Method, "path", r.URL.Path, "dbName", dbName)
+
+	if !dbNameRegexp.MatchString(dbName) {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		log.Error(errors.New("invalid db name"), "bad params")
+		return
+	}
+
+	s.mu.Lock()
+	db, found := s.databases[dbName]
+	s.mu.Unlock()
+
+	if !found {
+		http.Error(w, "no such db", http.StatusNotFound)
+		log.Error(errors.New("db not found"), "not found")
+		return
+
+	}
+
+	db.HandleBulkUploadURLs(w, r)
+
+}
+
 func (s *Server) handleLastID(w http.ResponseWriter, r *http.Request) {
 
 	dbName := chi.URLParam(r, "name")
@@ -269,5 +297,31 @@ func (s *Server) handleDownloadURL(w http.ResponseWriter, r *http.Request) {
 	}
 
 	db.HandleDownloadURL(w, r)
+
+}
+
+func (s *Server) handleBulkDownloadURLs(w http.ResponseWriter, r *http.Request) {
+
+	dbName := chi.URLParam(r, "name")
+	log := s.log.WithValues("method", r.Method, "path", r.URL.Path, "dbName", dbName)
+
+	if !dbNameRegexp.MatchString(dbName) {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		log.Error(errors.New("invalid db name"), "bad params")
+		return
+	}
+
+	s.mu.Lock()
+	db, found := s.databases[dbName]
+	s.mu.Unlock()
+
+	if !found {
+		http.Error(w, "no such db", http.StatusNotFound)
+		log.Error(errors.New("db not found"), "not found")
+		return
+
+	}
+
+	db.HandleBulkDownloadURLs(w, r)
 
 }
