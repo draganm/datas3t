@@ -20,7 +20,11 @@ func main() {
 			ctx, cancel := signal.NotifyContext(c.Context, os.Interrupt)
 			defer cancel()
 
-			return server.Run(ctx, log)
+			return server.Run(
+				ctx,
+				log,
+				"file::memory:?cache=shared",
+			)
 		},
 	}
 
