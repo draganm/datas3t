@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"database/sql"
 	"embed"
@@ -29,53 +28,64 @@ import (
 //go:embed sqlitestore/migrations/*.sql
 var migrationsFS embed.FS
 
-func Run(
+type Server struct {
+	db *sql.DB
+	http.Handler
+}
+
+func CreateServer(
 	ctx context.Context,
 	log *slog.Logger,
 	dbURL string,
-) error {
+) (*Server, error) {
 
 	// Import required packages
 
 	// Open SQLite database
 	db, err := sql.Open("sqlite3", dbURL)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	defer db.Close()
+
+	context.AfterFunc(ctx, func() {
+		err := db.Close()
+		if err != nil {
+			log.Error("failed to close database", "error", err)
+		}
+	})
 
 	// Ensure database connection is working
 	if err := db.Ping(); err != nil {
-		return err
+		return nil, err
 	}
 	log.Info("Connected to SQLite database", "url", dbURL)
 
 	// Prepare migrations from embedded filesystem
 	migrationFS, err := fs.Sub(migrationsFS, "sqlitestore/migrations")
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	d, err := iofs.New(migrationFS, ".")
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Initialize database driver for migrations
 	driver, err := sqlite3.WithInstance(db, &sqlite3.Config{})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Create migration instance
 	m, err := migrate.NewWithInstance("iofs", d, "sqlite3", driver)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Apply migrations
 	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
-		return err
+		return nil, err
 	}
 	log.Info("Applied database migrations")
 
@@ -89,36 +99,32 @@ func Run(
 		// Use the store here to avoid "declared but not used" error
 		err := store.CreateDataset(r.Context(), id)
 		if err != nil {
+			log.Error("failed to create dataset", "error", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		w.WriteHeader(http.StatusCreated)
+		w.WriteHeader(http.StatusNoContent)
 	})
 
-	// Serve the HTTP server
-	server := &http.Server{
-		Addr:    ":8080",
-		Handler: mux,
-	}
-
-	log.Info("Starting HTTP server", "addr", server.Addr)
-
-	context.AfterFunc(ctx, func() {
-
-		timeoutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-
-		log.Info("Shutting down HTTP server")
-		err := server.Shutdown(timeoutCtx)
-
-		if err == context.DeadlineExceeded {
-			log.Error("HTTP server shutdown timed out, forcefully closing")
-			server.Close()
-		} else if err != nil {
-			log.Error("Error shutting down server", "error", err)
+	mux.HandleFunc("GET /api/v1/datas3t/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		dataset, err := store.DatasetExists(r.Context(), id)
+		if err != nil {
+			log.Error("failed to get dataset", "error", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
-		log.Info("HTTP server closed")
+		if !dataset {
+			log.Error("dataset not found", "id", id)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+
 	})
 
-	return server.ListenAndServe()
+	return &Server{
+		db:      db,
+		Handler: mux,
+	}, nil
 }
