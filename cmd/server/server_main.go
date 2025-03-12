@@ -30,7 +30,7 @@ func main() {
 
 	err := app.Run(os.Args)
 	if err != nil {
-		log.Error("Error starting datas3t", "error", err)
+		log.Error("terminated", "error", err)
 		os.Exit(1)
 	}
 }

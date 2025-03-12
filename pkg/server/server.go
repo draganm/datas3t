@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"database/sql"
 	"embed"
@@ -102,13 +103,22 @@ func Run(
 
 	log.Info("Starting HTTP server", "addr", server.Addr)
 
-	go func() {
-		<-ctx.Done()
+	context.AfterFunc(ctx, func() {
+
+		timeoutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
 		log.Info("Shutting down HTTP server")
-		if err := server.Shutdown(context.Background()); err != nil {
+		err := server.Shutdown(timeoutCtx)
+
+		if err == context.DeadlineExceeded {
+			log.Error("HTTP server shutdown timed out, forcefully closing")
+			server.Close()
+		} else if err != nil {
 			log.Error("Error shutting down server", "error", err)
 		}
-	}()
+		log.Info("HTTP server closed")
+	})
 
 	return server.ListenAndServe()
 }
