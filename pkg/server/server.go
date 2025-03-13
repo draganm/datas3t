@@ -9,6 +9,10 @@ import (
 	"embed"
 	"io/fs"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/draganm/datas3t/pkg/server/sqlitestore"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/sqlite3"
@@ -28,8 +32,20 @@ import (
 //go:embed sqlitestore/migrations/*.sql
 var migrationsFS embed.FS
 
+// S3Config holds configuration for connecting to an S3 bucket
+type S3Config struct {
+	Endpoint        string
+	Region          string
+	AccessKeyID     string
+	SecretAccessKey string
+	BucketName      string
+	UseSSL          bool
+}
+
 type Server struct {
-	db *sql.DB
+	db       *sql.DB
+	s3Client *s3.Client
+	bucket   string
 	http.Handler
 }
 
@@ -37,6 +53,7 @@ func CreateServer(
 	ctx context.Context,
 	log *slog.Logger,
 	dbURL string,
+	s3Config *S3Config,
 ) (*Server, error) {
 
 	// Import required packages
@@ -89,6 +106,34 @@ func CreateServer(
 	}
 	log.Info("Applied database migrations")
 
+	// Initialize S3 client
+	var s3Client *s3.Client
+	if s3Config != nil {
+		customResolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+			return aws.Endpoint{
+				URL:               s3Config.Endpoint,
+				HostnameImmutable: true,
+				SigningRegion:     s3Config.Region,
+			}, nil
+		})
+
+		cfg, err := config.LoadDefaultConfig(ctx,
+			config.WithRegion(s3Config.Region),
+			config.WithEndpointResolverWithOptions(customResolver),
+			config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
+				s3Config.AccessKeyID,
+				s3Config.SecretAccessKey,
+				"",
+			)),
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		s3Client = s3.NewFromConfig(cfg)
+		log.Info("Connected to S3 storage", "endpoint", s3Config.Endpoint, "bucket", s3Config.BucketName)
+	}
+
 	// Initialize store
 	store := sqlitestore.New(db)
 
@@ -123,8 +168,15 @@ func CreateServer(
 
 	})
 
+	bucket := ""
+	if s3Config != nil {
+		bucket = s3Config.BucketName
+	}
+
 	return &Server{
-		db:      db,
-		Handler: mux,
+		db:       db,
+		s3Client: s3Client,
+		bucket:   bucket,
+		Handler:  mux,
 	}, nil
 }
