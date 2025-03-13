@@ -25,6 +25,9 @@ type World struct {
 	MinioSecretKey  string
 	MinioClient     *minio.Client
 	MinioBucketName string
+
+	// Uploads path
+	UploadsPath string
 }
 
 func New(ctx context.Context) (*World, error) {
@@ -71,6 +74,18 @@ func New(ctx context.Context) (*World, error) {
 		return nil, fmt.Errorf("failed to create MinIO bucket: %w", err)
 	}
 
+	// Create a temporary directory for uploads
+	uploadsPath, err := os.MkdirTemp("", "datas3t-uploads-*")
+	if err != nil {
+		_ = minioContainer.Terminate(context.Background())
+		return nil, fmt.Errorf("failed to create temporary uploads directory: %w", err)
+	}
+
+	// Ensure uploads directory is removed when context is cancelled
+	context.AfterFunc(ctx, func() {
+		_ = os.RemoveAll(uploadsPath)
+	})
+
 	// Create S3 configuration for the server
 	s3Config := &server.S3Config{
 		Endpoint:        endpoint,
@@ -87,9 +102,11 @@ func New(ctx context.Context) (*World, error) {
 		log,
 		":memory:",
 		s3Config,
+		uploadsPath,
 	)
 	if err != nil {
 		_ = minioContainer.Terminate(context.Background())
+		_ = os.RemoveAll(uploadsPath)
 		return nil, fmt.Errorf("failed to create server: %w", err)
 	}
 
@@ -106,6 +123,7 @@ func New(ctx context.Context) (*World, error) {
 		MinioSecretKey:  secretKey,
 		MinioClient:     minioClient,
 		MinioBucketName: bucketName,
+		UploadsPath:     uploadsPath,
 	}, nil
 }
 

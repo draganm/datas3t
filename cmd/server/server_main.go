@@ -23,6 +23,7 @@ func main() {
 		s3SecretKey   string
 		s3BucketName  string
 		s3UseSSL      bool
+		uploadsPath   string
 	}{}
 
 	app := &cli.App{
@@ -77,6 +78,12 @@ func main() {
 				Usage:       "Use SSL for S3 connection",
 				Destination: &cfg.s3UseSSL,
 			},
+			&cli.StringFlag{
+				Name:        "uploads-path",
+				Required:    true,
+				Usage:       "Path for temporary file uploads",
+				Destination: &cfg.uploadsPath,
+			},
 		},
 		Action: func(c *cli.Context) error {
 			log.Info("Starting datas3t")
@@ -98,6 +105,7 @@ func main() {
 				log,
 				cfg.dbURL,
 				s3Config,
+				cfg.uploadsPath,
 			)
 			if err != nil {
 				return err

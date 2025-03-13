@@ -43,9 +43,10 @@ type S3Config struct {
 }
 
 type Server struct {
-	db       *sql.DB
-	s3Client *s3.Client
-	bucket   string
+	db          *sql.DB
+	s3Client    *s3.Client
+	bucket      string
+	uploadsPath string
 	http.Handler
 }
 
@@ -54,6 +55,7 @@ func CreateServer(
 	log *slog.Logger,
 	dbURL string,
 	s3Config *S3Config,
+	uploadsPath string,
 ) (*Server, error) {
 
 	// Import required packages
@@ -174,9 +176,10 @@ func CreateServer(
 	}
 
 	return &Server{
-		db:       db,
-		s3Client: s3Client,
-		bucket:   bucket,
-		Handler:  mux,
+		db:          db,
+		s3Client:    s3Client,
+		bucket:      bucket,
+		uploadsPath: uploadsPath,
+		Handler:     mux,
 	}, nil
 }
