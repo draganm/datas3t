@@ -17,6 +17,8 @@ type World struct {
 	ServerURL          string
 	CurrentDatasetID   string
 	LastResponseStatus int
+	LastDatasetID      string
+	NumDataPoints      int
 
 	// MinIO related fields
 	MinioContainer  *miniomodule.MinioContainer

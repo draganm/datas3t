@@ -8,6 +8,14 @@ import (
 	"database/sql"
 )
 
+type Datarange struct {
+	ID              int64
+	DatasetName     string
+	ObjectKey       string
+	MinDatapointKey int64
+	MaxDatapointKey int64
+}
+
 type Dataset struct {
 	Name      string
 	CreatedAt sql.NullTime

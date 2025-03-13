@@ -28,3 +28,25 @@ func (q *Queries) DatasetExists(ctx context.Context, name string) (bool, error) 
 	err := row.Scan(&column_1)
 	return column_1, err
 }
+
+const insertDataRange = `-- name: InsertDataRange :exec
+INSERT INTO dataranges (dataset_name, object_key, min_datapoint_key, max_datapoint_key) 
+VALUES (?, ?, ?, ?)
+`
+
+type InsertDataRangeParams struct {
+	DatasetName     string
+	ObjectKey       string
+	MinDatapointKey int64
+	MaxDatapointKey int64
+}
+
+func (q *Queries) InsertDataRange(ctx context.Context, arg InsertDataRangeParams) error {
+	_, err := q.db.ExecContext(ctx, insertDataRange,
+		arg.DatasetName,
+		arg.ObjectKey,
+		arg.MinDatapointKey,
+		arg.MaxDatapointKey,
+	)
+	return err
+}
