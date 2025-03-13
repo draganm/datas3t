@@ -10,7 +10,6 @@ import (
 	"io/fs"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/draganm/datas3t/pkg/server/sqlitestore"
@@ -111,28 +110,37 @@ func CreateServer(
 	// Initialize S3 client
 	var s3Client *s3.Client
 	if s3Config != nil {
-		customResolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-			return aws.Endpoint{
-				URL:               s3Config.Endpoint,
-				HostnameImmutable: true,
-				SigningRegion:     s3Config.Region,
-			}, nil
-		})
+		// IMPORTANT: AWS SDK v2 S3 Client Configuration
+		// The following pattern is the recommended way to configure a custom endpoint for S3 in AWS SDK v2.
+		// Do NOT use deprecated approaches such as:
+		// - Direct EndpointOptions assignment (removed from SDK)
+		// - EndpointResolverWithOptions with type conversion (causes compilation errors)
+		// - Manually constructing the endpoint URL
 
-		cfg, err := config.LoadDefaultConfig(ctx,
-			config.WithRegion(s3Config.Region),
-			config.WithEndpointResolverWithOptions(customResolver),
-			config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
+		// 1. Create the AWS config with credentials and region
+		cfg := aws.Config{
+			Region: s3Config.Region,
+			Credentials: credentials.NewStaticCredentialsProvider(
 				s3Config.AccessKeyID,
 				s3Config.SecretAccessKey,
 				"",
-			)),
-		)
-		if err != nil {
-			return nil, err
+			),
 		}
 
-		s3Client = s3.NewFromConfig(cfg)
+		// 2. Create the S3 client with functional options to customize behavior
+		s3Client = s3.NewFromConfig(cfg, func(o *s3.Options) {
+			// Enable path-style addressing (bucket.s3.amazonaws.com vs. s3.amazonaws.com/bucket)
+			// Required for most S3-compatible servers like MinIO
+			o.UsePathStyle = true
+
+			// Set custom endpoint resolver to connect to non-AWS S3 services
+			o.EndpointResolver = s3.EndpointResolverFunc(func(region string, options s3.EndpointResolverOptions) (aws.Endpoint, error) {
+				return aws.Endpoint{
+					URL: s3Config.Endpoint,
+				}, nil
+			})
+		})
+
 		log.Info("Connected to S3 storage", "endpoint", s3Config.Endpoint, "bucket", s3Config.BucketName)
 	}
 

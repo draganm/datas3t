@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "name": "aws-sdk-v2-s3-endpoint-configuration",
+      "description": "Rules for configuring AWS SDK v2 S3 client with custom endpoints",
+      "patterns": {
+        "avoid": [
+          {
+            "pattern": "EndpointOptions: s3.EndpointOptions",
+            "message": "s3.EndpointOptions was removed from AWS SDK v2. Use EndpointResolver with s3.EndpointResolverFunc instead."
+          },
+          {
+            "pattern": "s3.NewFromConfig(cfg)",
+            "message": "When using custom endpoints, always use the functional option pattern with s3.NewFromConfig to configure the endpoint resolver."
+          },
+          {
+            "pattern": "EndpointResolverWithOptions:",
+            "message": "EndpointResolverWithOptions causes type conversion errors in AWS SDK v2. Use EndpointResolver with s3.EndpointResolverFunc instead."
+          },
+          {
+            "pattern": "aws.EndpointResolverWithOptionsFunc",
+            "message": "aws.EndpointResolverWithOptionsFunc causes type conversion errors with S3 client. Use s3.EndpointResolverFunc instead."
+          }
+        ],
+        "prefer": [
+          {
+            "pattern": "s3Client = s3.NewFromConfig(cfg, func(o *s3.Options) {\n\t\t\to.UsePathStyle = true\n\t\t\to.EndpointResolver = s3.EndpointResolverFunc",
+            "message": "This is the preferred pattern for configuring AWS SDK v2 S3 client with custom endpoints."
+          }
+        ]
+      },
+      "examples": {
+        "incorrect": [
+          "s3Options := s3.Options{\n\tRegion: s3Config.Region,\n\tEndpointOptions: s3.EndpointOptions{\n\t\tURL: s3Config.Endpoint,\n\t},\n}",
+          "s3Client = s3.NewFromConfig(cfg)",
+          "EndpointResolverWithOptions: aws.EndpointResolverWithOptionsFunc(func(service, region string, options interface{}) (aws.Endpoint, error) {"
+        ],
+        "correct": [
+          "cfg := aws.Config{\n\tRegion: s3Config.Region,\n\tCredentials: credentials.NewStaticCredentialsProvider(accessKey, secretKey, \"\"),\n}\n\ns3Client = s3.NewFromConfig(cfg, func(o *s3.Options) {\n\to.UsePathStyle = true\n\to.EndpointResolver = s3.EndpointResolverFunc(func(region string, options s3.EndpointResolverOptions) (aws.Endpoint, error) {\n\t\treturn aws.Endpoint{\n\t\t\tURL: endpoint,\n\t\t}, nil\n\t})\n})"
+        ]
+      },
+      "documentation": {
+        "title": "AWS SDK v2 S3 Client Configuration Best Practices",
+        "description": "The AWS SDK v2 for Go has specific patterns for configuring S3 clients with custom endpoints. This is particularly important when working with S3-compatible storage services like MinIO.",
+        "references": [
+          {
+            "title": "AWS SDK for Go V2 Developer Guide",
+            "url": "https://aws.github.io/aws-sdk-go-v2/docs/configuring-sdk/"
+          },
+          {
+            "title": "S3 Client Configuration",
+            "url": "https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/s3"
+          }
+        ]
+      }
+    }
+  ]
+} 
