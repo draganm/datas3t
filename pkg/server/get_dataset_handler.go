@@ -9,7 +9,7 @@ import (
 // HandleGetDataset handles GET requests to retrieve dataset info
 func (s *Server) HandleGetDataset(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	store := sqlitestore.New(s.db)
+	store := sqlitestore.New(s.DB)
 	dataset, err := store.DatasetExists(r.Context(), id)
 	if err != nil {
 		s.logger.Error("failed to get dataset", "error", err)

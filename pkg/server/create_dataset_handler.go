@@ -9,7 +9,7 @@ import (
 // HandleCreateDataset handles PUT requests to create a new dataset
 func (s *Server) HandleCreateDataset(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	store := sqlitestore.New(s.db)
+	store := sqlitestore.New(s.DB)
 	err := store.CreateDataset(r.Context(), id)
 	if err != nil {
 		s.logger.Error("failed to create dataset", "error", err)

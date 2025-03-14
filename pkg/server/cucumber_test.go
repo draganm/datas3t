@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/cucumber/godog"
 	"github.com/draganm/datas3t/pkg/server/serverworld"
+	"github.com/draganm/datas3t/pkg/server/sqlitestore"
 	"github.com/minio/minio-go/v7"
 )
 
@@ -56,9 +58,9 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the response status should be (\d+)$`, theResponseStatusShouldBe)
 	ctx.Step(`^the dataset with the id "([^"]*)" should exist$`, theDatasetWithTheIdShouldExist)
 	ctx.Step(`^I create a new dataset with ID "([^"]*)"$`, iCreateANewDatasetWithID)
-	ctx.Step(`^I upload a file containing (\d+) data points to the dataset with ID "([^"]*)"$`, iUploadAFileContainingDataPointsToTheDatasetWithID)
+	ctx.Step(`^I upload a dataset range containing (\d+) data points to the dataset with ID "([^"]*)"$`, iUploadADatasetRangeContainingDataPointsToTheDatasetWithID)
 	ctx.Step(`^the dataset should have (\d+) data points$`, theDatasetShouldHaveDataPoints)
-	ctx.Step(`^the s(\d+) bucket should contain the dataset objects$`, theSBucketShouldContainTheDatasetObjects)
+	ctx.Step(`^the s(\d+) bucket should contain the dataset range$`, theSBucketShouldContainTheDatasetRange)
 }
 
 func iSendAPUTRequestTo(ctx context.Context, path string) error {
@@ -161,7 +163,7 @@ func iCreateANewDatasetWithID(ctx context.Context, id string) error {
 	return nil
 }
 
-func iUploadAFileContainingDataPointsToTheDatasetWithID(ctx context.Context, numPoints int, id string) error {
+func iUploadADatasetRangeContainingDataPointsToTheDatasetWithID(ctx context.Context, numPoints int, id string) error {
 	w, ok := serverworld.FromContext(ctx)
 	if !ok {
 		return fmt.Errorf("world not found in context")
@@ -179,7 +181,7 @@ func iUploadAFileContainingDataPointsToTheDatasetWithID(ctx context.Context, num
 	tw := tar.NewWriter(tarFile)
 
 	// Create the specified number of data points
-	for i := 0; i < numPoints; i++ {
+	for i := range numPoints {
 		// Format sequence number as 20 digits with leading zeros
 		seqNum := fmt.Sprintf("%020d", i+1)
 		fileName := fmt.Sprintf("%s.json", seqNum)
@@ -242,8 +244,29 @@ func iUploadAFileContainingDataPointsToTheDatasetWithID(ctx context.Context, num
 		return fmt.Errorf("expected status code %d, got %d: %s", http.StatusOK, response.StatusCode, body)
 	}
 
+	// Deserialize the response JSON
+	type UploadDataResponse struct {
+		DatasetID     string `json:"dataset_id"`
+		NumDataPoints int    `json:"num_data_points"`
+	}
+
+	var uploadResponse UploadDataResponse
+	err = json.NewDecoder(response.Body).Decode(&uploadResponse)
+	if err != nil {
+		return fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	// Verify the response contains the expected data
+	if uploadResponse.DatasetID != id {
+		return fmt.Errorf("expected dataset ID %s, got %s", id, uploadResponse.DatasetID)
+	}
+
+	if uploadResponse.NumDataPoints != numPoints {
+		return fmt.Errorf("expected %d data points, got %d", numPoints, uploadResponse.NumDataPoints)
+	}
+
 	w.LastResponseStatus = response.StatusCode
-	w.NumDataPoints = numPoints
+	w.NumUploadedDataPoints = uploadResponse.NumDataPoints
 	return nil
 }
 
@@ -253,19 +276,24 @@ func theDatasetShouldHaveDataPoints(ctx context.Context, expectedCount int) erro
 		return fmt.Errorf("world not found in context")
 	}
 
-	// Here we would typically call an API endpoint to get the dataset information
-	// and verify the count of data points.
-	// Since this endpoint isn't fully implemented in the server yet, we'll use
-	// the count stored during upload for verification.
+	// Query the database to get the actual count of data points for this dataset
+	store := sqlitestore.New(w.DB)
 
-	if w.NumDataPoints != expectedCount {
-		return fmt.Errorf("expected %d data points, but found %d", expectedCount, w.NumDataPoints)
+	// Get the datapoints for the dataset
+	datapoints, err := store.GetDatapointsForDataset(ctx, w.LastDatasetID)
+	if err != nil {
+		return fmt.Errorf("failed to get datapoints from database: %w", err)
+	}
+
+	// Verify that the number of datapoints matches what we expect
+	if len(datapoints) != expectedCount {
+		return fmt.Errorf("expected %d data points, but found %d", expectedCount, len(datapoints))
 	}
 
 	return nil
 }
 
-func theSBucketShouldContainTheDatasetObjects(ctx context.Context, _ int) error {
+func theSBucketShouldContainTheDatasetRange(ctx context.Context, _ int) error {
 	w, ok := serverworld.FromContext(ctx)
 	if !ok {
 		return fmt.Errorf("world not found in context")
@@ -289,7 +317,7 @@ func theSBucketShouldContainTheDatasetObjects(ctx context.Context, _ int) error 
 	}
 
 	// Verify that at least one object exists for the dataset
-	if count == 0 {
+	if count != 1 {
 		return fmt.Errorf("no objects found in S3 bucket for dataset %s", w.LastDatasetID)
 	}
 

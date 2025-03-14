@@ -42,7 +42,7 @@ type S3Config struct {
 }
 
 type Server struct {
-	db          *sql.DB
+	DB          *sql.DB
 	s3Client    *s3.Client
 	bucket      string
 	uploadsPath string
@@ -146,7 +146,7 @@ func CreateServer(
 	}
 
 	server := &Server{
-		db:          db,
+		DB:          db,
 		s3Client:    s3Client,
 		bucket:      bucket,
 		uploadsPath: uploadsPath,

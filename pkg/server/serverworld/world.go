@@ -2,6 +2,7 @@ package serverworld
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"net/http/httptest"
@@ -14,11 +15,11 @@ import (
 )
 
 type World struct {
-	ServerURL          string
-	CurrentDatasetID   string
-	LastResponseStatus int
-	LastDatasetID      string
-	NumDataPoints      int
+	ServerURL             string
+	CurrentDatasetID      string
+	LastResponseStatus    int
+	LastDatasetID         string
+	NumUploadedDataPoints int
 
 	// MinIO related fields
 	MinioContainer  *miniomodule.MinioContainer
@@ -30,6 +31,9 @@ type World struct {
 
 	// Uploads path
 	UploadsPath string
+
+	// Database connection
+	DB *sql.DB
 }
 
 func New(ctx context.Context) (*World, error) {
@@ -126,6 +130,7 @@ func New(ctx context.Context) (*World, error) {
 		MinioClient:     minioClient,
 		MinioBucketName: bucketName,
 		UploadsPath:     uploadsPath,
+		DB:              srv.DB,
 	}, nil
 }
 

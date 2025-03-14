@@ -8,6 +8,14 @@ import (
 	"database/sql"
 )
 
+type Datapoint struct {
+	ID           int64
+	DatarangeID  int64
+	DatapointKey int64
+	BeginOffset  int64
+	EndOffset    int64
+}
+
 type Datarange struct {
 	ID              int64
 	DatasetName     string

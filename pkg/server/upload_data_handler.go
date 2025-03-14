@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,8 +19,14 @@ import (
 
 // HandleUploadData handles POST requests to upload data to a dataset
 func (s *Server) HandleUploadData(w http.ResponseWriter, r *http.Request) {
+
+	type UploadDataResponse struct {
+		DatasetID     string `json:"dataset_id"`
+		NumDataPoints int    `json:"num_data_points"`
+	}
+
 	id := r.PathValue("id")
-	store := sqlitestore.New(s.db)
+	store := sqlitestore.New(s.DB)
 
 	// Check if dataset exists
 	exists, err := store.DatasetExists(r.Context(), id)
@@ -88,6 +95,9 @@ func (s *Server) HandleUploadData(w http.ResponseWriter, r *http.Request) {
 	// Track file sequence numbers
 	var fileNumbers []uint64
 
+	// Map to store section information for each sequence number
+	sectionMap := make(map[uint64]tarmmap.TarSection)
+
 	// Validate file names and collect sequence numbers
 	for _, section := range tr.Sections {
 		matches := filePattern.FindStringSubmatch(filepath.Base(section.Header.Name))
@@ -107,6 +117,7 @@ func (s *Server) HandleUploadData(w http.ResponseWriter, r *http.Request) {
 		}
 
 		fileNumbers = append(fileNumbers, seqNum)
+		sectionMap[seqNum] = section
 	}
 
 	// Check that we have at least one file
@@ -157,8 +168,26 @@ func (s *Server) HandleUploadData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Begin a database transaction
+	tx, err := s.DB.BeginTx(r.Context(), nil)
+	if err != nil {
+		s.logger.Error("failed to begin database transaction", "error", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Ensure transaction is rolled back on error
+	defer func() {
+		if tx != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Create a query with the transaction
+	txStore := sqlitestore.New(tx).WithTx(tx)
+
 	// Insert data range into database
-	err = store.InsertDataRange(r.Context(), sqlitestore.InsertDataRangeParams{
+	dataRangeID, err := txStore.InsertDataRange(r.Context(), sqlitestore.InsertDataRangeParams{
 		DatasetName:     id,
 		ObjectKey:       objectKey,
 		MinDatapointKey: int64(minDatapointKey),
@@ -170,10 +199,52 @@ func (s *Server) HandleUploadData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Insert individual datapoints
+	for _, seqNum := range fileNumbers {
+		section := sectionMap[seqNum]
+		err = txStore.InsertDatapoint(r.Context(), sqlitestore.InsertDatapointParams{
+			DatarangeID:  dataRangeID,
+			DatapointKey: int64(seqNum),
+			BeginOffset:  int64(section.HeaderOffset),
+			EndOffset:    int64(section.EndOfDataOffset),
+		})
+
+		if err != nil {
+			s.logger.Error("failed to insert datapoint", "seqNum", seqNum, "error", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// Commit the transaction
+	err = tx.Commit()
+	if err != nil {
+		s.logger.Error("failed to commit transaction", "error", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Set transaction to nil to prevent rollback in defer
+	tx = nil
+
 	s.logger.Info("successfully uploaded data to S3",
 		"dataset", id,
 		"objectKey", objectKey,
 		"minKey", minDatapointKey,
-		"maxKey", maxDatapointKey)
+		"maxKey", maxDatapointKey,
+		"datapoints", len(fileNumbers))
+
+	// Prepare and send the response
+	response := UploadDataResponse{
+		DatasetID:     id,
+		NumDataPoints: len(fileNumbers),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		s.logger.Error("failed to encode response", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
 }

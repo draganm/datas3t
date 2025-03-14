@@ -29,9 +29,74 @@ func (q *Queries) DatasetExists(ctx context.Context, name string) (bool, error) 
 	return column_1, err
 }
 
-const insertDataRange = `-- name: InsertDataRange :exec
+const getDatapointsForDataset = `-- name: GetDatapointsForDataset :many
+SELECT d.id, d.datarange_id, d.datapoint_key, d.begin_offset, d.end_offset 
+FROM datapoints d
+JOIN dataranges dr ON d.datarange_id = dr.id
+WHERE dr.dataset_name = ?
+ORDER BY d.datapoint_key
+`
+
+func (q *Queries) GetDatapointsForDataset(ctx context.Context, datasetName string) ([]Datapoint, error) {
+	rows, err := q.db.QueryContext(ctx, getDatapointsForDataset, datasetName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Datapoint
+	for rows.Next() {
+		var i Datapoint
+		if err := rows.Scan(
+			&i.ID,
+			&i.DatarangeID,
+			&i.DatapointKey,
+			&i.BeginOffset,
+			&i.EndOffset,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getDatarangeIDsForDataset = `-- name: GetDatarangeIDsForDataset :many
+SELECT id FROM dataranges WHERE dataset_name = ?
+`
+
+func (q *Queries) GetDatarangeIDsForDataset(ctx context.Context, datasetName string) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, getDatarangeIDsForDataset, datasetName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const insertDataRange = `-- name: InsertDataRange :one
 INSERT INTO dataranges (dataset_name, object_key, min_datapoint_key, max_datapoint_key) 
 VALUES (?, ?, ?, ?)
+RETURNING id
 `
 
 type InsertDataRangeParams struct {
@@ -41,12 +106,36 @@ type InsertDataRangeParams struct {
 	MaxDatapointKey int64
 }
 
-func (q *Queries) InsertDataRange(ctx context.Context, arg InsertDataRangeParams) error {
-	_, err := q.db.ExecContext(ctx, insertDataRange,
+func (q *Queries) InsertDataRange(ctx context.Context, arg InsertDataRangeParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, insertDataRange,
 		arg.DatasetName,
 		arg.ObjectKey,
 		arg.MinDatapointKey,
 		arg.MaxDatapointKey,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const insertDatapoint = `-- name: InsertDatapoint :exec
+INSERT INTO datapoints (datarange_id, datapoint_key, begin_offset, end_offset)
+VALUES (?, ?, ?, ?)
+`
+
+type InsertDatapointParams struct {
+	DatarangeID  int64
+	DatapointKey int64
+	BeginOffset  int64
+	EndOffset    int64
+}
+
+func (q *Queries) InsertDatapoint(ctx context.Context, arg InsertDatapointParams) error {
+	_, err := q.db.ExecContext(ctx, insertDatapoint,
+		arg.DatarangeID,
+		arg.DatapointKey,
+		arg.BeginOffset,
+		arg.EndOffset,
 	)
 	return err
 }
