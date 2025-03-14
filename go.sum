@@ -61,8 +61,8 @@ github.com/docker/go-connections v0.5.0 h1:USnMq7hx7gwdVZq1L49hLXaFtUdTADjXGp+uj
 github.com/docker/go-connections v0.5.0/go.mod h1:ov60Kzw0kKElRwhNs9UlUHAE/F9Fe6GLaXnqyDdmEXc=
 github.com/docker/go-units v0.5.0 h1:69rxXcBk27SvSaaxTtLh/8llcHD8vYHT7WSdRZ/jvr4=
 github.com/docker/go-units v0.5.0/go.mod h1:fgPhTUdO+D/Jk86RDLlptpiXQzgHJF7gydDDbaIK4Dk=
-github.com/draganm/tar-mmap-go v0.0.2 h1:SlHZFsA/gAU81W+r0okk4YUQprPYLRifOYUYpbr7TaQ=
-github.com/draganm/tar-mmap-go v0.0.2/go.mod h1:MvqZIX0T1NSgB0BZh6msXert2r/FKT1SNoWgstRmjgQ=
+github.com/draganm/tar-mmap-go v0.0.3 h1:hlbPC4QkCU3Sa7yyvb06SLBZBhWwLAxP4uXPxz6Xzx0=
+github.com/draganm/tar-mmap-go v0.0.3/go.mod h1:MvqZIX0T1NSgB0BZh6msXert2r/FKT1SNoWgstRmjgQ=
 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
 github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=
 github.com/edsrzf/mmap-go v1.2.0 h1:hXLYlkbaPzt1SaQk+anYwKSRNhufIDCchSPkUD6dD84=

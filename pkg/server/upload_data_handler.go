@@ -89,11 +89,11 @@ func (s *Server) HandleUploadData(w http.ResponseWriter, r *http.Request) {
 	var fileNumbers []uint64
 
 	// Validate file names and collect sequence numbers
-	for _, header := range tr.Headers {
-		matches := filePattern.FindStringSubmatch(filepath.Base(header.Name))
+	for _, section := range tr.Sections {
+		matches := filePattern.FindStringSubmatch(filepath.Base(section.Header.Name))
 		if matches == nil {
-			s.logger.Error("invalid file name pattern", "filename", header.Name)
-			http.Error(w, fmt.Sprintf("invalid file name pattern: %s", header.Name), http.StatusBadRequest)
+			s.logger.Error("invalid file name pattern", "filename", section.Header.Name)
+			http.Error(w, fmt.Sprintf("invalid file name pattern: %s", section.Header.Name), http.StatusBadRequest)
 			return
 		}
 
@@ -101,8 +101,8 @@ func (s *Server) HandleUploadData(w http.ResponseWriter, r *http.Request) {
 		seqNumStr := matches[1]
 		seqNum, err := strconv.ParseUint(seqNumStr, 10, 64)
 		if err != nil {
-			s.logger.Error("failed to parse sequence number", "filename", header.Name, "error", err)
-			http.Error(w, fmt.Sprintf("invalid sequence number in file name: %s", header.Name), http.StatusBadRequest)
+			s.logger.Error("failed to parse sequence number", "filename", section.Header.Name, "error", err)
+			http.Error(w, fmt.Sprintf("invalid sequence number in file name: %s", section.Header.Name), http.StatusBadRequest)
 			return
 		}
 

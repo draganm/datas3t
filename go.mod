@@ -7,7 +7,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.62
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.78.2
 	github.com/cucumber/godog v0.15.0
-	github.com/draganm/tar-mmap-go v0.0.2
+	github.com/draganm/tar-mmap-go v0.0.3
 	github.com/golang-migrate/migrate/v4 v4.18.2
 	github.com/mattn/go-sqlite3 v1.14.24
 	github.com/minio/minio-go/v7 v7.0.88
