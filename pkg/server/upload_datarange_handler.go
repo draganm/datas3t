@@ -17,8 +17,8 @@ import (
 	tarmmap "github.com/draganm/tar-mmap-go"
 )
 
-// HandleUploadData handles POST requests to upload data to a dataset
-func (s *Server) HandleUploadData(w http.ResponseWriter, r *http.Request) {
+// HandleUploadDatarange handles POST requests to upload data to a dataset
+func (s *Server) HandleUploadDatarange(w http.ResponseWriter, r *http.Request) {
 
 	type UploadDataResponse struct {
 		DatasetID     string `json:"dataset_id"`
