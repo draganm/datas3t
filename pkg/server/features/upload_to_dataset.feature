@@ -5,3 +5,12 @@ Feature: Upload to dataset
         And I upload a dataset range containing 3 data points to the dataset with ID "my-dataset"
         Then the dataset should have 3 data points        
         And the s3 bucket should contain the dataset range
+
+
+    Scenario: Upload to a dataset with existing data
+        Given a dataset with ID "my-dataset" exists
+        And the dataset contains 3 data points
+        When I upload a dataset range containing 3 data points ajdective to the existing datapoints
+        Then the dataset should have 6 data points
+        
+        

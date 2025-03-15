@@ -61,6 +61,10 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^I upload a dataset range containing (\d+) data points to the dataset with ID "([^"]*)"$`, iUploadADatasetRangeContainingDataPointsToTheDatasetWithID)
 	ctx.Step(`^the dataset should have (\d+) data points$`, theDatasetShouldHaveDataPoints)
 	ctx.Step(`^the s(\d+) bucket should contain the dataset range$`, theSBucketShouldContainTheDatasetRange)
+	ctx.Step(`^a dataset with ID "([^"]*)" exists$`, aDatasetWithIDExists)
+	ctx.Step(`^I upload a dataset range containing (\d+) data points ajdective to the existing datapoints$`, iUploadADatasetRangeContainingDataPointsAjdectiveToTheExistingDatapoints)
+	ctx.Step(`^the dataset contains (\d+) data points$`, theDatasetContainsDataPoints)
+
 }
 
 func iSendAPUTRequestTo(ctx context.Context, path string) error {
@@ -326,4 +330,270 @@ func theSBucketShouldContainTheDatasetRange(ctx context.Context, _ int) error {
 	// Instead, we'll just verify that at least one object exists.
 
 	return nil
+}
+
+func aDatasetWithIDExists(ctx context.Context, id string) error {
+	w, ok := serverworld.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("world not found in context")
+	}
+
+	// This function is similar to iCreateANewDatasetWithID but is used as a prerequisite step
+	u, err := url.JoinPath(w.ServerURL, "api", "v1", "datas3t", id)
+	if err != nil {
+		return fmt.Errorf("failed to join path: %w", err)
+	}
+
+	request, err := http.NewRequest(http.MethodPut, u, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return fmt.Errorf("failed to send request: %w", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("expected status code %d, got %d", http.StatusNoContent, response.StatusCode)
+	}
+
+	w.LastDatasetID = id
+	return nil
+}
+
+func iUploadADatasetRangeContainingDataPointsAjdectiveToTheExistingDatapoints(ctx context.Context, numPoints int) error {
+	w, ok := serverworld.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("world not found in context")
+	}
+
+	// First, we need to determine the current number of datapoints to know where to start
+	store := sqlitestore.New(w.DB)
+
+	// Get the existing datapoints
+	existingDatapoints, err := store.GetDatapointsForDataset(ctx, w.LastDatasetID)
+	if err != nil {
+		return fmt.Errorf("failed to get existing datapoints: %w", err)
+	}
+
+	// Find the highest sequence number from existing datapoints
+	var highestSeq int64 = 0
+	for _, dp := range existingDatapoints {
+		if dp.DatapointKey > highestSeq {
+			highestSeq = dp.DatapointKey
+		}
+	}
+
+	// Create a temporary file for the tar archive
+	tarFile, err := os.CreateTemp("", "dataset-*.tar")
+	if err != nil {
+		return fmt.Errorf("failed to create temporary file: %w", err)
+	}
+	defer os.Remove(tarFile.Name())
+	defer tarFile.Close()
+
+	// Create a tar writer
+	tw := tar.NewWriter(tarFile)
+
+	// Create the specified number of data points, starting after the highest existing sequence
+	for i := range numPoints {
+		// Format sequence number as 20 digits with leading zeros
+		// Add 1 to highestSeq to start with the next sequence number
+		seqNum := fmt.Sprintf("%020d", highestSeq+int64(i+1))
+		fileName := fmt.Sprintf("%s.json", seqNum)
+
+		// Create simple JSON content for the data point
+		content := []byte(fmt.Sprintf(`{"id": %d, "data": "adjacent data point %d"}`, highestSeq+int64(i+1), i+1))
+
+		// Create tar header
+		header := &tar.Header{
+			Name:   fileName,
+			Mode:   0644,
+			Size:   int64(len(content)),
+			Format: tar.FormatUSTAR,
+		}
+
+		if err := tw.WriteHeader(header); err != nil {
+			return fmt.Errorf("failed to write tar header: %w", err)
+		}
+
+		if _, err := tw.Write(content); err != nil {
+			return fmt.Errorf("failed to write content to tar: %w", err)
+		}
+	}
+
+	// Close the tar writer to flush any remaining data
+	if err := tw.Close(); err != nil {
+		return fmt.Errorf("failed to close tar writer: %w", err)
+	}
+
+	// Reset the file position to the beginning for reading
+	if _, err := tarFile.Seek(0, 0); err != nil {
+		return fmt.Errorf("failed to seek to beginning of tar file: %w", err)
+	}
+
+	// Read the tar file content
+	tarContent, err := io.ReadAll(tarFile)
+	if err != nil {
+		return fmt.Errorf("failed to read tar file: %w", err)
+	}
+
+	// Upload the tar file to the dataset
+	u, err := url.JoinPath(w.ServerURL, "api", "v1", "datas3t", w.LastDatasetID)
+	if err != nil {
+		return fmt.Errorf("failed to join path: %w", err)
+	}
+
+	request, err := http.NewRequest(http.MethodPost, u, bytes.NewReader(tarContent))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return fmt.Errorf("failed to send request: %w", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		return fmt.Errorf("expected status code %d, got %d: %s", http.StatusOK, response.StatusCode, body)
+	}
+
+	// Deserialize the response JSON
+	type UploadDataResponse struct {
+		DatasetID     string `json:"dataset_id"`
+		NumDataPoints int    `json:"num_data_points"`
+	}
+
+	var uploadResponse UploadDataResponse
+	err = json.NewDecoder(response.Body).Decode(&uploadResponse)
+	if err != nil {
+		return fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	// Verify the response contains the expected data
+	if uploadResponse.DatasetID != w.LastDatasetID {
+		return fmt.Errorf("expected dataset ID %s, got %s", w.LastDatasetID, uploadResponse.DatasetID)
+	}
+
+	if uploadResponse.NumDataPoints != numPoints {
+		return fmt.Errorf("expected %d data points, got %d", numPoints, uploadResponse.NumDataPoints)
+	}
+
+	w.LastResponseStatus = response.StatusCode
+	w.NumUploadedDataPoints += uploadResponse.NumDataPoints
+	return nil
+}
+
+func theDatasetContainsDataPoints(ctx context.Context, numPoints int) error {
+	w, ok := serverworld.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("world not found in context")
+	}
+
+	// Create a temporary file for the tar archive
+	tarFile, err := os.CreateTemp("", "dataset-*.tar")
+	if err != nil {
+		return fmt.Errorf("failed to create temporary file: %w", err)
+	}
+	defer os.Remove(tarFile.Name())
+	defer tarFile.Close()
+
+	// Create a tar writer that produces USTAR format tars
+	tw := tar.NewWriter(tarFile)
+
+	// Create the specified number of data points
+	for i := range numPoints {
+		// Format sequence number as 20 digits with leading zeros
+		seqNum := fmt.Sprintf("%020d", i+1)
+		fileName := fmt.Sprintf("%s.json", seqNum)
+
+		// Create simple JSON content for the data point
+		content := []byte(fmt.Sprintf(`{"id": %d, "data": "test data point %d"}`, i+1, i+1))
+
+		// Create tar header
+		header := &tar.Header{
+			Name:   fileName,
+			Mode:   0644,
+			Size:   int64(len(content)),
+			Format: tar.FormatUSTAR,
+		}
+
+		if err := tw.WriteHeader(header); err != nil {
+			return fmt.Errorf("failed to write tar header: %w", err)
+		}
+
+		if _, err := tw.Write(content); err != nil {
+			return fmt.Errorf("failed to write content to tar: %w", err)
+		}
+	}
+
+	// Close the tar writer to flush any remaining data
+	if err := tw.Close(); err != nil {
+		return fmt.Errorf("failed to close tar writer: %w", err)
+	}
+
+	// Reset the file position to the beginning for reading
+	if _, err := tarFile.Seek(0, 0); err != nil {
+		return fmt.Errorf("failed to seek to beginning of tar file: %w", err)
+	}
+
+	// Read the tar file content
+	tarContent, err := io.ReadAll(tarFile)
+	if err != nil {
+		return fmt.Errorf("failed to read tar file: %w", err)
+	}
+
+	id := w.LastDatasetID
+
+	// Upload the tar file to the dataset
+	u, err := url.JoinPath(w.ServerURL, "api", "v1", "datas3t", id)
+	if err != nil {
+		return fmt.Errorf("failed to join path: %w", err)
+	}
+
+	request, err := http.NewRequest(http.MethodPost, u, bytes.NewReader(tarContent))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return fmt.Errorf("failed to send request: %w", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		return fmt.Errorf("expected status code %d, got %d: %s", http.StatusOK, response.StatusCode, body)
+	}
+
+	// Deserialize the response JSON
+	type UploadDataResponse struct {
+		DatasetID     string `json:"dataset_id"`
+		NumDataPoints int    `json:"num_data_points"`
+	}
+
+	var uploadResponse UploadDataResponse
+	err = json.NewDecoder(response.Body).Decode(&uploadResponse)
+	if err != nil {
+		return fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	// Verify the response contains the expected data
+	if uploadResponse.DatasetID != id {
+		return fmt.Errorf("expected dataset ID %s, got %s", id, uploadResponse.DatasetID)
+	}
+
+	if uploadResponse.NumDataPoints != numPoints {
+		return fmt.Errorf("expected %d data points, got %d", numPoints, uploadResponse.NumDataPoints)
+	}
+
+	w.LastResponseStatus = response.StatusCode
+	w.NumUploadedDataPoints = uploadResponse.NumDataPoints
+	return nil
+
 }
