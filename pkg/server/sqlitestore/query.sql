@@ -22,3 +22,14 @@ FROM datapoints d
 JOIN dataranges dr ON d.datarange_id = dr.id
 WHERE dr.dataset_name = ?
 ORDER BY d.datapoint_key;
+
+-- name: CheckOverlappingDatapointRange :one
+SELECT count(*) > 0 FROM dataranges
+WHERE dataset_name = @dataset_name
+AND (
+    (min_datapoint_key <= @new_min AND max_datapoint_key >= @new_min) -- new range start overlaps with existing range
+    OR
+    (min_datapoint_key <= @new_max AND max_datapoint_key >= @new_max) -- new range end overlaps with existing range
+    OR
+    (min_datapoint_key >= @new_min AND max_datapoint_key <= @new_max) -- new range contains existing range
+);

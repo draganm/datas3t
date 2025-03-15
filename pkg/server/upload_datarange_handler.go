@@ -145,27 +145,22 @@ func (s *Server) HandleUploadDatarange(w http.ResponseWriter, r *http.Request) {
 	minDatapointKey := fileNumbers[0]
 	maxDatapointKey := fileNumbers[len(fileNumbers)-1]
 
-	// Check for overlaps with existing datapoints
-	existingDatapoints, err := store.GetDatapointsForDataset(r.Context(), id)
+	// Check for overlaps with existing datapoints using a single database query
+	hasOverlap, err := store.CheckOverlappingDatapointRange(r.Context(), sqlitestore.CheckOverlappingDatapointRangeParams{
+		DatasetName: id,
+		NewMin:      int64(minDatapointKey),
+		NewMax:      int64(maxDatapointKey),
+	})
 	if err != nil {
-		s.logger.Error("failed to get existing datapoints", "error", err)
+		s.logger.Error("failed to check for overlapping datapoints", "error", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Create a map of existing datapoint keys for efficient lookup
-	existingKeysMap := make(map[int64]bool, len(existingDatapoints))
-	for _, dp := range existingDatapoints {
-		existingKeysMap[dp.DatapointKey] = true
-	}
-
-	// Check if any of the new datapoints overlap with existing ones
-	for _, key := range fileNumbers {
-		if existingKeysMap[int64(key)] {
-			s.logger.Error("datapoint key already exists", "key", key)
-			http.Error(w, fmt.Sprintf("datapoint with key %d already exists", key), http.StatusBadRequest)
-			return
-		}
+	if hasOverlap {
+		s.logger.Error("datapoint range overlaps with existing datapoints", "min", minDatapointKey, "max", maxDatapointKey)
+		http.Error(w, "datapoint range overlaps with existing datapoints", http.StatusBadRequest)
+		return
 	}
 
 	// Create S3 object key with the pattern dataset/<dataset_name>/datapoints/<from>-<to>.tar

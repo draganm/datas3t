@@ -9,6 +9,31 @@ import (
 	"context"
 )
 
+const checkOverlappingDatapointRange = `-- name: CheckOverlappingDatapointRange :one
+SELECT count(*) > 0 FROM dataranges
+WHERE dataset_name = ?1
+AND (
+    (min_datapoint_key <= ?2 AND max_datapoint_key >= ?2) -- new range start overlaps with existing range
+    OR
+    (min_datapoint_key <= ?3 AND max_datapoint_key >= ?3) -- new range end overlaps with existing range
+    OR
+    (min_datapoint_key >= ?2 AND max_datapoint_key <= ?3) -- new range contains existing range
+)
+`
+
+type CheckOverlappingDatapointRangeParams struct {
+	DatasetName string
+	NewMin      int64
+	NewMax      int64
+}
+
+func (q *Queries) CheckOverlappingDatapointRange(ctx context.Context, arg CheckOverlappingDatapointRangeParams) (bool, error) {
+	row := q.db.QueryRowContext(ctx, checkOverlappingDatapointRange, arg.DatasetName, arg.NewMin, arg.NewMax)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const createDataset = `-- name: CreateDataset :exec
 INSERT INTO datasets (name) VALUES (?)
 `

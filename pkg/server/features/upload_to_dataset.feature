@@ -17,3 +17,4 @@ Feature: Upload to dataset
         And the dataset contains 3 data points
         When I upload a datapoint range containing 3 data points overlapping with the existing datapoints
         Then the upload should fail with a 400 status code
+        Then the dataset should have 3 data points
