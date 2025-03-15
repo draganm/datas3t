@@ -64,6 +64,8 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^a dataset with ID "([^"]*)" exists$`, aDatasetWithIDExists)
 	ctx.Step(`^I upload a dataset range containing (\d+) data points ajdective to the existing datapoints$`, iUploadADatasetRangeContainingDataPointsAjdectiveToTheExistingDatapoints)
 	ctx.Step(`^the dataset contains (\d+) data points$`, theDatasetContainsDataPoints)
+	ctx.Step(`^I upload a dataset range containing (\d+) data points overlapping with the existing datapoints$`, iUploadADatasetRangeContainingDataPointsOverlappingWithTheExistingDatapoints)
+	ctx.Step(`^the upload should fail with a (\d+) status code$`, theUploadShouldFailWithAStatusCode)
 
 }
 
@@ -596,4 +598,126 @@ func theDatasetContainsDataPoints(ctx context.Context, numPoints int) error {
 	w.NumUploadedDataPoints = uploadResponse.NumDataPoints
 	return nil
 
+}
+
+func iUploadADatasetRangeContainingDataPointsOverlappingWithTheExistingDatapoints(ctx context.Context, numPoints int) error {
+	w, ok := serverworld.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("world not found in context")
+	}
+
+	// First, we need to determine the current number of datapoints to know which ones to overlap
+	store := sqlitestore.New(w.DB)
+
+	// Get the existing datapoints
+	existingDatapoints, err := store.GetDatapointsForDataset(ctx, w.LastDatasetID)
+	if err != nil {
+		return fmt.Errorf("failed to get existing datapoints: %w", err)
+	}
+
+	if len(existingDatapoints) == 0 {
+		return fmt.Errorf("no existing datapoints to overlap with")
+	}
+
+	// Create a temporary file for the tar archive
+	tarFile, err := os.CreateTemp("", "dataset-*.tar")
+	if err != nil {
+		return fmt.Errorf("failed to create temporary file: %w", err)
+	}
+	defer os.Remove(tarFile.Name())
+	defer tarFile.Close()
+
+	// Create a tar writer
+	tw := tar.NewWriter(tarFile)
+
+	// Create the specified number of data points, deliberately overlapping with existing ones
+	// We'll start from the middle of the existing range to ensure overlap
+	startIdx := len(existingDatapoints) / 2
+	if startIdx+numPoints > len(existingDatapoints) {
+		startIdx = 0 // If not enough points, start from the beginning
+	}
+
+	// Get the sequence numbers to overlap
+	var overlappingKeys []int64
+	for i := 0; i < numPoints && i+startIdx < len(existingDatapoints); i++ {
+		overlappingKeys = append(overlappingKeys, existingDatapoints[i+startIdx].DatapointKey)
+	}
+
+	// Create overlapping datapoints
+	for i, key := range overlappingKeys {
+		// Format sequence number as 20 digits with leading zeros
+		seqNum := fmt.Sprintf("%020d", key)
+		fileName := fmt.Sprintf("%s.json", seqNum)
+
+		// Create content for the overlapping data point
+		content := []byte(fmt.Sprintf(`{"id": %d, "data": "overlapping data point %d"}`, key, i+1))
+
+		// Create tar header
+		header := &tar.Header{
+			Name:   fileName,
+			Mode:   0644,
+			Size:   int64(len(content)),
+			Format: tar.FormatUSTAR,
+		}
+
+		if err := tw.WriteHeader(header); err != nil {
+			return fmt.Errorf("failed to write tar header: %w", err)
+		}
+
+		if _, err := tw.Write(content); err != nil {
+			return fmt.Errorf("failed to write content to tar: %w", err)
+		}
+	}
+
+	// Close the tar writer to flush any remaining data
+	if err := tw.Close(); err != nil {
+		return fmt.Errorf("failed to close tar writer: %w", err)
+	}
+
+	// Reset the file position to the beginning for reading
+	if _, err := tarFile.Seek(0, 0); err != nil {
+		return fmt.Errorf("failed to seek to beginning of tar file: %w", err)
+	}
+
+	// Read the tar file content
+	tarContent, err := io.ReadAll(tarFile)
+	if err != nil {
+		return fmt.Errorf("failed to read tar file: %w", err)
+	}
+
+	// Upload the tar file to the dataset (expecting it to fail)
+	u, err := url.JoinPath(w.ServerURL, "api", "v1", "datas3t", w.LastDatasetID)
+	if err != nil {
+		return fmt.Errorf("failed to join path: %w", err)
+	}
+
+	request, err := http.NewRequest(http.MethodPost, u, bytes.NewReader(tarContent))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return fmt.Errorf("failed to send request: %w", err)
+	}
+	defer response.Body.Close()
+
+	// Store the response status for verification in the next step
+	w.LastResponseStatus = response.StatusCode
+
+	// We don't check the response code here as it should be verified in theUploadShouldFailWithAStatusCode
+	return nil
+}
+
+func theUploadShouldFailWithAStatusCode(ctx context.Context, expectedStatusCode int) error {
+	w, ok := serverworld.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("world not found in context")
+	}
+
+	if w.LastResponseStatus != expectedStatusCode {
+		return fmt.Errorf("expected status code %d, but got %d", expectedStatusCode, w.LastResponseStatus)
+	}
+
+	return nil
 }
