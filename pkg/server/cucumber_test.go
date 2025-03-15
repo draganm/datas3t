@@ -58,13 +58,13 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the response status should be (\d+)$`, theResponseStatusShouldBe)
 	ctx.Step(`^the dataset with the id "([^"]*)" should exist$`, theDatasetWithTheIdShouldExist)
 	ctx.Step(`^I create a new dataset with ID "([^"]*)"$`, iCreateANewDatasetWithID)
-	ctx.Step(`^I upload a dataset range containing (\d+) data points to the dataset with ID "([^"]*)"$`, iUploadADatasetRangeContainingDataPointsToTheDatasetWithID)
+	ctx.Step(`^I upload a datapoint range containing (\d+) data points to the dataset with ID "([^"]*)"$`, iUploadADatapointRangeContainingDataPointsToTheDatasetWithID)
 	ctx.Step(`^the dataset should have (\d+) data points$`, theDatasetShouldHaveDataPoints)
-	ctx.Step(`^the s(\d+) bucket should contain the dataset range$`, theSBucketShouldContainTheDatasetRange)
+	ctx.Step(`^the s(\d+) bucket should contain the datapoint range$`, theSBucketShouldContainTheDatapointRange)
 	ctx.Step(`^a dataset with ID "([^"]*)" exists$`, aDatasetWithIDExists)
-	ctx.Step(`^I upload a dataset range containing (\d+) data points ajdective to the existing datapoints$`, iUploadADatasetRangeContainingDataPointsAjdectiveToTheExistingDatapoints)
+	ctx.Step(`^I upload a datapoint range containing (\d+) data points ajdective to the existing datapoints$`, iUploadADatapointRangeContainingDataPointsAjdectiveToTheExistingDatapoints)
 	ctx.Step(`^the dataset contains (\d+) data points$`, theDatasetContainsDataPoints)
-	ctx.Step(`^I upload a dataset range containing (\d+) data points overlapping with the existing datapoints$`, iUploadADatasetRangeContainingDataPointsOverlappingWithTheExistingDatapoints)
+	ctx.Step(`^I upload a datapoint range containing (\d+) data points overlapping with the existing datapoints$`, iUploadADatapointRangeContainingDataPointsOverlappingWithTheExistingDatapoints)
 	ctx.Step(`^the upload should fail with a (\d+) status code$`, theUploadShouldFailWithAStatusCode)
 
 }
@@ -169,7 +169,7 @@ func iCreateANewDatasetWithID(ctx context.Context, id string) error {
 	return nil
 }
 
-func iUploadADatasetRangeContainingDataPointsToTheDatasetWithID(ctx context.Context, numPoints int, id string) error {
+func iUploadADatapointRangeContainingDataPointsToTheDatasetWithID(ctx context.Context, numPoints int, id string) error {
 	w, ok := serverworld.FromContext(ctx)
 	if !ok {
 		return fmt.Errorf("world not found in context")
@@ -299,7 +299,7 @@ func theDatasetShouldHaveDataPoints(ctx context.Context, expectedCount int) erro
 	return nil
 }
 
-func theSBucketShouldContainTheDatasetRange(ctx context.Context, _ int) error {
+func theSBucketShouldContainTheDatapointRange(ctx context.Context, _ int) error {
 	w, ok := serverworld.FromContext(ctx)
 	if !ok {
 		return fmt.Errorf("world not found in context")
@@ -365,7 +365,7 @@ func aDatasetWithIDExists(ctx context.Context, id string) error {
 	return nil
 }
 
-func iUploadADatasetRangeContainingDataPointsAjdectiveToTheExistingDatapoints(ctx context.Context, numPoints int) error {
+func iUploadADatapointRangeContainingDataPointsAjdectiveToTheExistingDatapoints(ctx context.Context, numPoints int) error {
 	w, ok := serverworld.FromContext(ctx)
 	if !ok {
 		return fmt.Errorf("world not found in context")
@@ -600,7 +600,7 @@ func theDatasetContainsDataPoints(ctx context.Context, numPoints int) error {
 
 }
 
-func iUploadADatasetRangeContainingDataPointsOverlappingWithTheExistingDatapoints(ctx context.Context, numPoints int) error {
+func iUploadADatapointRangeContainingDataPointsOverlappingWithTheExistingDatapoints(ctx context.Context, numPoints int) error {
 	w, ok := serverworld.FromContext(ctx)
 	if !ok {
 		return fmt.Errorf("world not found in context")
