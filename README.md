@@ -9,6 +9,10 @@ A Go service for managing datasets with S3 storage integration.
 - REST API for dataset operations
 - Integration with MinIO for development and testing
 
+## Data Dictionary
+
+For detailed information about the key terms and concepts used in this project, see [DATA_DICTIONARY.md](DATA_DICTIONARY.md).
+
 ## Development
 
 ### Prerequisites
@@ -28,24 +32,8 @@ A Go service for managing datasets with S3 storage integration.
 go run cmd/server/server_main.go --db-url <sqlite-db-url> --addr <listen-address> --s3-endpoint <s3-endpoint> --s3-region <region> --s3-access-key-id <access-key> --s3-secret-key <secret-key> --s3-bucket-name <bucket> --s3-use-ssl <true/false> --uploads-path <path>
 ```
 
-## CursorRules
-
-This project includes a `.cursorrules.json` file with rules to prevent generating deprecated code patterns when working with AWS SDK v2, specifically for S3 client configuration.
-
-For detailed information about these rules, see [CURSOR_RULES.md](CURSOR_RULES.md).
-
-### Key Benefits
-
-- Prevents compilation errors related to AWS SDK v2 S3 client configuration
-- Enforces best practices for working with S3-compatible storage services
-- Ensures consistent code patterns across the project
-
 ## Testing
 
 ```bash
 go test ./...
 ```
-
-## License
-
-[MIT License](LICENSE) 
