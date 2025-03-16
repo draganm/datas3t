@@ -23,6 +23,7 @@ import (
 // endpoints
 // 	create a datas3t:  PUT /api/v1/datas3t/{id}
 // 	get a datas3 info: GET /api/v1/datas3t/{id}
+// 	get a datas3 layout: GET /api/v1/datas3t/{id}/layout
 // 	put a datas3t: PATCH /api/v1/datas3t/{id}
 // 	post data to a datas3t: POST /api/v1/datas3t/{id}
 //  get data for a datas3t range: GET /api/v1/datas3t/{id}/data/{start}/{end}
@@ -158,6 +159,7 @@ func CreateServer(
 	mux.HandleFunc("PUT /api/v1/datas3t/{id}", server.HandleCreateDataset)
 	mux.HandleFunc("GET /api/v1/datas3t/{id}", server.HandleGetDataset)
 	mux.HandleFunc("POST /api/v1/datas3t/{id}", server.HandleUploadDatarange)
+	mux.HandleFunc("GET /api/v1/datas3t/{id}/dataranges", server.HandleGetDataranges)
 
 	server.Handler = mux
 

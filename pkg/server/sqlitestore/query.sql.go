@@ -118,6 +118,48 @@ func (q *Queries) GetDatarangeIDsForDataset(ctx context.Context, datasetName str
 	return items, nil
 }
 
+const getDatarangesForDataset = `-- name: GetDatarangesForDataset :many
+SELECT object_key, min_datapoint_key, max_datapoint_key, size_bytes 
+FROM dataranges 
+WHERE dataset_name = ?
+ORDER BY min_datapoint_key ASC
+`
+
+type GetDatarangesForDatasetRow struct {
+	ObjectKey       string
+	MinDatapointKey int64
+	MaxDatapointKey int64
+	SizeBytes       int64
+}
+
+func (q *Queries) GetDatarangesForDataset(ctx context.Context, datasetName string) ([]GetDatarangesForDatasetRow, error) {
+	rows, err := q.db.QueryContext(ctx, getDatarangesForDataset, datasetName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetDatarangesForDatasetRow
+	for rows.Next() {
+		var i GetDatarangesForDatasetRow
+		if err := rows.Scan(
+			&i.ObjectKey,
+			&i.MinDatapointKey,
+			&i.MaxDatapointKey,
+			&i.SizeBytes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const insertDataRange = `-- name: InsertDataRange :one
 INSERT INTO dataranges (dataset_name, object_key, min_datapoint_key, max_datapoint_key, size_bytes) 
 VALUES (?, ?, ?, ?, ?)
