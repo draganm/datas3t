@@ -18,3 +18,10 @@ Feature: Upload to dataset
         When I upload a datapoint range containing 3 data points overlapping with the existing datapoints
         Then the upload should fail with a 400 status code
         Then the dataset should have 3 data points
+
+    Scenario: Upload of datapoint range with non-sequential datapoints
+        Given a dataset with ID "my-dataset" exists
+        When I upload a datapoint range containing 2 datapoints with keys 1 and 3
+        Then the upload should fail with a 400 status code
+        Then the dataset should have 0 data points
+

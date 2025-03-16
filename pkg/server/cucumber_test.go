@@ -66,6 +66,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the dataset contains (\d+) data points$`, theDatasetContainsDataPoints)
 	ctx.Step(`^I upload a datapoint range containing (\d+) data points overlapping with the existing datapoints$`, iUploadADatapointRangeContainingDataPointsOverlappingWithTheExistingDatapoints)
 	ctx.Step(`^the upload should fail with a (\d+) status code$`, theUploadShouldFailWithAStatusCode)
+	ctx.Step(`^I upload a datapoint range containing (\d+) datapoints with keys (\d+) and (\d+)$`, iUploadADatapointRangeContainingDatapointsWithKeysAnd)
 
 }
 
@@ -718,6 +719,92 @@ func theUploadShouldFailWithAStatusCode(ctx context.Context, expectedStatusCode 
 	if w.LastResponseStatus != expectedStatusCode {
 		return fmt.Errorf("expected status code %d, but got %d", expectedStatusCode, w.LastResponseStatus)
 	}
+
+	return nil
+}
+
+func iUploadADatapointRangeContainingDatapointsWithKeysAnd(ctx context.Context, numDatapoints, key1, key2 int) error {
+	w, ok := serverworld.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("world not found in context")
+	}
+
+	// Create a temporary tar file
+	tarFile, err := os.CreateTemp("", "datapoints-*.tar")
+	if err != nil {
+		return fmt.Errorf("failed to create temporary tar file: %w", err)
+	}
+	defer os.Remove(tarFile.Name())
+	defer tarFile.Close()
+
+	// Create a tar writer
+	tw := tar.NewWriter(tarFile)
+	defer tw.Close()
+
+	// Create the specified number of datapoints with the given keys
+	keys := []int{key1, key2}
+	for i := 0; i < numDatapoints; i++ {
+		if i >= len(keys) {
+			return fmt.Errorf("not enough keys provided for %d datapoints", numDatapoints)
+		}
+
+		// Create a file with the key as the filename (padded to 20 digits)
+		filename := fmt.Sprintf("%020d.json", keys[i])
+
+		// Create some dummy content
+		content := []byte(fmt.Sprintf(`{"key": %d, "value": "test data %d"}`, keys[i], i))
+
+		// Add the file to the tar archive
+		hdr := &tar.Header{
+			Name: filename,
+			Mode: 0600,
+			Size: int64(len(content)),
+		}
+
+		if err := tw.WriteHeader(hdr); err != nil {
+			return fmt.Errorf("failed to write tar header: %w", err)
+		}
+
+		if _, err := tw.Write(content); err != nil {
+			return fmt.Errorf("failed to write tar content: %w", err)
+		}
+	}
+
+	// Flush the tar writer
+	if err := tw.Close(); err != nil {
+		return fmt.Errorf("failed to close tar writer: %w", err)
+	}
+
+	// Reset the file position to the beginning for reading
+	if _, err := tarFile.Seek(0, 0); err != nil {
+		return fmt.Errorf("failed to seek to beginning of tar file: %w", err)
+	}
+
+	// Read the tar file content
+	tarContent, err := io.ReadAll(tarFile)
+	if err != nil {
+		return fmt.Errorf("failed to read tar file: %w", err)
+	}
+
+	// Upload the tar file to the dataset
+	u, err := url.JoinPath(w.ServerURL, "api", "v1", "datas3t", w.LastDatasetID)
+	if err != nil {
+		return fmt.Errorf("failed to join path: %w", err)
+	}
+
+	request, err := http.NewRequest(http.MethodPost, u, bytes.NewReader(tarContent))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return fmt.Errorf("failed to send request: %w", err)
+	}
+	defer response.Body.Close()
+
+	// Store the response status for verification in the next step
+	w.LastResponseStatus = response.StatusCode
 
 	return nil
 }
