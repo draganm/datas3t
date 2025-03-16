@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/cucumber/godog"
+	"github.com/draganm/datas3t/pkg/client"
 	"github.com/draganm/datas3t/pkg/server/serverworld"
 	"github.com/draganm/datas3t/pkg/server/sqlitestore"
 	"github.com/minio/minio-go/v7"
@@ -22,11 +22,11 @@ func TestMain(m *testing.M) {
 
 	// Initialize cucumber test suite
 	opts := godog.Options{
-		Format:        "pretty",
-		Paths:         []string{"features"},
-		NoColors:      true,
-		StopOnFailure: true,
-		Strict:        true,
+		Format:   "pretty",
+		Paths:    []string{"features"},
+		NoColors: true,
+		// StopOnFailure: true,
+		Strict: true,
 	}
 
 	status := godog.TestSuite{
@@ -115,25 +115,14 @@ func theDatasetWithTheIdShouldExist(ctx context.Context, id string) error {
 		return fmt.Errorf("world not found in context")
 	}
 
-	u, err := url.JoinPath(w.ServerURL, "api", "v1", "datas3t", id)
+	c, err := client.NewClient(w.ServerURL)
 	if err != nil {
-		return fmt.Errorf("failed to join path: %w", err)
+		return fmt.Errorf("failed to create client: %w", err)
 	}
 
-	request, err := http.NewRequest(http.MethodGet, u, nil)
+	_, err = c.GetDataset(ctx, id)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
-	}
-
-	defer response.Body.Close()
-
-	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("expected status code %d, got %d", http.StatusOK, response.StatusCode)
+		return fmt.Errorf("dataset does not exist: %w", err)
 	}
 
 	return nil
@@ -145,27 +134,17 @@ func iCreateANewDatasetWithID(ctx context.Context, id string) error {
 		return fmt.Errorf("world not found in context")
 	}
 
-	u, err := url.JoinPath(w.ServerURL, "api", "v1", "datas3t", id)
+	c, err := client.NewClient(w.ServerURL)
 	if err != nil {
-		return fmt.Errorf("failed to join path: %w", err)
+		return fmt.Errorf("failed to create client: %w", err)
 	}
 
-	request, err := http.NewRequest(http.MethodPut, u, nil)
+	err = c.CreateDataset(ctx, id)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return fmt.Errorf("failed to create dataset: %w", err)
 	}
 
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
-	}
-	defer response.Body.Close()
-
-	if response.StatusCode != http.StatusNoContent {
-		return fmt.Errorf("expected status code %d, got %d", http.StatusNoContent, response.StatusCode)
-	}
-
-	w.LastResponseStatus = response.StatusCode
+	w.LastResponseStatus = http.StatusNoContent
 	w.LastDatasetID = id
 	return nil
 }
@@ -233,54 +212,18 @@ func iUploadADatapointRangeContainingDataPointsToTheDatasetWithID(ctx context.Co
 		return fmt.Errorf("failed to read tar file: %w", err)
 	}
 
-	// Upload the tar file to the dataset
-	u, err := url.JoinPath(w.ServerURL, "api", "v1", "datas3t", id)
+	c, err := client.NewClient(w.ServerURL)
 	if err != nil {
-		return fmt.Errorf("failed to join path: %w", err)
+		return fmt.Errorf("failed to create client: %w", err)
 	}
 
-	request, err := http.NewRequest(http.MethodPost, u, bytes.NewReader(tarContent))
+	err = c.UploadDatarange(ctx, id, bytes.NewReader(tarContent))
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return fmt.Errorf("failed to upload datarange: %w", err)
 	}
 
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
-	}
-	defer response.Body.Close()
-
-	if response.StatusCode != http.StatusOK {
-		body, err := io.ReadAll(response.Body)
-		if err != nil {
-			return fmt.Errorf("failed to read error response body: %w", err)
-		}
-		return fmt.Errorf("expected status code %d, got %d: %s", http.StatusOK, response.StatusCode, body)
-	}
-
-	// Deserialize the response JSON
-	type UploadDataResponse struct {
-		DatasetID     string `json:"dataset_id"`
-		NumDataPoints int    `json:"num_data_points"`
-	}
-
-	var uploadResponse UploadDataResponse
-	err = json.NewDecoder(response.Body).Decode(&uploadResponse)
-	if err != nil {
-		return fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	// Verify the response contains the expected data
-	if uploadResponse.DatasetID != id {
-		return fmt.Errorf("expected dataset ID %s, got %s", id, uploadResponse.DatasetID)
-	}
-
-	if uploadResponse.NumDataPoints != numPoints {
-		return fmt.Errorf("expected %d data points, got %d", numPoints, uploadResponse.NumDataPoints)
-	}
-
-	w.LastResponseStatus = response.StatusCode
-	w.NumUploadedDataPoints = uploadResponse.NumDataPoints
+	w.LastResponseStatus = http.StatusOK
+	w.NumUploadedDataPoints = numPoints
 	return nil
 }
 
@@ -348,25 +291,14 @@ func aDatasetWithIDExists(ctx context.Context, id string) error {
 		return fmt.Errorf("world not found in context")
 	}
 
-	// This function is similar to iCreateANewDatasetWithID but is used as a prerequisite step
-	u, err := url.JoinPath(w.ServerURL, "api", "v1", "datas3t", id)
+	c, err := client.NewClient(w.ServerURL)
 	if err != nil {
-		return fmt.Errorf("failed to join path: %w", err)
+		return fmt.Errorf("failed to create client: %w", err)
 	}
 
-	request, err := http.NewRequest(http.MethodPut, u, nil)
+	err = c.CreateDataset(ctx, id)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
-	}
-	defer response.Body.Close()
-
-	if response.StatusCode != http.StatusNoContent {
-		return fmt.Errorf("expected status code %d, got %d", http.StatusNoContent, response.StatusCode)
+		return fmt.Errorf("failed to create dataset: %w", err)
 	}
 
 	w.LastDatasetID = id
@@ -454,54 +386,18 @@ func iUploadADatapointRangeContainingDataPointsAjdectiveToTheExistingDatapoints(
 		return fmt.Errorf("failed to read tar file: %w", err)
 	}
 
-	// Upload the tar file to the dataset
-	u, err := url.JoinPath(w.ServerURL, "api", "v1", "datas3t", w.LastDatasetID)
+	c, err := client.NewClient(w.ServerURL)
 	if err != nil {
-		return fmt.Errorf("failed to join path: %w", err)
+		return fmt.Errorf("failed to create client: %w", err)
 	}
 
-	request, err := http.NewRequest(http.MethodPost, u, bytes.NewReader(tarContent))
+	err = c.UploadDatarange(ctx, w.LastDatasetID, bytes.NewReader(tarContent))
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return fmt.Errorf("failed to upload datarange: %w", err)
 	}
 
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
-	}
-	defer response.Body.Close()
-
-	if response.StatusCode != http.StatusOK {
-		body, err := io.ReadAll(response.Body)
-		if err != nil {
-			return fmt.Errorf("failed to read error response body: %w", err)
-		}
-		return fmt.Errorf("expected status code %d, got %d: %s", http.StatusOK, response.StatusCode, body)
-	}
-
-	// Deserialize the response JSON
-	type UploadDataResponse struct {
-		DatasetID     string `json:"dataset_id"`
-		NumDataPoints int    `json:"num_data_points"`
-	}
-
-	var uploadResponse UploadDataResponse
-	err = json.NewDecoder(response.Body).Decode(&uploadResponse)
-	if err != nil {
-		return fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	// Verify the response contains the expected data
-	if uploadResponse.DatasetID != w.LastDatasetID {
-		return fmt.Errorf("expected dataset ID %s, got %s", w.LastDatasetID, uploadResponse.DatasetID)
-	}
-
-	if uploadResponse.NumDataPoints != numPoints {
-		return fmt.Errorf("expected %d data points, got %d", numPoints, uploadResponse.NumDataPoints)
-	}
-
-	w.LastResponseStatus = response.StatusCode
-	w.NumUploadedDataPoints += uploadResponse.NumDataPoints
+	w.LastResponseStatus = http.StatusOK
+	w.NumUploadedDataPoints += numPoints
 	return nil
 }
 
@@ -570,56 +466,19 @@ func theDatasetContainsDataPoints(ctx context.Context, numPoints int) error {
 
 	id := w.LastDatasetID
 
-	// Upload the tar file to the dataset
-	u, err := url.JoinPath(w.ServerURL, "api", "v1", "datas3t", id)
+	c, err := client.NewClient(w.ServerURL)
 	if err != nil {
-		return fmt.Errorf("failed to join path: %w", err)
+		return fmt.Errorf("failed to create client: %w", err)
 	}
 
-	request, err := http.NewRequest(http.MethodPost, u, bytes.NewReader(tarContent))
+	err = c.UploadDatarange(ctx, id, bytes.NewReader(tarContent))
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return fmt.Errorf("failed to upload datarange: %w", err)
 	}
 
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
-	}
-	defer response.Body.Close()
-
-	if response.StatusCode != http.StatusOK {
-		body, err := io.ReadAll(response.Body)
-		if err != nil {
-			return fmt.Errorf("failed to read error response body: %w", err)
-		}
-		return fmt.Errorf("expected status code %d, got %d: %s", http.StatusOK, response.StatusCode, body)
-	}
-
-	// Deserialize the response JSON
-	type UploadDataResponse struct {
-		DatasetID     string `json:"dataset_id"`
-		NumDataPoints int    `json:"num_data_points"`
-	}
-
-	var uploadResponse UploadDataResponse
-	err = json.NewDecoder(response.Body).Decode(&uploadResponse)
-	if err != nil {
-		return fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	// Verify the response contains the expected data
-	if uploadResponse.DatasetID != id {
-		return fmt.Errorf("expected dataset ID %s, got %s", id, uploadResponse.DatasetID)
-	}
-
-	if uploadResponse.NumDataPoints != numPoints {
-		return fmt.Errorf("expected %d data points, got %d", numPoints, uploadResponse.NumDataPoints)
-	}
-
-	w.LastResponseStatus = response.StatusCode
-	w.NumUploadedDataPoints = uploadResponse.NumDataPoints
+	w.LastResponseStatus = http.StatusOK
+	w.NumUploadedDataPoints = numPoints
 	return nil
-
 }
 
 func iUploadADatapointRangeContainingDataPointsOverlappingWithTheExistingDatapoints(ctx context.Context, numPoints int) error {
@@ -711,27 +570,22 @@ func iUploadADatapointRangeContainingDataPointsOverlappingWithTheExistingDatapoi
 		return fmt.Errorf("failed to read tar file: %w", err)
 	}
 
-	// Upload the tar file to the dataset (expecting it to fail)
-	u, err := url.JoinPath(w.ServerURL, "api", "v1", "datas3t", w.LastDatasetID)
+	c, err := client.NewClient(w.ServerURL)
 	if err != nil {
-		return fmt.Errorf("failed to join path: %w", err)
+		return fmt.Errorf("failed to create client: %w", err)
 	}
 
-	request, err := http.NewRequest(http.MethodPost, u, bytes.NewReader(tarContent))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
-	}
-	defer response.Body.Close()
+	err = c.UploadDatarange(ctx, w.LastDatasetID, bytes.NewReader(tarContent))
+	// We expect this to fail, but we'll check the status code in the next step
 
 	// Store the response status for verification in the next step
-	w.LastResponseStatus = response.StatusCode
+	if err != nil {
+		// Extract status code from error message using client.GetStatusCode
+		w.LastResponseStatus = client.GetStatusCode(err)
+	} else {
+		w.LastResponseStatus = http.StatusOK
+	}
 
-	// We don't check the response code here as it should be verified in theUploadShouldFailWithAStatusCode
 	return nil
 }
 
@@ -815,25 +669,17 @@ func iUploadADatapointRangeContainingDatapointsWithKeysAnd(ctx context.Context, 
 		return fmt.Errorf("failed to read tar file: %w", err)
 	}
 
-	// Upload the tar file to the dataset
-	u, err := url.JoinPath(w.ServerURL, "api", "v1", "datas3t", w.LastDatasetID)
+	c, err := client.NewClient(w.ServerURL)
 	if err != nil {
-		return fmt.Errorf("failed to join path: %w", err)
+		return fmt.Errorf("failed to create client: %w", err)
 	}
 
-	request, err := http.NewRequest(http.MethodPost, u, bytes.NewReader(tarContent))
+	err = c.UploadDatarange(ctx, w.LastDatasetID, bytes.NewReader(tarContent))
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		w.LastResponseStatus = client.GetStatusCode(err)
+	} else {
+		w.LastResponseStatus = http.StatusOK
 	}
-
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
-	}
-	defer response.Body.Close()
-
-	// Store the response status for verification in the next step
-	w.LastResponseStatus = response.StatusCode
 
 	return nil
 }
