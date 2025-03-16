@@ -60,7 +60,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^I create a new dataset with ID "([^"]*)"$`, iCreateANewDatasetWithID)
 	ctx.Step(`^I upload a datapoint range containing (\d+) data points to the dataset with ID "([^"]*)"$`, iUploadADatapointRangeContainingDataPointsToTheDatasetWithID)
 	ctx.Step(`^the dataset should have (\d+) data points$`, theDatasetShouldHaveDataPoints)
-	ctx.Step(`^the s(\d+) bucket should contain the datapoint range$`, theSBucketShouldContainTheDatapointRange)
+	ctx.Step(`^the s3 bucket should contain the datapoint range$`, theSBucketShouldContainTheDatapointRange)
 	ctx.Step(`^a dataset with ID "([^"]*)" exists$`, aDatasetWithIDExists)
 	ctx.Step(`^I upload a datapoint range containing (\d+) data points ajdective to the existing datapoints$`, iUploadADatapointRangeContainingDataPointsAjdectiveToTheExistingDatapoints)
 	ctx.Step(`^the dataset contains (\d+) data points$`, theDatasetContainsDataPoints)
@@ -307,7 +307,7 @@ func theDatasetShouldHaveDataPoints(ctx context.Context, expectedCount int) erro
 	return nil
 }
 
-func theSBucketShouldContainTheDatapointRange(ctx context.Context, _ int) error {
+func theSBucketShouldContainTheDatapointRange(ctx context.Context) error {
 	w, ok := serverworld.FromContext(ctx)
 	if !ok {
 		return fmt.Errorf("world not found in context")
