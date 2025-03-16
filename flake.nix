@@ -27,13 +27,11 @@
 
             packages = with pkgs; [
               go
-              go-tools # staticccheck
-              gopls # lsp
-              gotools # goimports, ...
               shellcheck
               sqlc
               sqlite
               overmind
+              minio
             ];
           };
         });
