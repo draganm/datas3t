@@ -22,6 +22,7 @@ type Datarange struct {
 	ObjectKey       string
 	MinDatapointKey int64
 	MaxDatapointKey int64
+	SizeBytes       int64
 }
 
 type Dataset struct {

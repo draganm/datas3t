@@ -7,7 +7,6 @@ package sqlitestore
 
 import (
 	"context"
-	"fmt"
 )
 
 const checkOverlappingDatapointRange = `-- name: CheckOverlappingDatapointRange :one
@@ -83,15 +82,11 @@ func (q *Queries) GetDatapointsForDataset(ctx context.Context, datasetName strin
 		}
 		items = append(items, i)
 	}
-	// Close rows to prevent resource leaks
-	err = rows.Close()
-	if err != nil {
-		return nil, fmt.Errorf("failed to close rows: %w", err)
+	if err := rows.Close(); err != nil {
+		return nil, err
 	}
-
-	err = rows.Err()
-	if err != nil {
-		return nil, fmt.Errorf("error during row iteration: %w", err)
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return items, nil
 }
@@ -109,28 +104,23 @@ func (q *Queries) GetDatarangeIDsForDataset(ctx context.Context, datasetName str
 	var items []int64
 	for rows.Next() {
 		var id int64
-		err = rows.Scan(&id)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan row: %w", err)
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
 		}
 		items = append(items, id)
 	}
-	// Close rows to prevent resource leaks
-	err = rows.Close()
-	if err != nil {
-		return nil, fmt.Errorf("failed to close rows: %w", err)
+	if err := rows.Close(); err != nil {
+		return nil, err
 	}
-
-	err = rows.Err()
-	if err != nil {
-		return nil, fmt.Errorf("error during row iteration: %w", err)
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return items, nil
 }
 
 const insertDataRange = `-- name: InsertDataRange :one
-INSERT INTO dataranges (dataset_name, object_key, min_datapoint_key, max_datapoint_key) 
-VALUES (?, ?, ?, ?)
+INSERT INTO dataranges (dataset_name, object_key, min_datapoint_key, max_datapoint_key, size_bytes) 
+VALUES (?, ?, ?, ?, ?)
 RETURNING id
 `
 
@@ -139,6 +129,7 @@ type InsertDataRangeParams struct {
 	ObjectKey       string
 	MinDatapointKey int64
 	MaxDatapointKey int64
+	SizeBytes       int64
 }
 
 func (q *Queries) InsertDataRange(ctx context.Context, arg InsertDataRangeParams) (int64, error) {
@@ -147,6 +138,7 @@ func (q *Queries) InsertDataRange(ctx context.Context, arg InsertDataRangeParams
 		arg.ObjectKey,
 		arg.MinDatapointKey,
 		arg.MaxDatapointKey,
+		arg.SizeBytes,
 	)
 	var id int64
 	err := row.Scan(&id)

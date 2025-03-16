@@ -5,8 +5,8 @@ SELECT count(*) > 0 FROM datasets WHERE name = ?;
 INSERT INTO datasets (name) VALUES (?);
 
 -- name: InsertDataRange :one
-INSERT INTO dataranges (dataset_name, object_key, min_datapoint_key, max_datapoint_key) 
-VALUES (?, ?, ?, ?)
+INSERT INTO dataranges (dataset_name, object_key, min_datapoint_key, max_datapoint_key, size_bytes) 
+VALUES (?, ?, ?, ?, ?)
 RETURNING id;
 
 -- name: InsertDatapoint :exec
