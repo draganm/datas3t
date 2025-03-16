@@ -204,22 +204,26 @@ func iUploadADatapointRangeContainingDataPointsToTheDatasetWithID(ctx context.Co
 			Format: tar.FormatUSTAR,
 		}
 
-		if err := tw.WriteHeader(header); err != nil {
+		err = tw.WriteHeader(header)
+		if err != nil {
 			return fmt.Errorf("failed to write tar header: %w", err)
 		}
 
-		if _, err := tw.Write(content); err != nil {
+		_, err = tw.Write(content)
+		if err != nil {
 			return fmt.Errorf("failed to write content to tar: %w", err)
 		}
 	}
 
 	// Close the tar writer to flush any remaining data
-	if err := tw.Close(); err != nil {
+	err = tw.Close()
+	if err != nil {
 		return fmt.Errorf("failed to close tar writer: %w", err)
 	}
 
 	// Reset the file position to the beginning for reading
-	if _, err := tarFile.Seek(0, 0); err != nil {
+	_, err = tarFile.Seek(0, 0)
+	if err != nil {
 		return fmt.Errorf("failed to seek to beginning of tar file: %w", err)
 	}
 
@@ -247,7 +251,10 @@ func iUploadADatapointRangeContainingDataPointsToTheDatasetWithID(ctx context.Co
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(response.Body)
+		body, err := io.ReadAll(response.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read error response body: %w", err)
+		}
 		return fmt.Errorf("expected status code %d, got %d: %s", http.StatusOK, response.StatusCode, body)
 	}
 
@@ -418,22 +425,26 @@ func iUploadADatapointRangeContainingDataPointsAjdectiveToTheExistingDatapoints(
 			Format: tar.FormatUSTAR,
 		}
 
-		if err := tw.WriteHeader(header); err != nil {
+		err = tw.WriteHeader(header)
+		if err != nil {
 			return fmt.Errorf("failed to write tar header: %w", err)
 		}
 
-		if _, err := tw.Write(content); err != nil {
+		_, err = tw.Write(content)
+		if err != nil {
 			return fmt.Errorf("failed to write content to tar: %w", err)
 		}
 	}
 
 	// Close the tar writer to flush any remaining data
-	if err := tw.Close(); err != nil {
+	err = tw.Close()
+	if err != nil {
 		return fmt.Errorf("failed to close tar writer: %w", err)
 	}
 
 	// Reset the file position to the beginning for reading
-	if _, err := tarFile.Seek(0, 0); err != nil {
+	_, err = tarFile.Seek(0, 0)
+	if err != nil {
 		return fmt.Errorf("failed to seek to beginning of tar file: %w", err)
 	}
 
@@ -461,7 +472,10 @@ func iUploadADatapointRangeContainingDataPointsAjdectiveToTheExistingDatapoints(
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(response.Body)
+		body, err := io.ReadAll(response.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read error response body: %w", err)
+		}
 		return fmt.Errorf("expected status code %d, got %d: %s", http.StatusOK, response.StatusCode, body)
 	}
 
@@ -525,22 +539,26 @@ func theDatasetContainsDataPoints(ctx context.Context, numPoints int) error {
 			Format: tar.FormatUSTAR,
 		}
 
-		if err := tw.WriteHeader(header); err != nil {
+		err = tw.WriteHeader(header)
+		if err != nil {
 			return fmt.Errorf("failed to write tar header: %w", err)
 		}
 
-		if _, err := tw.Write(content); err != nil {
+		_, err = tw.Write(content)
+		if err != nil {
 			return fmt.Errorf("failed to write content to tar: %w", err)
 		}
 	}
 
 	// Close the tar writer to flush any remaining data
-	if err := tw.Close(); err != nil {
+	err = tw.Close()
+	if err != nil {
 		return fmt.Errorf("failed to close tar writer: %w", err)
 	}
 
 	// Reset the file position to the beginning for reading
-	if _, err := tarFile.Seek(0, 0); err != nil {
+	_, err = tarFile.Seek(0, 0)
+	if err != nil {
 		return fmt.Errorf("failed to seek to beginning of tar file: %w", err)
 	}
 
@@ -570,7 +588,10 @@ func theDatasetContainsDataPoints(ctx context.Context, numPoints int) error {
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(response.Body)
+		body, err := io.ReadAll(response.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read error response body: %w", err)
+		}
 		return fmt.Errorf("expected status code %d, got %d: %s", http.StatusOK, response.StatusCode, body)
 	}
 
@@ -661,22 +682,26 @@ func iUploadADatapointRangeContainingDataPointsOverlappingWithTheExistingDatapoi
 			Format: tar.FormatUSTAR,
 		}
 
-		if err := tw.WriteHeader(header); err != nil {
+		err = tw.WriteHeader(header)
+		if err != nil {
 			return fmt.Errorf("failed to write tar header: %w", err)
 		}
 
-		if _, err := tw.Write(content); err != nil {
+		_, err = tw.Write(content)
+		if err != nil {
 			return fmt.Errorf("failed to write content to tar: %w", err)
 		}
 	}
 
 	// Close the tar writer to flush any remaining data
-	if err := tw.Close(); err != nil {
+	err = tw.Close()
+	if err != nil {
 		return fmt.Errorf("failed to close tar writer: %w", err)
 	}
 
 	// Reset the file position to the beginning for reading
-	if _, err := tarFile.Seek(0, 0); err != nil {
+	_, err = tarFile.Seek(0, 0)
+	if err != nil {
 		return fmt.Errorf("failed to seek to beginning of tar file: %w", err)
 	}
 
@@ -761,22 +786,26 @@ func iUploadADatapointRangeContainingDatapointsWithKeysAnd(ctx context.Context, 
 			Size: int64(len(content)),
 		}
 
-		if err := tw.WriteHeader(hdr); err != nil {
+		err = tw.WriteHeader(hdr)
+		if err != nil {
 			return fmt.Errorf("failed to write tar header: %w", err)
 		}
 
-		if _, err := tw.Write(content); err != nil {
+		_, err = tw.Write(content)
+		if err != nil {
 			return fmt.Errorf("failed to write tar content: %w", err)
 		}
 	}
 
 	// Flush the tar writer
-	if err := tw.Close(); err != nil {
+	err = tw.Close()
+	if err != nil {
 		return fmt.Errorf("failed to close tar writer: %w", err)
 	}
 
 	// Reset the file position to the beginning for reading
-	if _, err := tarFile.Seek(0, 0); err != nil {
+	_, err = tarFile.Seek(0, 0)
+	if err != nil {
 		return fmt.Errorf("failed to seek to beginning of tar file: %w", err)
 	}
 

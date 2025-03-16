@@ -7,6 +7,7 @@ package sqlitestore
 
 import (
 	"context"
+	"fmt"
 )
 
 const checkOverlappingDatapointRange = `-- name: CheckOverlappingDatapointRange :one
@@ -82,11 +83,15 @@ func (q *Queries) GetDatapointsForDataset(ctx context.Context, datasetName strin
 		}
 		items = append(items, i)
 	}
-	if err := rows.Close(); err != nil {
-		return nil, err
+	// Close rows to prevent resource leaks
+	err = rows.Close()
+	if err != nil {
+		return nil, fmt.Errorf("failed to close rows: %w", err)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
+
+	err = rows.Err()
+	if err != nil {
+		return nil, fmt.Errorf("error during row iteration: %w", err)
 	}
 	return items, nil
 }
@@ -104,16 +109,21 @@ func (q *Queries) GetDatarangeIDsForDataset(ctx context.Context, datasetName str
 	var items []int64
 	for rows.Next() {
 		var id int64
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
+		err = rows.Scan(&id)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan row: %w", err)
 		}
 		items = append(items, id)
 	}
-	if err := rows.Close(); err != nil {
-		return nil, err
+	// Close rows to prevent resource leaks
+	err = rows.Close()
+	if err != nil {
+		return nil, fmt.Errorf("failed to close rows: %w", err)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
+
+	err = rows.Err()
+	if err != nil {
+		return nil, fmt.Errorf("error during row iteration: %w", err)
 	}
 	return items, nil
 }

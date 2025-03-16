@@ -260,7 +260,8 @@ func (s *Server) HandleUploadDatarange(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(response); err != nil {
+	err = json.NewEncoder(w).Encode(response)
+	if err != nil {
 		s.logger.Error("failed to encode response", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return

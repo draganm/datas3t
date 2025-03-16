@@ -75,9 +75,10 @@ func CreateServer(
 		}
 	})
 
-	// Ensure database connection is working
-	if err := db.Ping(); err != nil {
-		return nil, err
+	// Ping the database to ensure it's accessible
+	err = db.Ping()
+	if err != nil {
+		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 	log.Info("Connected to SQLite database", "url", dbURL)
 
@@ -101,12 +102,12 @@ func CreateServer(
 	// Create migration instance
 	m, err := migrate.NewWithInstance("iofs", d, "sqlite3", driver)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create migrator: %w", err)
 	}
 
-	// Apply migrations
-	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
-		return nil, err
+	err = m.Up()
+	if err != nil && err != migrate.ErrNoChange {
+		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 	log.Info("Applied database migrations")
 
