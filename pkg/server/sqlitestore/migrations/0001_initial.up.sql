@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS dataranges (
     object_key TEXT NOT NULL,
     min_datapoint_key UNSIGNED BIGINT NOT NULL,
     max_datapoint_key UNSIGNED BIGINT NOT NULL,
+    size_bytes UNSIGNED BIGINT NOT NULL,
     FOREIGN KEY (dataset_name) REFERENCES datasets(name) ON DELETE CASCADE
 );
 

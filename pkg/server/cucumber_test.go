@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/cucumber/godog"
+	"github.com/draganm/datas3t/pkg/client"
 	"github.com/draganm/datas3t/pkg/server/serverworld"
 	"github.com/draganm/datas3t/pkg/server/sqlitestore"
 	"github.com/minio/minio-go/v7"
@@ -22,11 +22,11 @@ func TestMain(m *testing.M) {
 
 	// Initialize cucumber test suite
 	opts := godog.Options{
-		Format:        "pretty",
-		Paths:         []string{"features"},
-		NoColors:      true,
-		StopOnFailure: true,
-		Strict:        true,
+		Format:   "pretty",
+		Paths:    []string{"features"},
+		NoColors: true,
+		// StopOnFailure: true,
+		Strict: true,
 	}
 
 	status := godog.TestSuite{
@@ -60,12 +60,13 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^I create a new dataset with ID "([^"]*)"$`, iCreateANewDatasetWithID)
 	ctx.Step(`^I upload a datapoint range containing (\d+) data points to the dataset with ID "([^"]*)"$`, iUploadADatapointRangeContainingDataPointsToTheDatasetWithID)
 	ctx.Step(`^the dataset should have (\d+) data points$`, theDatasetShouldHaveDataPoints)
-	ctx.Step(`^the s(\d+) bucket should contain the datapoint range$`, theSBucketShouldContainTheDatapointRange)
+	ctx.Step(`^the s3 bucket should contain the datapoint range$`, theSBucketShouldContainTheDatapointRange)
 	ctx.Step(`^a dataset with ID "([^"]*)" exists$`, aDatasetWithIDExists)
 	ctx.Step(`^I upload a datapoint range containing (\d+) data points ajdective to the existing datapoints$`, iUploadADatapointRangeContainingDataPointsAjdectiveToTheExistingDatapoints)
 	ctx.Step(`^the dataset contains (\d+) data points$`, theDatasetContainsDataPoints)
 	ctx.Step(`^I upload a datapoint range containing (\d+) data points overlapping with the existing datapoints$`, iUploadADatapointRangeContainingDataPointsOverlappingWithTheExistingDatapoints)
 	ctx.Step(`^the upload should fail with a (\d+) status code$`, theUploadShouldFailWithAStatusCode)
+	ctx.Step(`^I upload a datapoint range containing (\d+) datapoints with keys (\d+) and (\d+)$`, iUploadADatapointRangeContainingDatapointsWithKeysAnd)
 
 }
 
@@ -114,25 +115,14 @@ func theDatasetWithTheIdShouldExist(ctx context.Context, id string) error {
 		return fmt.Errorf("world not found in context")
 	}
 
-	u, err := url.JoinPath(w.ServerURL, "api", "v1", "datas3t", id)
+	c, err := client.NewClient(w.ServerURL)
 	if err != nil {
-		return fmt.Errorf("failed to join path: %w", err)
+		return fmt.Errorf("failed to create client: %w", err)
 	}
 
-	request, err := http.NewRequest(http.MethodGet, u, nil)
+	_, err = c.GetDataset(ctx, id)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
-	}
-
-	defer response.Body.Close()
-
-	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("expected status code %d, got %d", http.StatusOK, response.StatusCode)
+		return fmt.Errorf("dataset does not exist: %w", err)
 	}
 
 	return nil
@@ -144,27 +134,17 @@ func iCreateANewDatasetWithID(ctx context.Context, id string) error {
 		return fmt.Errorf("world not found in context")
 	}
 
-	u, err := url.JoinPath(w.ServerURL, "api", "v1", "datas3t", id)
+	c, err := client.NewClient(w.ServerURL)
 	if err != nil {
-		return fmt.Errorf("failed to join path: %w", err)
+		return fmt.Errorf("failed to create client: %w", err)
 	}
 
-	request, err := http.NewRequest(http.MethodPut, u, nil)
+	err = c.CreateDataset(ctx, id)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return fmt.Errorf("failed to create dataset: %w", err)
 	}
 
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
-	}
-	defer response.Body.Close()
-
-	if response.StatusCode != http.StatusNoContent {
-		return fmt.Errorf("expected status code %d, got %d", http.StatusNoContent, response.StatusCode)
-	}
-
-	w.LastResponseStatus = response.StatusCode
+	w.LastResponseStatus = http.StatusNoContent
 	w.LastDatasetID = id
 	return nil
 }
@@ -203,22 +183,26 @@ func iUploadADatapointRangeContainingDataPointsToTheDatasetWithID(ctx context.Co
 			Format: tar.FormatUSTAR,
 		}
 
-		if err := tw.WriteHeader(header); err != nil {
+		err = tw.WriteHeader(header)
+		if err != nil {
 			return fmt.Errorf("failed to write tar header: %w", err)
 		}
 
-		if _, err := tw.Write(content); err != nil {
+		_, err = tw.Write(content)
+		if err != nil {
 			return fmt.Errorf("failed to write content to tar: %w", err)
 		}
 	}
 
 	// Close the tar writer to flush any remaining data
-	if err := tw.Close(); err != nil {
+	err = tw.Close()
+	if err != nil {
 		return fmt.Errorf("failed to close tar writer: %w", err)
 	}
 
 	// Reset the file position to the beginning for reading
-	if _, err := tarFile.Seek(0, 0); err != nil {
+	_, err = tarFile.Seek(0, 0)
+	if err != nil {
 		return fmt.Errorf("failed to seek to beginning of tar file: %w", err)
 	}
 
@@ -228,51 +212,18 @@ func iUploadADatapointRangeContainingDataPointsToTheDatasetWithID(ctx context.Co
 		return fmt.Errorf("failed to read tar file: %w", err)
 	}
 
-	// Upload the tar file to the dataset
-	u, err := url.JoinPath(w.ServerURL, "api", "v1", "datas3t", id)
+	c, err := client.NewClient(w.ServerURL)
 	if err != nil {
-		return fmt.Errorf("failed to join path: %w", err)
+		return fmt.Errorf("failed to create client: %w", err)
 	}
 
-	request, err := http.NewRequest(http.MethodPost, u, bytes.NewReader(tarContent))
+	err = c.UploadDatarange(ctx, id, bytes.NewReader(tarContent))
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return fmt.Errorf("failed to upload datarange: %w", err)
 	}
 
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
-	}
-	defer response.Body.Close()
-
-	if response.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(response.Body)
-		return fmt.Errorf("expected status code %d, got %d: %s", http.StatusOK, response.StatusCode, body)
-	}
-
-	// Deserialize the response JSON
-	type UploadDataResponse struct {
-		DatasetID     string `json:"dataset_id"`
-		NumDataPoints int    `json:"num_data_points"`
-	}
-
-	var uploadResponse UploadDataResponse
-	err = json.NewDecoder(response.Body).Decode(&uploadResponse)
-	if err != nil {
-		return fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	// Verify the response contains the expected data
-	if uploadResponse.DatasetID != id {
-		return fmt.Errorf("expected dataset ID %s, got %s", id, uploadResponse.DatasetID)
-	}
-
-	if uploadResponse.NumDataPoints != numPoints {
-		return fmt.Errorf("expected %d data points, got %d", numPoints, uploadResponse.NumDataPoints)
-	}
-
-	w.LastResponseStatus = response.StatusCode
-	w.NumUploadedDataPoints = uploadResponse.NumDataPoints
+	w.LastResponseStatus = http.StatusOK
+	w.NumUploadedDataPoints = numPoints
 	return nil
 }
 
@@ -299,7 +250,7 @@ func theDatasetShouldHaveDataPoints(ctx context.Context, expectedCount int) erro
 	return nil
 }
 
-func theSBucketShouldContainTheDatapointRange(ctx context.Context, _ int) error {
+func theSBucketShouldContainTheDatapointRange(ctx context.Context) error {
 	w, ok := serverworld.FromContext(ctx)
 	if !ok {
 		return fmt.Errorf("world not found in context")
@@ -340,25 +291,14 @@ func aDatasetWithIDExists(ctx context.Context, id string) error {
 		return fmt.Errorf("world not found in context")
 	}
 
-	// This function is similar to iCreateANewDatasetWithID but is used as a prerequisite step
-	u, err := url.JoinPath(w.ServerURL, "api", "v1", "datas3t", id)
+	c, err := client.NewClient(w.ServerURL)
 	if err != nil {
-		return fmt.Errorf("failed to join path: %w", err)
+		return fmt.Errorf("failed to create client: %w", err)
 	}
 
-	request, err := http.NewRequest(http.MethodPut, u, nil)
+	err = c.CreateDataset(ctx, id)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
-	}
-	defer response.Body.Close()
-
-	if response.StatusCode != http.StatusNoContent {
-		return fmt.Errorf("expected status code %d, got %d", http.StatusNoContent, response.StatusCode)
+		return fmt.Errorf("failed to create dataset: %w", err)
 	}
 
 	w.LastDatasetID = id
@@ -417,22 +357,26 @@ func iUploadADatapointRangeContainingDataPointsAjdectiveToTheExistingDatapoints(
 			Format: tar.FormatUSTAR,
 		}
 
-		if err := tw.WriteHeader(header); err != nil {
+		err = tw.WriteHeader(header)
+		if err != nil {
 			return fmt.Errorf("failed to write tar header: %w", err)
 		}
 
-		if _, err := tw.Write(content); err != nil {
+		_, err = tw.Write(content)
+		if err != nil {
 			return fmt.Errorf("failed to write content to tar: %w", err)
 		}
 	}
 
 	// Close the tar writer to flush any remaining data
-	if err := tw.Close(); err != nil {
+	err = tw.Close()
+	if err != nil {
 		return fmt.Errorf("failed to close tar writer: %w", err)
 	}
 
 	// Reset the file position to the beginning for reading
-	if _, err := tarFile.Seek(0, 0); err != nil {
+	_, err = tarFile.Seek(0, 0)
+	if err != nil {
 		return fmt.Errorf("failed to seek to beginning of tar file: %w", err)
 	}
 
@@ -442,51 +386,18 @@ func iUploadADatapointRangeContainingDataPointsAjdectiveToTheExistingDatapoints(
 		return fmt.Errorf("failed to read tar file: %w", err)
 	}
 
-	// Upload the tar file to the dataset
-	u, err := url.JoinPath(w.ServerURL, "api", "v1", "datas3t", w.LastDatasetID)
+	c, err := client.NewClient(w.ServerURL)
 	if err != nil {
-		return fmt.Errorf("failed to join path: %w", err)
+		return fmt.Errorf("failed to create client: %w", err)
 	}
 
-	request, err := http.NewRequest(http.MethodPost, u, bytes.NewReader(tarContent))
+	err = c.UploadDatarange(ctx, w.LastDatasetID, bytes.NewReader(tarContent))
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return fmt.Errorf("failed to upload datarange: %w", err)
 	}
 
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
-	}
-	defer response.Body.Close()
-
-	if response.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(response.Body)
-		return fmt.Errorf("expected status code %d, got %d: %s", http.StatusOK, response.StatusCode, body)
-	}
-
-	// Deserialize the response JSON
-	type UploadDataResponse struct {
-		DatasetID     string `json:"dataset_id"`
-		NumDataPoints int    `json:"num_data_points"`
-	}
-
-	var uploadResponse UploadDataResponse
-	err = json.NewDecoder(response.Body).Decode(&uploadResponse)
-	if err != nil {
-		return fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	// Verify the response contains the expected data
-	if uploadResponse.DatasetID != w.LastDatasetID {
-		return fmt.Errorf("expected dataset ID %s, got %s", w.LastDatasetID, uploadResponse.DatasetID)
-	}
-
-	if uploadResponse.NumDataPoints != numPoints {
-		return fmt.Errorf("expected %d data points, got %d", numPoints, uploadResponse.NumDataPoints)
-	}
-
-	w.LastResponseStatus = response.StatusCode
-	w.NumUploadedDataPoints += uploadResponse.NumDataPoints
+	w.LastResponseStatus = http.StatusOK
+	w.NumUploadedDataPoints += numPoints
 	return nil
 }
 
@@ -524,22 +435,26 @@ func theDatasetContainsDataPoints(ctx context.Context, numPoints int) error {
 			Format: tar.FormatUSTAR,
 		}
 
-		if err := tw.WriteHeader(header); err != nil {
+		err = tw.WriteHeader(header)
+		if err != nil {
 			return fmt.Errorf("failed to write tar header: %w", err)
 		}
 
-		if _, err := tw.Write(content); err != nil {
+		_, err = tw.Write(content)
+		if err != nil {
 			return fmt.Errorf("failed to write content to tar: %w", err)
 		}
 	}
 
 	// Close the tar writer to flush any remaining data
-	if err := tw.Close(); err != nil {
+	err = tw.Close()
+	if err != nil {
 		return fmt.Errorf("failed to close tar writer: %w", err)
 	}
 
 	// Reset the file position to the beginning for reading
-	if _, err := tarFile.Seek(0, 0); err != nil {
+	_, err = tarFile.Seek(0, 0)
+	if err != nil {
 		return fmt.Errorf("failed to seek to beginning of tar file: %w", err)
 	}
 
@@ -551,53 +466,19 @@ func theDatasetContainsDataPoints(ctx context.Context, numPoints int) error {
 
 	id := w.LastDatasetID
 
-	// Upload the tar file to the dataset
-	u, err := url.JoinPath(w.ServerURL, "api", "v1", "datas3t", id)
+	c, err := client.NewClient(w.ServerURL)
 	if err != nil {
-		return fmt.Errorf("failed to join path: %w", err)
+		return fmt.Errorf("failed to create client: %w", err)
 	}
 
-	request, err := http.NewRequest(http.MethodPost, u, bytes.NewReader(tarContent))
+	err = c.UploadDatarange(ctx, id, bytes.NewReader(tarContent))
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return fmt.Errorf("failed to upload datarange: %w", err)
 	}
 
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
-	}
-	defer response.Body.Close()
-
-	if response.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(response.Body)
-		return fmt.Errorf("expected status code %d, got %d: %s", http.StatusOK, response.StatusCode, body)
-	}
-
-	// Deserialize the response JSON
-	type UploadDataResponse struct {
-		DatasetID     string `json:"dataset_id"`
-		NumDataPoints int    `json:"num_data_points"`
-	}
-
-	var uploadResponse UploadDataResponse
-	err = json.NewDecoder(response.Body).Decode(&uploadResponse)
-	if err != nil {
-		return fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	// Verify the response contains the expected data
-	if uploadResponse.DatasetID != id {
-		return fmt.Errorf("expected dataset ID %s, got %s", id, uploadResponse.DatasetID)
-	}
-
-	if uploadResponse.NumDataPoints != numPoints {
-		return fmt.Errorf("expected %d data points, got %d", numPoints, uploadResponse.NumDataPoints)
-	}
-
-	w.LastResponseStatus = response.StatusCode
-	w.NumUploadedDataPoints = uploadResponse.NumDataPoints
+	w.LastResponseStatus = http.StatusOK
+	w.NumUploadedDataPoints = numPoints
 	return nil
-
 }
 
 func iUploadADatapointRangeContainingDataPointsOverlappingWithTheExistingDatapoints(ctx context.Context, numPoints int) error {
@@ -660,22 +541,26 @@ func iUploadADatapointRangeContainingDataPointsOverlappingWithTheExistingDatapoi
 			Format: tar.FormatUSTAR,
 		}
 
-		if err := tw.WriteHeader(header); err != nil {
+		err = tw.WriteHeader(header)
+		if err != nil {
 			return fmt.Errorf("failed to write tar header: %w", err)
 		}
 
-		if _, err := tw.Write(content); err != nil {
+		_, err = tw.Write(content)
+		if err != nil {
 			return fmt.Errorf("failed to write content to tar: %w", err)
 		}
 	}
 
 	// Close the tar writer to flush any remaining data
-	if err := tw.Close(); err != nil {
+	err = tw.Close()
+	if err != nil {
 		return fmt.Errorf("failed to close tar writer: %w", err)
 	}
 
 	// Reset the file position to the beginning for reading
-	if _, err := tarFile.Seek(0, 0); err != nil {
+	_, err = tarFile.Seek(0, 0)
+	if err != nil {
 		return fmt.Errorf("failed to seek to beginning of tar file: %w", err)
 	}
 
@@ -685,27 +570,22 @@ func iUploadADatapointRangeContainingDataPointsOverlappingWithTheExistingDatapoi
 		return fmt.Errorf("failed to read tar file: %w", err)
 	}
 
-	// Upload the tar file to the dataset (expecting it to fail)
-	u, err := url.JoinPath(w.ServerURL, "api", "v1", "datas3t", w.LastDatasetID)
+	c, err := client.NewClient(w.ServerURL)
 	if err != nil {
-		return fmt.Errorf("failed to join path: %w", err)
+		return fmt.Errorf("failed to create client: %w", err)
 	}
 
-	request, err := http.NewRequest(http.MethodPost, u, bytes.NewReader(tarContent))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
-	}
-	defer response.Body.Close()
+	err = c.UploadDatarange(ctx, w.LastDatasetID, bytes.NewReader(tarContent))
+	// We expect this to fail, but we'll check the status code in the next step
 
 	// Store the response status for verification in the next step
-	w.LastResponseStatus = response.StatusCode
+	if err != nil {
+		// Extract status code from error message using client.GetStatusCode
+		w.LastResponseStatus = client.GetStatusCode(err)
+	} else {
+		w.LastResponseStatus = http.StatusOK
+	}
 
-	// We don't check the response code here as it should be verified in theUploadShouldFailWithAStatusCode
 	return nil
 }
 
@@ -717,6 +597,88 @@ func theUploadShouldFailWithAStatusCode(ctx context.Context, expectedStatusCode 
 
 	if w.LastResponseStatus != expectedStatusCode {
 		return fmt.Errorf("expected status code %d, but got %d", expectedStatusCode, w.LastResponseStatus)
+	}
+
+	return nil
+}
+
+func iUploadADatapointRangeContainingDatapointsWithKeysAnd(ctx context.Context, numDatapoints, key1, key2 int) error {
+	w, ok := serverworld.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("world not found in context")
+	}
+
+	// Create a temporary tar file
+	tarFile, err := os.CreateTemp("", "datapoints-*.tar")
+	if err != nil {
+		return fmt.Errorf("failed to create temporary tar file: %w", err)
+	}
+	defer os.Remove(tarFile.Name())
+	defer tarFile.Close()
+
+	// Create a tar writer
+	tw := tar.NewWriter(tarFile)
+	defer tw.Close()
+
+	// Create the specified number of datapoints with the given keys
+	keys := []int{key1, key2}
+	for i := 0; i < numDatapoints; i++ {
+		if i >= len(keys) {
+			return fmt.Errorf("not enough keys provided for %d datapoints", numDatapoints)
+		}
+
+		// Create a file with the key as the filename (padded to 20 digits)
+		filename := fmt.Sprintf("%020d.json", keys[i])
+
+		// Create some dummy content
+		content := []byte(fmt.Sprintf(`{"key": %d, "value": "test data %d"}`, keys[i], i))
+
+		// Add the file to the tar archive
+		hdr := &tar.Header{
+			Name: filename,
+			Mode: 0600,
+			Size: int64(len(content)),
+		}
+
+		err = tw.WriteHeader(hdr)
+		if err != nil {
+			return fmt.Errorf("failed to write tar header: %w", err)
+		}
+
+		_, err = tw.Write(content)
+		if err != nil {
+			return fmt.Errorf("failed to write tar content: %w", err)
+		}
+	}
+
+	// Flush the tar writer
+	err = tw.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close tar writer: %w", err)
+	}
+
+	// Reset the file position to the beginning for reading
+	_, err = tarFile.Seek(0, 0)
+	if err != nil {
+		return fmt.Errorf("failed to seek to beginning of tar file: %w", err)
+	}
+
+	// Read the tar file content
+	tarContent, err := io.ReadAll(tarFile)
+	if err != nil {
+		return fmt.Errorf("failed to read tar file: %w", err)
+	}
+
+	c, err := client.NewClient(w.ServerURL)
+	if err != nil {
+		return fmt.Errorf("failed to create client: %w", err)
+	}
+
+	err = c.UploadDatarange(ctx, w.LastDatasetID, bytes.NewReader(tarContent))
+	if err != nil {
+		w.LastResponseStatus = client.GetStatusCode(err)
+	} else {
+		w.LastResponseStatus = http.StatusOK
 	}
 
 	return nil

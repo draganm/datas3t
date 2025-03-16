@@ -8,6 +8,34 @@ A Go service for managing datasets with S3 storage integration.
 - Store dataset data in S3-compatible storage
 - REST API for dataset operations
 - Integration with MinIO for development and testing
+- Client library for programmatic access
+- Command-line interface (CLI) for easy interaction
+
+## Components
+
+### Server
+
+The server provides a REST API with the following endpoints:
+- `PUT /api/v1/datas3t/{id}` - Create a dataset
+- `GET /api/v1/datas3t/{id}` - Get dataset information
+- `POST /api/v1/datas3t/{id}` - Upload data to a dataset
+- `GET /api/v1/datas3t/{id}/dataranges` - Get dataset data ranges
+
+### Client Library
+
+The client library (`pkg/client`) provides a Go interface for interacting with the Datas3t server:
+- Create datasets
+- Retrieve dataset information
+- Upload data ranges
+- Get data ranges
+
+### Command-Line Interface (CLI)
+
+The CLI (`cmd/datas3t-cli`) provides commands for:
+- Creating datasets
+- Getting dataset information
+- Uploading data
+- Listing datasets
 
 ## Data Dictionary
 

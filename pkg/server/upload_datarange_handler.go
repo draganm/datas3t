@@ -175,6 +175,15 @@ func (s *Server) HandleUploadDatarange(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
+	// Get file size for storing in database
+	fileInfo, err := file.Stat()
+	if err != nil {
+		s.logger.Error("failed to get file size", "error", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	fileSizeBytes := fileInfo.Size()
+
 	_, err = s.s3Client.PutObject(r.Context(), &s3.PutObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(objectKey),
@@ -210,6 +219,7 @@ func (s *Server) HandleUploadDatarange(w http.ResponseWriter, r *http.Request) {
 		ObjectKey:       objectKey,
 		MinDatapointKey: int64(minDatapointKey),
 		MaxDatapointKey: int64(maxDatapointKey),
+		SizeBytes:       fileSizeBytes,
 	})
 	if err != nil {
 		s.logger.Error("failed to insert data range into database", "error", err)
@@ -250,6 +260,7 @@ func (s *Server) HandleUploadDatarange(w http.ResponseWriter, r *http.Request) {
 		"objectKey", objectKey,
 		"minKey", minDatapointKey,
 		"maxKey", maxDatapointKey,
+		"sizeBytes", fileSizeBytes,
 		"datapoints", len(fileNumbers))
 
 	// Prepare and send the response
@@ -260,7 +271,8 @@ func (s *Server) HandleUploadDatarange(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(response); err != nil {
+	err = json.NewEncoder(w).Encode(response)
+	if err != nil {
 		s.logger.Error("failed to encode response", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return

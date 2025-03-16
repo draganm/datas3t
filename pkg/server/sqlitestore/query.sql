@@ -5,8 +5,8 @@ SELECT count(*) > 0 FROM datasets WHERE name = ?;
 INSERT INTO datasets (name) VALUES (?);
 
 -- name: InsertDataRange :one
-INSERT INTO dataranges (dataset_name, object_key, min_datapoint_key, max_datapoint_key) 
-VALUES (?, ?, ?, ?)
+INSERT INTO dataranges (dataset_name, object_key, min_datapoint_key, max_datapoint_key, size_bytes) 
+VALUES (?, ?, ?, ?, ?)
 RETURNING id;
 
 -- name: InsertDatapoint :exec
@@ -33,3 +33,9 @@ AND (
     OR
     (min_datapoint_key >= @new_min AND max_datapoint_key <= @new_max) -- new range contains existing range
 );
+
+-- name: GetDatarangesForDataset :many
+SELECT object_key, min_datapoint_key, max_datapoint_key, size_bytes 
+FROM dataranges 
+WHERE dataset_name = ?
+ORDER BY min_datapoint_key ASC;
