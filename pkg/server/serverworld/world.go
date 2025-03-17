@@ -20,6 +20,13 @@ type World struct {
 	LastResponseStatus    int
 	LastDatasetID         string
 	NumUploadedDataPoints int
+	LastResponseBody      []byte
+	LastDatarange         struct {
+		ObjectKey       string `json:"object_key"`
+		MinDatapointKey int64  `json:"min_datapoint_key"`
+		MaxDatapointKey int64  `json:"max_datapoint_key"`
+		SizeBytes       int64  `json:"size_bytes"`
+	}
 
 	// MinIO related fields
 	MinioContainer  *miniomodule.MinioContainer

@@ -4,11 +4,13 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/cucumber/godog"
@@ -67,7 +69,12 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^I upload a datapoint range containing (\d+) data points overlapping with the existing datapoints$`, iUploadADatapointRangeContainingDataPointsOverlappingWithTheExistingDatapoints)
 	ctx.Step(`^the upload should fail with a (\d+) status code$`, theUploadShouldFailWithAStatusCode)
 	ctx.Step(`^I upload a datapoint range containing (\d+) datapoints with keys (\d+) and (\d+)$`, iUploadADatapointRangeContainingDatapointsWithKeysAnd)
-
+	ctx.Step(`^I send a GET request to "([^"]*)"$`, iSendAGETRequestTo)
+	ctx.Step(`^the response should contain (\d+) datarange$`, theResponseShouldContainDataranges)
+	ctx.Step(`^the datarange should have min_datapoint_key (\d+)$`, theDatarangeShouldHaveMinDatapointKey)
+	ctx.Step(`^the datarange should have max_datapoint_key (\d+)$`, theDatarangeShouldHaveMaxDatapointKey)
+	ctx.Step(`^the datarange should have size_bytes greater than (\d+)$`, theDatarangeShouldHaveSizeBytesGreaterThan)
+	ctx.Step(`^the response body should be "([^"]*)"$`, theResponseBodyShouldBe)
 }
 
 func iSendAPUTRequestTo(ctx context.Context, path string) error {
@@ -679,6 +686,115 @@ func iUploadADatapointRangeContainingDatapointsWithKeysAnd(ctx context.Context, 
 		w.LastResponseStatus = client.GetStatusCode(err)
 	} else {
 		w.LastResponseStatus = http.StatusOK
+	}
+
+	return nil
+}
+
+func iSendAGETRequestTo(ctx context.Context, path string) error {
+	w, ok := serverworld.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("world not found in context")
+	}
+
+	u, err := url.JoinPath(w.ServerURL, path)
+	if err != nil {
+		return fmt.Errorf("failed to join path: %w", err)
+	}
+
+	request, err := http.NewRequest(http.MethodGet, u, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return fmt.Errorf("failed to send request: %w", err)
+	}
+
+	defer response.Body.Close()
+
+	w.LastResponseStatus = response.StatusCode
+	w.LastResponseBody, err = io.ReadAll(response.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	return nil
+}
+
+func theResponseShouldContainDataranges(ctx context.Context, expectedCount int) error {
+	w, ok := serverworld.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("world not found in context")
+	}
+
+	var dataranges []struct {
+		ObjectKey       string `json:"object_key"`
+		MinDatapointKey int64  `json:"min_datapoint_key"`
+		MaxDatapointKey int64  `json:"max_datapoint_key"`
+		SizeBytes       int64  `json:"size_bytes"`
+	}
+
+	if err := json.Unmarshal(w.LastResponseBody, &dataranges); err != nil {
+		return fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	if len(dataranges) != expectedCount {
+		return fmt.Errorf("expected %d dataranges, got %d", expectedCount, len(dataranges))
+	}
+
+	w.LastDatarange = dataranges[0]
+	return nil
+}
+
+func theDatarangeShouldHaveMinDatapointKey(ctx context.Context, expected int64) error {
+	w, ok := serverworld.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("world not found in context")
+	}
+
+	if w.LastDatarange.MinDatapointKey != expected {
+		return fmt.Errorf("expected min_datapoint_key %d, got %d", expected, w.LastDatarange.MinDatapointKey)
+	}
+
+	return nil
+}
+
+func theDatarangeShouldHaveMaxDatapointKey(ctx context.Context, expected int64) error {
+	w, ok := serverworld.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("world not found in context")
+	}
+
+	if w.LastDatarange.MaxDatapointKey != expected {
+		return fmt.Errorf("expected max_datapoint_key %d, got %d", expected, w.LastDatarange.MaxDatapointKey)
+	}
+
+	return nil
+}
+
+func theDatarangeShouldHaveSizeBytesGreaterThan(ctx context.Context, expected int64) error {
+	w, ok := serverworld.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("world not found in context")
+	}
+
+	if w.LastDatarange.SizeBytes <= expected {
+		return fmt.Errorf("expected size_bytes greater than %d, got %d", expected, w.LastDatarange.SizeBytes)
+	}
+
+	return nil
+}
+
+func theResponseBodyShouldBe(ctx context.Context, expected string) error {
+	w, ok := serverworld.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("world not found in context")
+	}
+
+	if strings.TrimSpace(string(w.LastResponseBody)) != expected {
+		return fmt.Errorf("expected response body %q, got %q", expected, string(w.LastResponseBody))
 	}
 
 	return nil

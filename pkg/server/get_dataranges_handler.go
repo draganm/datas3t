@@ -23,6 +23,21 @@ func (s *Server) HandleGetDataranges(w http.ResponseWriter, r *http.Request) {
 	}
 
 	store := sqlitestore.New(s.DB)
+
+	// Check if dataset exists
+	exists, err := store.DatasetExists(r.Context(), datasetName)
+	if err != nil {
+		s.logger.Error("failed to check if dataset exists", "error", err)
+		http.Error(w, "failed to check if dataset exists", http.StatusInternalServerError)
+		return
+	}
+
+	if !exists {
+		s.logger.Error("dataset not found", "id", datasetName)
+		http.Error(w, "dataset not found", http.StatusNotFound)
+		return
+	}
+
 	dataranges, err := store.GetDatarangesForDataset(r.Context(), datasetName)
 	if err != nil {
 		s.logger.Error("failed to query dataranges", "error", err)
