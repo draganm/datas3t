@@ -251,14 +251,25 @@ func (c *Client) GetDatarange(ctx context.Context, id string, start, end uint64,
 
 	for _, d := range downloads {
 		g.Go(func() error {
+			// Create a request with Range header for the download
+			req, err := http.NewRequestWithContext(ctx, "GET", d.url, nil)
+			if err != nil {
+				return fmt.Errorf("failed to create request: %w", err)
+			}
+
+			// Set Range header to download only the specified range
+			rangeHeader := fmt.Sprintf("bytes=%d-%d", d.remoteRangeStart, d.remoteRangeEnd)
+			req.Header.Set("Range", rangeHeader)
+			fmt.Println("rangeHeader", rangeHeader)
+
 			// Download the data from the presigned URL
-			resp, err := http.Get(d.url)
+			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				return fmt.Errorf("failed to download from presigned URL: %w", err)
 			}
 			defer resp.Body.Close()
 
-			if resp.StatusCode != http.StatusOK {
+			if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
 				var sb strings.Builder
 				_, err = io.Copy(&sb, resp.Body)
 				if err != nil {
@@ -288,11 +299,11 @@ func (c *Client) GetDatarange(ctx context.Context, id string, start, end uint64,
 
 	// Add two empty blocks (2x512 zero bytes) at the end
 	emptyBlock := make([]byte, 512)
-	_, err = file.WriteAt(emptyBlock, int64(end-start+1))
+	_, err = file.WriteAt(emptyBlock, int64(localFileOffset))
 	if err != nil {
 		return fmt.Errorf("failed to write first empty block: %w", err)
 	}
-	_, err = file.WriteAt(emptyBlock, int64(end-start+513))
+	_, err = file.WriteAt(emptyBlock, int64(localFileOffset+512))
 	if err != nil {
 		return fmt.Errorf("failed to write second empty block: %w", err)
 	}

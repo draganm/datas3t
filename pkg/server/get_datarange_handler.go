@@ -143,7 +143,7 @@ func (s *Server) generateResponse(ctx context.Context, dataranges []sqlitestore.
 		objects = append(objects, ObjectAndRange{
 			GETURL: req.URL,
 			Start:  uint64(minOffset),
-			End:    uint64(maxOffset),
+			End:    uint64(maxOffset) - 1,
 		})
 
 		totalBytes += uint64(maxOffset - minOffset)
