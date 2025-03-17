@@ -23,6 +23,23 @@ JOIN dataranges dr ON d.datarange_id = dr.id
 WHERE dr.dataset_name = ?
 ORDER BY d.datapoint_key;
 
+-- name: GetSectionsOfDataranges :many
+SELECT 
+    dr.object_key,
+    MIN(CASE WHEN d.datapoint_key >= @start_key THEN d.begin_offset END) as first_offset,
+    MAX(CASE WHEN d.datapoint_key <= @end_key THEN d.end_offset END) as last_offset
+FROM dataranges dr
+JOIN datapoints d ON d.datarange_id = dr.id
+WHERE dr.dataset_name = @dataset_name
+AND d.datapoint_key <= @end_key
+AND EXISTS (
+    SELECT 1 FROM datapoints d2 
+    WHERE d2.datarange_id = dr.id 
+    AND d2.datapoint_key >= @start_key
+)
+GROUP BY dr.object_key
+ORDER BY dr.object_key;
+
 -- name: CheckOverlappingDatapointRange :one
 SELECT count(*) > 0 FROM dataranges
 WHERE dataset_name = @dataset_name
@@ -39,3 +56,12 @@ SELECT object_key, min_datapoint_key, max_datapoint_key, size_bytes
 FROM dataranges 
 WHERE dataset_name = ?
 ORDER BY min_datapoint_key ASC;
+
+-- name: GetDatarangeOffsets :one
+SELECT dr.id, dr.dataset_name, dr.object_key,
+       MIN(dp.begin_offset) as min_offset,
+       MAX(dp.end_offset) as max_offset
+FROM dataranges dr
+JOIN datapoints dp ON dp.datarange_id = dr.id
+WHERE dr.id = ?
+GROUP BY dr.id;

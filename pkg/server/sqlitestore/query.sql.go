@@ -118,6 +118,37 @@ func (q *Queries) GetDatarangeIDsForDataset(ctx context.Context, datasetName str
 	return items, nil
 }
 
+const getDatarangeOffsets = `-- name: GetDatarangeOffsets :one
+SELECT dr.id, dr.dataset_name, dr.object_key,
+       MIN(dp.begin_offset) as min_offset,
+       MAX(dp.end_offset) as max_offset
+FROM dataranges dr
+JOIN datapoints dp ON dp.datarange_id = dr.id
+WHERE dr.id = ?
+GROUP BY dr.id
+`
+
+type GetDatarangeOffsetsRow struct {
+	ID          int64
+	DatasetName string
+	ObjectKey   string
+	MinOffset   interface{}
+	MaxOffset   interface{}
+}
+
+func (q *Queries) GetDatarangeOffsets(ctx context.Context, id int64) (GetDatarangeOffsetsRow, error) {
+	row := q.db.QueryRowContext(ctx, getDatarangeOffsets, id)
+	var i GetDatarangeOffsetsRow
+	err := row.Scan(
+		&i.ID,
+		&i.DatasetName,
+		&i.ObjectKey,
+		&i.MinOffset,
+		&i.MaxOffset,
+	)
+	return i, err
+}
+
 const getDatarangesForDataset = `-- name: GetDatarangesForDataset :many
 SELECT object_key, min_datapoint_key, max_datapoint_key, size_bytes 
 FROM dataranges 
@@ -147,6 +178,59 @@ func (q *Queries) GetDatarangesForDataset(ctx context.Context, datasetName strin
 			&i.MaxDatapointKey,
 			&i.SizeBytes,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getSectionsOfDataranges = `-- name: GetSectionsOfDataranges :many
+SELECT 
+    dr.object_key,
+    MIN(CASE WHEN d.datapoint_key >= ?1 THEN d.begin_offset END) as first_offset,
+    MAX(CASE WHEN d.datapoint_key <= ?2 THEN d.end_offset END) as last_offset
+FROM dataranges dr
+JOIN datapoints d ON d.datarange_id = dr.id
+WHERE dr.dataset_name = ?3
+AND d.datapoint_key <= ?2
+AND EXISTS (
+    SELECT 1 FROM datapoints d2 
+    WHERE d2.datarange_id = dr.id 
+    AND d2.datapoint_key >= ?1
+)
+GROUP BY dr.object_key
+ORDER BY dr.object_key
+`
+
+type GetSectionsOfDatarangesParams struct {
+	StartKey    int64
+	EndKey      int64
+	DatasetName string
+}
+
+type GetSectionsOfDatarangesRow struct {
+	ObjectKey   string
+	FirstOffset interface{}
+	LastOffset  interface{}
+}
+
+func (q *Queries) GetSectionsOfDataranges(ctx context.Context, arg GetSectionsOfDatarangesParams) ([]GetSectionsOfDatarangesRow, error) {
+	rows, err := q.db.QueryContext(ctx, getSectionsOfDataranges, arg.StartKey, arg.EndKey, arg.DatasetName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetSectionsOfDatarangesRow
+	for rows.Next() {
+		var i GetSectionsOfDatarangesRow
+		if err := rows.Scan(&i.ObjectKey, &i.FirstOffset, &i.LastOffset); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
