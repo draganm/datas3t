@@ -9,25 +9,37 @@ import (
 )
 
 func Command(log *slog.Logger) *cli.Command {
+	cfg := struct {
+		serverURL string
+		id        string
+	}{}
+
 	return &cli.Command{
-		Name:  "get-dataranges",
-		Usage: "Get data ranges for a dataset",
+		Name:  "list",
+		Usage: "List data ranges for a dataset",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:     "id",
-				Required: true,
-				Usage:    "Dataset ID",
+				Name:        "id",
+				Required:    true,
+				Usage:       "Dataset ID",
+				Destination: &cfg.id,
+				EnvVars:     []string{"DATAS3T_DATASET_ID"},
+			},
+			&cli.StringFlag{
+				Name:        "server-url",
+				Required:    true,
+				Usage:       "URL of the Datas3t server",
+				Destination: &cfg.serverURL,
+				EnvVars:     []string{"DATAS3T_SERVER_URL"},
 			},
 		},
 		Action: func(c *cli.Context) error {
-			serverURL := c.String("server-url")
-			cl, err := client.NewClient(serverURL)
+			cl, err := client.NewClient(cfg.serverURL)
 			if err != nil {
 				return fmt.Errorf("failed to create client: %w", err)
 			}
 
-			id := c.String("id")
-			ranges, err := cl.GetDataranges(c.Context, id)
+			ranges, err := cl.GetDataranges(c.Context, cfg.id)
 			if err != nil {
 				return fmt.Errorf("failed to get dataranges: %w", err)
 			}
