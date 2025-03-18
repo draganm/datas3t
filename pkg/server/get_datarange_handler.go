@@ -21,15 +21,7 @@ type ObjectAndRange struct {
 
 type GetDatarangeResponse []ObjectAndRange
 
-type DatarangeInfo struct {
-	DatarangeID int64
-	DatasetName string
-	ObjectKey   string
-	FirstOffset int64
-	LastOffset  int64
-}
-
-// GET /api/v1/datas3t/{id}/data/{start}/{end}
+// GET /api/v1/datas3t/{id}/datarange/{start}/{end}
 func (s *Server) HandleGetDatarange(w http.ResponseWriter, r *http.Request) {
 	// Extract and validate parameters
 	datasetID, start, end, err := s.validateParameters(r)

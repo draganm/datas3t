@@ -25,17 +25,17 @@ type toDownload struct {
 	remoteRangeEnd   uint64
 }
 
-func (c *Client) GetDatarange(ctx context.Context, id string, start, end uint64, file io.WriterAt) error {
-	endpoint := c.baseURL.JoinPath("api", "v1", "datas3t", id, "data", strconv.FormatUint(start, 10), strconv.FormatUint(end, 10))
+func (c *Client) GetDatarange(ctx context.Context, id string, start, end uint64) ([]ObjectAndRange, error) {
+	endpoint := c.baseURL.JoinPath("api", "v1", "datas3t", id, "datarange", strconv.FormatUint(start, 10), strconv.FormatUint(end, 10))
 
 	req, err := http.NewRequestWithContext(ctx, "GET", endpoint.String(), nil)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to execute request: %w", err)
+		return nil, fmt.Errorf("failed to execute request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -43,9 +43,9 @@ func (c *Client) GetDatarange(ctx context.Context, id string, start, end uint64,
 		var sb strings.Builder
 		_, err = io.Copy(&sb, resp.Body)
 		if err != nil {
-			return fmt.Errorf("failed to read error response: %w", err)
+			return nil, fmt.Errorf("failed to read error response: %w", err)
 		}
-		return &StatusError{
+		return nil, &StatusError{
 			StatusCode: resp.StatusCode,
 			Body:       sb.String(),
 			Err:        fmt.Errorf("get datarange failed"),
@@ -55,9 +55,13 @@ func (c *Client) GetDatarange(ctx context.Context, id string, start, end uint64,
 	var ranges []ObjectAndRange
 	err = json.NewDecoder(resp.Body).Decode(&ranges)
 	if err != nil {
-		return fmt.Errorf("failed to decode response: %w", err)
+		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
+	return ranges, nil
+}
+
+func (c *Client) DownloadDataranges(ctx context.Context, ranges []ObjectAndRange, file io.WriterAt) error {
 	downloads := make([]toDownload, len(ranges))
 	localFileOffset := uint64(0)
 	for i, r := range ranges {
@@ -107,7 +111,7 @@ func (c *Client) GetDatarange(ctx context.Context, id string, start, end uint64,
 		})
 	}
 
-	err = g.Wait()
+	err := g.Wait()
 	if err != nil {
 		return fmt.Errorf("failed to download data: %w", err)
 	}

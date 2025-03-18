@@ -61,15 +61,21 @@ func Command(log *slog.Logger) *cli.Command {
 				return fmt.Errorf("failed to create client: %w", err)
 			}
 
+			// Get list of dataranges from server
+			ranges, err := cl.GetDatarange(c.Context, cfg.id, cfg.start, cfg.end)
+			if err != nil {
+				return fmt.Errorf("failed to get datarange info: %w", err)
+			}
+
+			// Create output file and download data
 			file, err := os.Create(cfg.output)
 			if err != nil {
 				return fmt.Errorf("failed to create output file: %w", err)
 			}
 			defer file.Close()
 
-			err = cl.GetDatarange(c.Context, cfg.id, cfg.start, cfg.end, file)
-			if err != nil {
-				return fmt.Errorf("failed to get datarange: %w", err)
+			if err := cl.DownloadDataranges(c.Context, ranges, file); err != nil {
+				return fmt.Errorf("failed to download dataranges: %w", err)
 			}
 
 			log.Info("successfully saved datarange",
