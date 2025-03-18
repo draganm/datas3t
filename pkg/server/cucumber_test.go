@@ -75,6 +75,8 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the datarange should have max_datapoint_key (\d+)$`, theDatarangeShouldHaveMaxDatapointKey)
 	ctx.Step(`^the datarange should have size_bytes greater than (\d+)$`, theDatarangeShouldHaveSizeBytesGreaterThan)
 	ctx.Step(`^the response body should be "([^"]*)"$`, theResponseBodyShouldBe)
+	ctx.Step(`^the response should return a list of one object and range$`, theResponseShouldReturnAListOfOneObjectAndRange)
+
 }
 
 func iSendAPUTRequestTo(ctx context.Context, path string) error {
@@ -795,6 +797,25 @@ func theResponseBodyShouldBe(ctx context.Context, expected string) error {
 
 	if strings.TrimSpace(string(w.LastResponseBody)) != expected {
 		return fmt.Errorf("expected response body %q, got %q", expected, string(w.LastResponseBody))
+	}
+
+	return nil
+}
+
+func theResponseShouldReturnAListOfOneObjectAndRange(ctx context.Context) error {
+	w, ok := serverworld.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("world not found in context")
+	}
+
+	var ranges []client.ObjectAndRange
+	err := json.Unmarshal(w.LastResponseBody, &ranges)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	if len(ranges) != 1 {
+		return fmt.Errorf("expected 1 datarange, got %d", len(ranges))
 	}
 
 	return nil

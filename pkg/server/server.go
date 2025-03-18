@@ -160,6 +160,7 @@ func CreateServer(
 	mux.HandleFunc("GET /api/v1/datas3t/{id}", server.HandleGetDataset)
 	mux.HandleFunc("POST /api/v1/datas3t/{id}", server.HandleUploadDatarange)
 	mux.HandleFunc("GET /api/v1/datas3t/{id}/dataranges", server.HandleGetDataranges)
+	mux.HandleFunc("GET /api/v1/datas3t/{id}/datarange/{start}/{end}", server.HandleGetDatarange)
 
 	server.Handler = mux
 
