@@ -19,16 +19,6 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-// Plan for the server
-// endpoints
-// 	create a datas3t:  PUT /api/v1/datas3t/{id}
-// 	get a datas3 info: GET /api/v1/datas3t/{id}
-// 	get a datas3 layout: GET /api/v1/datas3t/{id}/layout
-// 	put a datas3t: PATCH /api/v1/datas3t/{id}
-// 	post data to a datas3t: POST /api/v1/datas3t/{id}
-//  get data for a datas3t range: GET /api/v1/datas3t/{id}/data/{start}/{end}
-//  get data for a single data: GET /api/v1/datas3t/{id}/data/{id}
-
 //go:embed sqlitestore/migrations/*.sql
 var migrationsFS embed.FS
 
