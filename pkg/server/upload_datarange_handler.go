@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,8 +14,10 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/cespare/xxhash/v2"
 	"github.com/draganm/datas3t/pkg/server/sqlitestore"
 	tarmmap "github.com/draganm/tar-mmap-go"
+	"github.com/klauspost/compress/zstd"
 )
 
 // HandleUploadDatarange handles POST requests to upload data to a dataset
@@ -23,6 +26,14 @@ func (s *Server) HandleUploadDatarange(w http.ResponseWriter, r *http.Request) {
 	type UploadDataResponse struct {
 		DatasetID     string `json:"dataset_id"`
 		NumDataPoints int    `json:"num_data_points"`
+	}
+
+	// DatapointMetadata represents the metadata for a single datapoint
+	type DatapointMetadata struct {
+		ID          uint64 `json:"id,string"`
+		BeginOffset uint64 `json:"begin_offset,string"`
+		EndOffset   uint64 `json:"end_offset,string"`
+		DataHash    string `json:"data_hash"`
 	}
 
 	id := r.PathValue("id")
@@ -165,6 +176,30 @@ func (s *Server) HandleUploadDatarange(w http.ResponseWriter, r *http.Request) {
 
 	// Create S3 object key with the pattern dataset/<dataset_name>/datapoints/<from>-<to>.tar
 	objectKey := fmt.Sprintf("dataset/%s/datapoints/%020d-%020d.tar", id, minDatapointKey, maxDatapointKey)
+	metadataKey := objectKey + ".metadata"
+
+	// Generate metadata for each datapoint
+	var datapointMetadata []DatapointMetadata
+
+	// Process each datapoint to generate metadata
+	for _, seqNum := range fileNumbers {
+		section := sectionMap[seqNum]
+
+		// Access memory-mapped data directly from the section
+		dataBuf := section.Data
+
+		// Calculate xxhash of the data
+		h := xxhash.New()
+		h.Write(dataBuf)
+		hash := fmt.Sprintf("%x", h.Sum64())
+
+		datapointMetadata = append(datapointMetadata, DatapointMetadata{
+			ID:          seqNum,
+			BeginOffset: section.HeaderOffset,
+			EndOffset:   section.EndOfDataOffset,
+			DataHash:    hash,
+		})
+	}
 
 	// Upload file to S3
 	file, err := os.Open(tmpFile.Name())
@@ -191,6 +226,50 @@ func (s *Server) HandleUploadDatarange(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		s.logger.Error("failed to upload file to S3", "error", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Upload metadata file to S3
+	metadataJSON, err := json.Marshal(datapointMetadata)
+	if err != nil {
+		s.logger.Error("failed to marshal metadata to JSON", "error", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Compress metadata with zstd best compression
+	var compressedBuf bytes.Buffer
+	encoder, err := zstd.NewWriter(&compressedBuf, zstd.WithEncoderLevel(zstd.SpeedBestCompression))
+	if err != nil {
+		s.logger.Error("failed to create zstd encoder", "error", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	_, err = encoder.Write(metadataJSON)
+	if err != nil {
+		s.logger.Error("failed to compress metadata", "error", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Close the encoder to flush any remaining data
+	err = encoder.Close()
+	if err != nil {
+		s.logger.Error("failed to close zstd encoder", "error", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	_, err = s.s3Client.PutObject(r.Context(), &s3.PutObjectInput{
+		Bucket:      aws.String(s.bucket),
+		Key:         aws.String(metadataKey),
+		Body:        bytes.NewReader(compressedBuf.Bytes()),
+		ContentType: aws.String("application/zstd"),
+	})
+	if err != nil {
+		s.logger.Error("failed to upload metadata file to S3", "error", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -258,6 +337,7 @@ func (s *Server) HandleUploadDatarange(w http.ResponseWriter, r *http.Request) {
 	s.logger.Info("successfully uploaded data to S3",
 		"dataset", id,
 		"objectKey", objectKey,
+		"metadataKey", metadataKey,
 		"minKey", minDatapointKey,
 		"maxKey", maxDatapointKey,
 		"sizeBytes", fileSizeBytes,

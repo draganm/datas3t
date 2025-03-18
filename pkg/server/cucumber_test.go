@@ -30,6 +30,7 @@ func TestMain(m *testing.M) {
 		NoColors: true,
 		// StopOnFailure: true,
 		Strict: true,
+		// Tags:   "wip",
 	}
 
 	status := godog.TestSuite{
@@ -280,6 +281,9 @@ func theSBucketShouldContainTheDatapointRange(ctx context.Context) error {
 	// Count the number of objects found
 	count := 0
 	for objInfo := range objectCh {
+		if strings.HasSuffix(objInfo.Key, ".metadata") {
+			continue
+		}
 		if objInfo.Err != nil {
 			return fmt.Errorf("error listing objects: %v", objInfo.Err)
 		}
