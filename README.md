@@ -46,6 +46,10 @@ The CLI (`cmd/datas3t-cli`) provides commands for:
 
 For detailed information about the key terms and concepts used in this project, see [DATA_DICTIONARY.md](DATA_DICTIONARY.md).
 
+## S3 Storage Layout
+
+For information about how datasets, dataranges, and metadata are stored in S3, see [S3_LAYOUT.md](S3_LAYOUT.md).
+
 ## Development
 
 ### Prerequisites
