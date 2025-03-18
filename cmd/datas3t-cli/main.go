@@ -4,7 +4,10 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/draganm/datas3t/cmd/datas3t-cli/commands/dataset"
+	"github.com/draganm/datas3t/cmd/datas3t-cli/commands/create"
+	"github.com/draganm/datas3t/cmd/datas3t-cli/commands/datarange"
+	"github.com/draganm/datas3t/cmd/datas3t-cli/commands/get"
+	"github.com/draganm/datas3t/cmd/datas3t-cli/commands/list"
 	"github.com/urfave/cli/v2"
 )
 
@@ -15,7 +18,10 @@ func main() {
 		Name:  "datas3t-cli",
 		Usage: "Command line interface for Datas3t",
 		Commands: []*cli.Command{
-			dataset.Command(log),
+			create.Command(log),
+			list.Command(log),
+			datarange.Command(log),
+			get.Command(log),
 		},
 	}
 

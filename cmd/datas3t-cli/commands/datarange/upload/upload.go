@@ -18,7 +18,7 @@ func Command(log *slog.Logger) *cli.Command {
 
 	return &cli.Command{
 		Name:  "upload",
-		Usage: "Upload data to a dataset",
+		Usage: "Upload datarange to a dataset",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:        "id",

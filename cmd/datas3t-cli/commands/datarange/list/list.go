@@ -1,23 +1,30 @@
-package datasets
+package list
 
 import (
 	"fmt"
 	"log/slog"
 
 	"github.com/draganm/datas3t/pkg/client"
-	"github.com/dustin/go-humanize"
 	"github.com/urfave/cli/v2"
 )
 
 func Command(log *slog.Logger) *cli.Command {
 	cfg := struct {
 		serverURL string
+		id        string
 	}{}
 
 	return &cli.Command{
 		Name:  "list",
-		Usage: "List all available datasets",
+		Usage: "List data ranges for a dataset",
 		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:        "id",
+				Required:    true,
+				Usage:       "Dataset ID",
+				Destination: &cfg.id,
+				EnvVars:     []string{"DATAS3T_DATASET_ID"},
+			},
 			&cli.StringFlag{
 				Name:        "server-url",
 				Required:    true,
@@ -32,24 +39,17 @@ func Command(log *slog.Logger) *cli.Command {
 				return fmt.Errorf("failed to create client: %w", err)
 			}
 
-			datasets, err := cl.ListDatasets(c.Context)
+			ranges, err := cl.GetDataranges(c.Context, cfg.id)
 			if err != nil {
-				return fmt.Errorf("failed to list datasets: %w", err)
+				return fmt.Errorf("failed to get dataranges: %w", err)
 			}
 
-			if len(datasets) == 0 {
-				fmt.Println("No datasets found")
-				return nil
-			}
-
-			fmt.Printf("%-20s %-15s %-15s\n", "ID", "DATARANGES", "SIZE")
-			fmt.Println("-------------------------------------------------------")
-			for _, ds := range datasets {
-				fmt.Printf("%-20s %-15d %-15s\n",
-					ds.ID,
-					ds.DatarangeCount,
-					humanize.Bytes(uint64(ds.TotalSizeBytes)),
-				)
+			for _, r := range ranges {
+				fmt.Printf("Object Key: %s\n", r.ObjectKey)
+				fmt.Printf("Min Datapoint Key: %d\n", r.MinDatapointKey)
+				fmt.Printf("Max Datapoint Key: %d\n", r.MaxDatapointKey)
+				fmt.Printf("Size (bytes): %d\n", r.SizeBytes)
+				fmt.Println("---")
 			}
 
 			return nil

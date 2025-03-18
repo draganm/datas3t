@@ -1,4 +1,4 @@
-package datarange
+package download
 
 import (
 	"fmt"
