@@ -146,6 +146,7 @@ func CreateServer(
 	}
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v1/datas3t", server.HandleListDatasets)
 	mux.HandleFunc("PUT /api/v1/datas3t/{id}", server.HandleCreateDataset)
 	mux.HandleFunc("GET /api/v1/datas3t/{id}", server.HandleGetDataset)
 	mux.HandleFunc("POST /api/v1/datas3t/{id}", server.HandleUploadDatarange)

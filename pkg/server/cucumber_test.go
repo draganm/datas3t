@@ -15,6 +15,7 @@ import (
 
 	"github.com/cucumber/godog"
 	"github.com/draganm/datas3t/pkg/client"
+	"github.com/draganm/datas3t/pkg/server"
 	"github.com/draganm/datas3t/pkg/server/serverworld"
 	"github.com/draganm/datas3t/pkg/server/sqlitestore"
 	"github.com/minio/minio-go/v7"
@@ -76,7 +77,10 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the datarange should have size_bytes greater than (\d+)$`, theDatarangeShouldHaveSizeBytesGreaterThan)
 	ctx.Step(`^the response body should be "([^"]*)"$`, theResponseBodyShouldBe)
 	ctx.Step(`^the response should return a list of one object and range$`, theResponseShouldReturnAListOfOneObjectAndRange)
-
+	ctx.Step(`^the response should contain (\d+) datasets$`, theResponseShouldContainDatasets)
+	ctx.Step(`^the response should contain a dataset with ID "([^"]*)"$`, theResponseShouldContainADatasetWithID)
+	ctx.Step(`^the dataset "([^"]*)" should have (\d+) datarange$`, theDatasetShouldHaveDatarange)
+	ctx.Step(`^the dataset "([^"]*)" should have size_bytes greater than (\d+)$`, theDatasetShouldHaveSize_bytesGreaterThan)
 }
 
 func iSendAPUTRequestTo(ctx context.Context, path string) error {
@@ -819,4 +823,98 @@ func theResponseShouldReturnAListOfOneObjectAndRange(ctx context.Context) error 
 	}
 
 	return nil
+}
+
+func theResponseShouldContainDatasets(ctx context.Context, expectedCount int) error {
+	w, ok := serverworld.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("world not found in context")
+	}
+
+	var datasets []server.Dataset
+	if err := json.Unmarshal(w.LastResponseBody, &datasets); err != nil {
+		return fmt.Errorf("failed to unmarshal datasets response: %w", err)
+	}
+
+	if len(datasets) != expectedCount {
+		return fmt.Errorf("expected %d datasets, got %d", expectedCount, len(datasets))
+	}
+
+	w.LastDatasets = datasets
+	return nil
+}
+
+func theResponseShouldContainADatasetWithID(ctx context.Context, id string) error {
+	w, ok := serverworld.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("world not found in context")
+	}
+
+	if w.LastDatasets == nil {
+		var datasets []server.Dataset
+		if err := json.Unmarshal(w.LastResponseBody, &datasets); err != nil {
+			return fmt.Errorf("failed to unmarshal datasets response: %w", err)
+		}
+		w.LastDatasets = datasets
+	}
+
+	for _, ds := range w.LastDatasets {
+		if ds.ID == id {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("dataset with ID %q not found in response", id)
+}
+
+func theDatasetShouldHaveDatarange(ctx context.Context, id string, expectedCount int) error {
+	w, ok := serverworld.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("world not found in context")
+	}
+
+	if w.LastDatasets == nil {
+		var datasets []server.Dataset
+		if err := json.Unmarshal(w.LastResponseBody, &datasets); err != nil {
+			return fmt.Errorf("failed to unmarshal datasets response: %w", err)
+		}
+		w.LastDatasets = datasets
+	}
+
+	for _, ds := range w.LastDatasets {
+		if ds.ID == id {
+			if int(ds.DatarangeCount) != expectedCount {
+				return fmt.Errorf("expected dataset %q to have %d dataranges, got %d", id, expectedCount, ds.DatarangeCount)
+			}
+			return nil
+		}
+	}
+
+	return fmt.Errorf("dataset with ID %q not found in response", id)
+}
+
+func theDatasetShouldHaveSize_bytesGreaterThan(ctx context.Context, id string, minSize int) error {
+	w, ok := serverworld.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("world not found in context")
+	}
+
+	if w.LastDatasets == nil {
+		var datasets []server.Dataset
+		if err := json.Unmarshal(w.LastResponseBody, &datasets); err != nil {
+			return fmt.Errorf("failed to unmarshal datasets response: %w", err)
+		}
+		w.LastDatasets = datasets
+	}
+
+	for _, ds := range w.LastDatasets {
+		if ds.ID == id {
+			if ds.TotalSizeBytes <= int64(minSize) {
+				return fmt.Errorf("expected dataset %q to have size_bytes greater than %d, got %d", id, minSize, ds.TotalSizeBytes)
+			}
+			return nil
+		}
+	}
+
+	return fmt.Errorf("dataset with ID %q not found in response", id)
 }

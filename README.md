@@ -16,6 +16,7 @@ A Go service for managing datasets with S3 storage integration.
 ### Server
 
 The server provides a REST API with the following endpoints:
+- `GET /api/v1/datas3t` - List all datasets
 - `PUT /api/v1/datas3t/{id}` - Create a dataset
 - `GET /api/v1/datas3t/{id}` - Get dataset information
 - `POST /api/v1/datas3t/{id}` - Upload data to a dataset
@@ -25,6 +26,7 @@ The server provides a REST API with the following endpoints:
 ### Client Library
 
 The client library (`pkg/client`) provides a Go interface for interacting with the Datas3t server:
+- List all available datasets
 - Create datasets
 - Retrieve dataset information
 - Upload data ranges

@@ -27,6 +27,7 @@ type World struct {
 		MaxDatapointKey int64  `json:"max_datapoint_key"`
 		SizeBytes       int64  `json:"size_bytes"`
 	}
+	LastDatasets []server.Dataset
 
 	// MinIO related fields
 	MinioContainer  *miniomodule.MinioContainer

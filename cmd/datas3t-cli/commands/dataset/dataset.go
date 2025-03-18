@@ -5,6 +5,7 @@ import (
 
 	"github.com/draganm/datas3t/cmd/datas3t-cli/commands/dataset/create"
 	"github.com/draganm/datas3t/cmd/datas3t-cli/commands/dataset/datarange"
+	"github.com/draganm/datas3t/cmd/datas3t-cli/commands/dataset/datasets"
 	"github.com/draganm/datas3t/cmd/datas3t-cli/commands/dataset/get"
 	"github.com/draganm/datas3t/cmd/datas3t-cli/commands/dataset/list"
 	"github.com/draganm/datas3t/cmd/datas3t-cli/commands/dataset/upload"
@@ -19,6 +20,7 @@ func Command(log *slog.Logger) *cli.Command {
 		Subcommands: []*cli.Command{
 			create.Command(log),
 			get.Command(log),
+			datasets.Command(log),
 			list.Command(log),
 			upload.Command(log),
 			datarange.Command(log),

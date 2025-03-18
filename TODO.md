@@ -8,11 +8,6 @@ During server initialization, if the database is empty:
    - Extract datarange/datapoint information
    - Populate database records with extracted metadata
 
-## Dataset Listing Feature
-Implement server endpoint, API client method, and CLI command to display available datasets. For each dataset entry, include:
-- Dataset identifier
-- Datarange count 
-- Total storage size (in bytes with human-readable format)
 
 ## Atomic Data Range Consolidation Endpoint
 Implement an API endpoint that enables clients to upload an optimized data range that supersedes multiple existing ranges. The endpoint should:
