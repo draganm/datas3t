@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/draganm/datas3t/pkg/restore"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/sqlite3"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
@@ -130,6 +131,18 @@ func CreateServer(
 		})
 
 		log.Info("Connected to S3 storage", "endpoint", s3Config.Endpoint, "bucket", s3Config.BucketName)
+
+		// Restore database from S3 if needed
+		if err := restore.RestoreIfNeeded(ctx, restore.Config{
+			Logger:   log,
+			DB:       db,
+			S3Client: s3Client,
+			Bucket:   s3Config.BucketName,
+		}); err != nil {
+			log.Error("failed to restore database from S3", "error", err)
+			// Continue execution despite restoration failure
+			// This allows the server to start even if restoration fails
+		}
 	}
 
 	bucket := ""

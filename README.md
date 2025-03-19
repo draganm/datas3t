@@ -10,6 +10,7 @@ A Go service for managing datasets with S3 storage integration.
 - Integration with MinIO for development and testing
 - Client library for programmatic access
 - Command-line interface (CLI) for easy interaction
+- Automatic database restoration from S3 metadata if database is empty
 
 ## Components
 
@@ -41,6 +42,14 @@ The CLI (`cmd/datas3t-cli`) provides commands for:
 - Uploading data ranges
 - Listing datasets
 - Querying specific data ranges
+
+### Restore Package
+
+The restore package (`pkg/restore`) provides functionality to:
+- Automatically detect if the database is empty
+- Discover datasets and dataranges from S3 storage
+- Restore database records from S3 metadata
+- Rebuild the complete database state in a single transaction
 
 ## Data Dictionary
 

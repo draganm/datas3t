@@ -1,13 +1,5 @@
 # Planned Features
 
-## Database Restoration from S3
-During server initialization, if the database is empty:
-1. Retrieve a list of available dataset objects from S3 storage
-2. For any datasets found (identified by object keys):
-   - Download each corresponding object
-   - Extract datarange/datapoint information
-   - Populate database records with extracted metadata
-
 
 ## Atomic Data Range Consolidation Endpoint
 Implement an API endpoint that enables clients to upload an optimized data range that supersedes multiple existing ranges. The endpoint should:
