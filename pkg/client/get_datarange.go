@@ -61,7 +61,7 @@ func (c *Client) GetDatarange(ctx context.Context, id string, start, end uint64)
 	return ranges, nil
 }
 
-func (c *Client) DownloadDataranges(ctx context.Context, ranges []ObjectAndRange, file io.WriterAt) error {
+func DownloadDataranges(ctx context.Context, ranges []ObjectAndRange, file io.WriterAt) error {
 	downloads := make([]toDownload, len(ranges))
 	localFileOffset := uint64(0)
 	for i, r := range ranges {
@@ -74,17 +74,19 @@ func (c *Client) DownloadDataranges(ctx context.Context, ranges []ObjectAndRange
 		localFileOffset += r.End - r.Start + 1
 	}
 
-	g, ctx := errgroup.WithContext(ctx)
+	g, grCtx := errgroup.WithContext(ctx)
 
 	for _, d := range downloads {
 		g.Go(func() error {
-			req, err := http.NewRequestWithContext(ctx, "GET", d.url, nil)
+			req, err := http.NewRequestWithContext(grCtx, "GET", d.url, nil)
 			if err != nil {
 				return fmt.Errorf("failed to create request: %w", err)
 			}
 
 			rangeHeader := fmt.Sprintf("bytes=%d-%d", d.remoteRangeStart, d.remoteRangeEnd)
 			req.Header.Set("Range", rangeHeader)
+
+			fmt.Println("downloading", d.url, rangeHeader, d.localFileOffset)
 
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {

@@ -82,6 +82,10 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the response should contain a dataset with ID "([^"]*)"$`, theResponseShouldContainADatasetWithID)
 	ctx.Step(`^the dataset "([^"]*)" should have (\d+) datarange$`, theDatasetShouldHaveDatarange)
 	ctx.Step(`^the dataset "([^"]*)" should have size_bytes greater than (\d+)$`, theDatasetShouldHaveSize_bytesGreaterThan)
+	ctx.Step(`^I send a POST request to "([^"]*)"$`, iSendAPOSTRequestTo)
+	ctx.Step(`^the aggregated datarange should have start key (\d+)$`, theAggregatedDatarangeShouldHaveStartKey)
+	ctx.Step(`^the aggregated datarange should have end key (\d+)$`, theAggregatedDatarangeShouldHaveEndKey)
+	ctx.Step(`^the aggregated datarange should have replaced (\d+) ranges$`, theAggregatedDatarangeShouldHaveReplacedRanges)
 }
 
 func iSendAPUTRequestTo(ctx context.Context, path string) error {
@@ -921,4 +925,87 @@ func theDatasetShouldHaveSize_bytesGreaterThan(ctx context.Context, id string, m
 	}
 
 	return fmt.Errorf("dataset with ID %q not found in response", id)
+}
+
+func iSendAPOSTRequestTo(ctx context.Context, path string) error {
+	w, ok := serverworld.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("world not found in context")
+	}
+
+	u, err := url.JoinPath(w.ServerURL, path)
+	if err != nil {
+		return fmt.Errorf("failed to join path: %w", err)
+	}
+
+	request, err := http.NewRequest(http.MethodPost, u, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return fmt.Errorf("failed to send request: %w", err)
+	}
+
+	defer response.Body.Close()
+
+	w.LastResponseStatus = response.StatusCode
+	w.LastResponseBody, err = io.ReadAll(response.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	// If successful, try to parse response as aggregate response
+	if response.StatusCode == http.StatusOK {
+		var aggregateResponse server.AggregateResponse
+		if err := json.Unmarshal(w.LastResponseBody, &aggregateResponse); err != nil {
+			return fmt.Errorf("failed to unmarshal aggregate response: %w", err)
+		}
+		w.LastAggregateResponse = aggregateResponse
+	}
+
+	return nil
+}
+
+func theAggregatedDatarangeShouldHaveStartKey(ctx context.Context, expectedStartKey int64) error {
+	w, ok := serverworld.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("world not found in context")
+	}
+
+	if w.LastAggregateResponse.StartKey != expectedStartKey {
+		return fmt.Errorf("expected aggregated datarange start key %d, got %d",
+			expectedStartKey, w.LastAggregateResponse.StartKey)
+	}
+
+	return nil
+}
+
+func theAggregatedDatarangeShouldHaveEndKey(ctx context.Context, expectedEndKey int64) error {
+	w, ok := serverworld.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("world not found in context")
+	}
+
+	if w.LastAggregateResponse.EndKey != expectedEndKey {
+		return fmt.Errorf("expected aggregated datarange end key %d, got %d",
+			expectedEndKey, w.LastAggregateResponse.EndKey)
+	}
+
+	return nil
+}
+
+func theAggregatedDatarangeShouldHaveReplacedRanges(ctx context.Context, expectedCount int) error {
+	w, ok := serverworld.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("world not found in context")
+	}
+
+	if w.LastAggregateResponse.RangesReplaced != expectedCount {
+		return fmt.Errorf("expected aggregated datarange to have replaced %d ranges, got %d",
+			expectedCount, w.LastAggregateResponse.RangesReplaced)
+	}
+
+	return nil
 }

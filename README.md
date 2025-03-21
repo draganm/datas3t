@@ -11,6 +11,7 @@ A Go service for managing datasets with S3 storage integration.
 - Client library for programmatic access
 - Command-line interface (CLI) for easy interaction
 - Automatic database restoration from S3 metadata if database is empty
+- Atomic aggregation of multiple dataranges into a single consolidated range
 
 ## Components
 
@@ -23,6 +24,7 @@ The server provides a REST API with the following endpoints:
 - `POST /api/v1/datas3t/{id}` - Upload data to a dataset
 - `GET /api/v1/datas3t/{id}/dataranges` - Get all data ranges for a dataset
 - `GET /api/v1/datas3t/{id}/datarange/{start}/{end}` - Get specific data range with start/end keys
+- `POST /api/v1/datas3t/{id}/aggregate/{start}/{end}` - Aggregate multiple dataranges into a single consolidated range
 
 ### Client Library
 
@@ -33,6 +35,7 @@ The client library (`pkg/client`) provides a Go interface for interacting with t
 - Upload data ranges
 - Get data ranges (all or specific range)
 - Retrieve individual data points
+- Aggregate multiple dataranges into a single consolidated range
 
 ### Command-Line Interface (CLI)
 
@@ -42,6 +45,7 @@ The CLI (`cmd/datas3t-cli`) provides commands for:
 - Uploading data ranges
 - Listing datasets
 - Querying specific data ranges
+- Aggregating multiple dataranges into a single consolidated range
 
 ### Restore Package
 

@@ -2,7 +2,9 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -91,70 +93,21 @@ func (s *Server) HandleUploadDatarange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Open the tar file for validation
-	tr, err := tarmmap.Open(tmpFile.Name())
+	datapointMetadata, err := extractMetadataAndCheckForGaps(tmpFile.Name())
 	if err != nil {
-		s.logger.Error("failed to open tar file", "error", err)
-		http.Error(w, "invalid tar file", http.StatusBadRequest)
+		if errors.Is(err, ErrGapDetected) {
+			s.logger.Error("gap detected in file sequence", "error", err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		s.logger.Error("failed to extract file numbers", "error", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
-	}
-	defer tr.Close()
-
-	// Define pattern for file names
-	filePattern := regexp.MustCompile(`^(\d{20})\..+$`)
-
-	// Track file sequence numbers
-	var fileNumbers []uint64
-
-	// Map to store section information for each sequence number
-	sectionMap := make(map[uint64]tarmmap.TarSection)
-
-	// Validate file names and collect sequence numbers
-	for _, section := range tr.Sections {
-		matches := filePattern.FindStringSubmatch(filepath.Base(section.Header.Name))
-		if matches == nil {
-			s.logger.Error("invalid file name pattern", "filename", section.Header.Name)
-			http.Error(w, fmt.Sprintf("invalid file name pattern: %s", section.Header.Name), http.StatusBadRequest)
-			return
-		}
-
-		// Parse the sequence number
-		seqNumStr := matches[1]
-		seqNum, err := strconv.ParseUint(seqNumStr, 10, 64)
-		if err != nil {
-			s.logger.Error("failed to parse sequence number", "filename", section.Header.Name, "error", err)
-			http.Error(w, fmt.Sprintf("invalid sequence number in file name: %s", section.Header.Name), http.StatusBadRequest)
-			return
-		}
-
-		fileNumbers = append(fileNumbers, seqNum)
-		sectionMap[seqNum] = section
-	}
-
-	// Check that we have at least one file
-	if len(fileNumbers) == 0 {
-		s.logger.Error("no valid files in tar archive")
-		http.Error(w, "no valid files in tar archive", http.StatusBadRequest)
-		return
-	}
-
-	// Sort the sequence numbers
-	sort.Slice(fileNumbers, func(i, j int) bool {
-		return fileNumbers[i] < fileNumbers[j]
-	})
-
-	// Check for gaps in the sequence
-	for i := 0; i < len(fileNumbers)-1; i++ {
-		if fileNumbers[i+1] != fileNumbers[i]+1 {
-			s.logger.Error("gap detected in file sequence", "expected", fileNumbers[i]+1, "got", fileNumbers[i+1])
-			http.Error(w, fmt.Sprintf("gap in file sequence: expected %d, got %d", fileNumbers[i]+1, fileNumbers[i+1]), http.StatusBadRequest)
-			return
-		}
 	}
 
 	// Get min and max datapoint keys
-	minDatapointKey := fileNumbers[0]
-	maxDatapointKey := fileNumbers[len(fileNumbers)-1]
+	minDatapointKey := datapointMetadata[0].ID
+	maxDatapointKey := datapointMetadata[len(datapointMetadata)-1].ID
 
 	// Check for overlaps with existing datapoints using a single database query
 	hasOverlap, err := store.CheckOverlappingDatapointRange(r.Context(), sqlitestore.CheckOverlappingDatapointRangeParams{
@@ -176,100 +129,17 @@ func (s *Server) HandleUploadDatarange(w http.ResponseWriter, r *http.Request) {
 
 	// Create S3 object key with the pattern dataset/<dataset_name>/datapoints/<from>-<to>.tar
 	objectKey := fmt.Sprintf("dataset/%s/datapoints/%020d-%020d.tar", id, minDatapointKey, maxDatapointKey)
-	metadataKey := objectKey + ".metadata"
 
-	// Generate metadata for each datapoint
-	var datapointMetadata []DatapointMetadata
-
-	// Process each datapoint to generate metadata
-	for _, seqNum := range fileNumbers {
-		section := sectionMap[seqNum]
-
-		// Access memory-mapped data directly from the section
-		dataBuf := section.Data
-
-		// Calculate xxhash of the data
-		h := xxhash.New()
-		h.Write(dataBuf)
-		hash := fmt.Sprintf("%x", h.Sum64())
-
-		datapointMetadata = append(datapointMetadata, DatapointMetadata{
-			ID:          seqNum,
-			BeginOffset: section.HeaderOffset,
-			EndOffset:   section.EndOfDataOffset,
-			DataHash:    hash,
-		})
-	}
-
-	// Upload file to S3
-	file, err := os.Open(tmpFile.Name())
+	err = s.uploadDatapointsAndMetadata(r.Context(), tmpFile.Name(), objectKey, datapointMetadata)
 	if err != nil {
-		s.logger.Error("failed to open temporary file for S3 upload", "error", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer file.Close()
-
-	// Get file size for storing in database
-	fileInfo, err := file.Stat()
-	if err != nil {
-		s.logger.Error("failed to get file size", "error", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	fileSizeBytes := fileInfo.Size()
-
-	_, err = s.s3Client.PutObject(r.Context(), &s3.PutObjectInput{
-		Bucket: aws.String(s.bucket),
-		Key:    aws.String(objectKey),
-		Body:   file,
-	})
-	if err != nil {
-		s.logger.Error("failed to upload file to S3", "error", err)
+		s.logger.Error("failed to upload datapoints and metadata", "error", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Upload metadata file to S3
-	metadataJSON, err := json.Marshal(datapointMetadata)
+	fileInfo, err := tmpFile.Stat()
 	if err != nil {
-		s.logger.Error("failed to marshal metadata to JSON", "error", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Compress metadata with zstd best compression
-	var compressedBuf bytes.Buffer
-	encoder, err := zstd.NewWriter(&compressedBuf, zstd.WithEncoderLevel(zstd.SpeedBestCompression))
-	if err != nil {
-		s.logger.Error("failed to create zstd encoder", "error", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	_, err = encoder.Write(metadataJSON)
-	if err != nil {
-		s.logger.Error("failed to compress metadata", "error", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Close the encoder to flush any remaining data
-	err = encoder.Close()
-	if err != nil {
-		s.logger.Error("failed to close zstd encoder", "error", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	_, err = s.s3Client.PutObject(r.Context(), &s3.PutObjectInput{
-		Bucket:      aws.String(s.bucket),
-		Key:         aws.String(metadataKey),
-		Body:        bytes.NewReader(compressedBuf.Bytes()),
-		ContentType: aws.String("application/zstd"),
-	})
-	if err != nil {
-		s.logger.Error("failed to upload metadata file to S3", "error", err)
+		s.logger.Error("failed to get file info", "error", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -298,7 +168,7 @@ func (s *Server) HandleUploadDatarange(w http.ResponseWriter, r *http.Request) {
 		ObjectKey:       objectKey,
 		MinDatapointKey: int64(minDatapointKey),
 		MaxDatapointKey: int64(maxDatapointKey),
-		SizeBytes:       fileSizeBytes,
+		SizeBytes:       fileInfo.Size(),
 	})
 	if err != nil {
 		s.logger.Error("failed to insert data range into database", "error", err)
@@ -307,17 +177,16 @@ func (s *Server) HandleUploadDatarange(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Insert individual datapoints
-	for _, seqNum := range fileNumbers {
-		section := sectionMap[seqNum]
+	for _, md := range datapointMetadata {
 		err = txStore.InsertDatapoint(r.Context(), sqlitestore.InsertDatapointParams{
 			DatarangeID:  dataRangeID,
-			DatapointKey: int64(seqNum),
-			BeginOffset:  int64(section.HeaderOffset),
-			EndOffset:    int64(section.EndOfDataOffset),
+			DatapointKey: int64(md.ID),
+			BeginOffset:  int64(md.BeginOffset),
+			EndOffset:    int64(md.EndOffset),
 		})
 
 		if err != nil {
-			s.logger.Error("failed to insert datapoint", "seqNum", seqNum, "error", err)
+			s.logger.Error("failed to insert datapoint", "datapoint", md.ID, "error", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -337,16 +206,15 @@ func (s *Server) HandleUploadDatarange(w http.ResponseWriter, r *http.Request) {
 	s.logger.Info("successfully uploaded data to S3",
 		"dataset", id,
 		"objectKey", objectKey,
-		"metadataKey", metadataKey,
 		"minKey", minDatapointKey,
 		"maxKey", maxDatapointKey,
-		"sizeBytes", fileSizeBytes,
-		"datapoints", len(fileNumbers))
+		"sizeBytes", fileInfo.Size(),
+		"datapoints", len(datapointMetadata))
 
 	// Prepare and send the response
 	response := UploadDataResponse{
 		DatasetID:     id,
-		NumDataPoints: len(fileNumbers),
+		NumDataPoints: len(datapointMetadata),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -357,4 +225,141 @@ func (s *Server) HandleUploadDatarange(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
+}
+
+var filePattern = regexp.MustCompile(`^(\d{20})\..+$`)
+
+var ErrGapDetected = errors.New("gap detected in file sequence")
+
+func extractMetadataAndCheckForGaps(filename string) ([]DatapointMetadata, error) {
+	// Open the tar file for validation
+	tr, err := tarmmap.Open(filename)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open tar file: %w", err)
+	}
+	defer tr.Close()
+
+	// Track file sequence numbers
+	var fileNumbers []uint64
+
+	// Map to store section information for each sequence number
+	sectionMap := make(map[uint64]tarmmap.TarSection)
+
+	// Validate file names and collect sequence numbers
+	for _, section := range tr.Sections {
+		matches := filePattern.FindStringSubmatch(filepath.Base(section.Header.Name))
+		if matches == nil {
+			return nil, fmt.Errorf("invalid file name pattern: %s", section.Header.Name)
+		}
+
+		// Parse the sequence number
+		seqNumStr := matches[1]
+		seqNum, err := strconv.ParseUint(seqNumStr, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse sequence number: %w", err)
+		}
+
+		fileNumbers = append(fileNumbers, seqNum)
+		sectionMap[seqNum] = section
+	}
+
+	// Check that we have at least one file
+	if len(fileNumbers) == 0 {
+		return nil, fmt.Errorf("no valid files in tar archive")
+	}
+
+	// Sort the sequence numbers
+	sort.Slice(fileNumbers, func(i, j int) bool {
+		return fileNumbers[i] < fileNumbers[j]
+	})
+
+	// Check for gaps in the sequence
+	for i := 0; i < len(fileNumbers)-1; i++ {
+		if fileNumbers[i+1] != fileNumbers[i]+1 {
+			return nil, fmt.Errorf("%w: expected %d, got %d", ErrGapDetected, fileNumbers[i]+1, fileNumbers[i+1])
+		}
+	}
+
+	// Generate metadata for each datapoint
+	var datapointMetadata []DatapointMetadata
+
+	// Process each datapoint to generate metadata
+	for _, seqNum := range fileNumbers {
+		section := sectionMap[seqNum]
+
+		// Access memory-mapped data directly from the section
+		dataBuf := section.Data
+
+		// Calculate xxhash of the data
+		h := xxhash.New()
+		h.Write(dataBuf)
+		hash := fmt.Sprintf("%x", h.Sum64())
+
+		datapointMetadata = append(datapointMetadata, DatapointMetadata{
+			ID:          seqNum,
+			BeginOffset: section.HeaderOffset,
+			EndOffset:   section.EndOfDataOffset,
+			DataHash:    hash,
+		})
+	}
+
+	return datapointMetadata, nil
+}
+
+func (s *Server) uploadDatapointsAndMetadata(ctx context.Context, filename, objectKey string, datapointMetadata []DatapointMetadata) error {
+	// Create compressed metadata
+	metadataJSON, err := json.Marshal(datapointMetadata)
+	if err != nil {
+		return fmt.Errorf("failed to marshal metadata to JSON: %w", err)
+	}
+
+	// Compress metadata with zstd best compression
+	var compressedBuf bytes.Buffer
+	encoder, err := zstd.NewWriter(&compressedBuf, zstd.WithEncoderLevel(zstd.SpeedBestCompression))
+	if err != nil {
+		return fmt.Errorf("failed to create zstd encoder: %w", err)
+	}
+
+	_, err = encoder.Write(metadataJSON)
+	if err != nil {
+		return fmt.Errorf("failed to compress metadata: %w", err)
+	}
+
+	// Close the encoder to flush any remaining data
+	err = encoder.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close zstd encoder: %w", err)
+	}
+
+	// Upload file to S3
+	file, err := os.Open(filename)
+	if err != nil {
+		return fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
+
+	_, err = s.s3Client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(objectKey),
+		Body:   file,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to upload file to S3: %w", err)
+	}
+
+	// Upload metadata file to S3
+	metadataKey := objectKey + ".metadata"
+
+	_, err = s.s3Client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:      aws.String(s.bucket),
+		Key:         aws.String(metadataKey),
+		Body:        bytes.NewReader(compressedBuf.Bytes()),
+		ContentType: aws.String("application/zstd"),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to upload metadata file to S3: %w", err)
+	}
+
+	return nil
+
 }

@@ -12,40 +12,53 @@ import (
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	miniomodule "github.com/testcontainers/testcontainers-go/modules/minio"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
+type ctxKey struct{}
+
+// World represents the test environment
 type World struct {
+	DB                    *sql.DB
+	HTTPServer            *httptest.Server
 	ServerURL             string
-	CurrentDatasetID      string
 	LastResponseStatus    int
+	LastResponseBody      []byte
 	LastDatasetID         string
 	NumUploadedDataPoints int
-	LastResponseBody      []byte
 	LastDatarange         struct {
 		ObjectKey       string `json:"object_key"`
 		MinDatapointKey int64  `json:"min_datapoint_key"`
 		MaxDatapointKey int64  `json:"max_datapoint_key"`
 		SizeBytes       int64  `json:"size_bytes"`
 	}
-	LastDatasets []server.Dataset
+	LastDatasets          []server.Dataset
+	MinioClient           *minio.Client
+	MinioBucketName       string
+	LastAggregateResponse server.AggregateResponse
 
 	// MinIO related fields
-	MinioContainer  *miniomodule.MinioContainer
-	MinioEndpoint   string
-	MinioAccessKey  string
-	MinioSecretKey  string
-	MinioClient     *minio.Client
-	MinioBucketName string
-
-	// Uploads path
-	UploadsPath string
-
-	// Database connection
-	DB *sql.DB
+	MinioContainer *miniomodule.MinioContainer
+	MinioEndpoint  string
+	MinioAccessKey string
+	MinioSecretKey string
+	UploadsPath    string
 }
 
-func New(ctx context.Context) (*World, error) {
+// ToContext adds the World to the context
+func ToContext(ctx context.Context, world *World) context.Context {
+	return context.WithValue(ctx, ctxKey{}, world)
+}
 
+// FromContext extracts the World from the context
+func FromContext(ctx context.Context) (*World, bool) {
+	world, ok := ctx.Value(ctxKey{}).(*World)
+	return world, ok
+}
+
+// New creates a new test environment
+func New(ctx context.Context) (*World, error) {
 	log := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	// Start MinIO testcontainer
@@ -140,17 +153,4 @@ func New(ctx context.Context) (*World, error) {
 		UploadsPath:     uploadsPath,
 		DB:              srv.DB,
 	}, nil
-}
-
-type worldKey string
-
-const worldContextKey worldKey = "world"
-
-func FromContext(ctx context.Context) (*World, bool) {
-	world, ok := ctx.Value(worldContextKey).(*World)
-	return world, ok
-}
-
-func ToContext(ctx context.Context, world *World) context.Context {
-	return context.WithValue(ctx, worldContextKey, world)
 }

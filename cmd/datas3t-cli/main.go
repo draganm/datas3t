@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/draganm/datas3t/cmd/datas3t-cli/commands/aggregate"
 	"github.com/draganm/datas3t/cmd/datas3t-cli/commands/create"
 	"github.com/draganm/datas3t/cmd/datas3t-cli/commands/datarange"
 	"github.com/draganm/datas3t/cmd/datas3t-cli/commands/get"
@@ -22,6 +23,7 @@ func main() {
 			list.Command(log),
 			datarange.Command(log),
 			get.Command(log),
+			aggregate.Command(log),
 		},
 	}
 

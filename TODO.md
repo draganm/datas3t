@@ -1,12 +1,10 @@
 # Planned Features
 
 
-## Atomic Data Range Consolidation Endpoint
-Implement an API endpoint that enables clients to upload an optimized data range that supersedes multiple existing ranges. The endpoint should:
-- Accept a new consolidated data range that fully encompasses existing smaller ranges
-- Perform integrity validation by:
-  - Generating an xxhash checksum for the new data range
-  - Verifying against the combined xxhash of individual datapoint hashes in existing ranges
+## Atomic Data Range Aggregation Endpoint: POST /api/v1/datas3t/{id}/aggregate/{start}/{end}
+Implement an API endpoint that enables clients to trigger aggregating multiple dataranges into a single data range that superseeds the smaller ranges. The endpoint should:
+- Accept {start} and {end} datapoint IDs.
+- The new datarange has to completely replace existing dataranges. After the operation, the invariant of no two dataranges are overlaping should still hold.
 - Execute an atomic transaction that:
   1. Stores the consolidated range
   2. Deletes all superseded ranges

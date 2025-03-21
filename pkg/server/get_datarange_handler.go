@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -63,16 +64,16 @@ func (s *Server) validateParameters(r *http.Request) (string, uint64, uint64, er
 
 	start, err := strconv.ParseUint(startStr, 10, 64)
 	if err != nil {
-		return "", 0, 0, fmt.Errorf("invalid start parameter: %w", err)
+		return "", 0, 0, fmt.Errorf("%w: invalid start parameter: %w", ErrValidationFailed, err)
 	}
 
 	end, err := strconv.ParseUint(endStr, 10, 64)
 	if err != nil {
-		return "", 0, 0, fmt.Errorf("invalid end parameter: %w", err)
+		return "", 0, 0, fmt.Errorf("%w: invalid end parameter: %w", ErrValidationFailed, err)
 	}
 
 	if start > end {
-		return "", 0, 0, fmt.Errorf("start parameter must be less than or equal to end parameter")
+		return "", 0, 0, fmt.Errorf("%w: start parameter must be less than or equal to end parameter", ErrValidationFailed)
 	}
 
 	return datasetID, start, end, nil
@@ -108,15 +109,8 @@ func (s *Server) generateResponse(ctx context.Context, dataranges []sqlitestore.
 
 	for _, dr := range dataranges {
 		// Convert interface{} to int64
-		firstOffset, ok := dr.FirstOffset.(int64)
-		if !ok {
-			return GetDatarangeResponse{}, fmt.Errorf("invalid first offset type")
-		}
-		lastOffset, ok := dr.LastOffset.(int64)
-		if !ok {
-			return GetDatarangeResponse{}, fmt.Errorf("invalid last offset type")
-		}
-
+		firstOffset := dr.FirstOffset
+		lastOffset := dr.LastOffset
 		// Ensure offsets are aligned to 512 bytes as required
 		minOffset := (firstOffset / 512) * 512
 		maxOffset := ((lastOffset + 511) / 512) * 512
@@ -148,21 +142,30 @@ func (s *Server) sendEmptyResponse(w http.ResponseWriter) {
 	response := GetDatarangeResponse{}
 
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
+	err := json.NewEncoder(w).Encode(response)
+	if err != nil {
 		s.logger.Error("failed to encode response", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
 
-func (s *Server) sendResponse(w http.ResponseWriter, response GetDatarangeResponse) {
+func (s *Server) sendResponse(w http.ResponseWriter, response any) {
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
+	err := json.NewEncoder(w).Encode(response)
+	if err != nil {
 		s.logger.Error("failed to encode response", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
+
+var ErrValidationFailed = errors.New("validation failed")
 
 func (s *Server) handleError(w http.ResponseWriter, err error) {
 	s.logger.Error("error occurred", "error", err)
+	if errors.Is(err, ErrValidationFailed) {
+		http.Error(w, fmt.Sprintf("Validation failed: %v", err), http.StatusBadRequest)
+		return
+	}
+
 	http.Error(w, fmt.Sprintf("Internal server error: %v", err), http.StatusInternalServerError)
 }

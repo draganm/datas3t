@@ -74,7 +74,7 @@ func Command(log *slog.Logger) *cli.Command {
 			}
 			defer file.Close()
 
-			if err := cl.DownloadDataranges(c.Context, ranges, file); err != nil {
+			if err := client.DownloadDataranges(c.Context, ranges, file); err != nil {
 				return fmt.Errorf("failed to download dataranges: %w", err)
 			}
 

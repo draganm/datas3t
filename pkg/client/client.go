@@ -1,8 +1,11 @@
 package client
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 )
@@ -13,6 +16,16 @@ type DataRange struct {
 	MinDatapointKey int64  `json:"min_datapoint_key"`
 	MaxDatapointKey int64  `json:"max_datapoint_key"`
 	SizeBytes       int64  `json:"size_bytes"`
+}
+
+// AggregateResponse represents the response from the aggregate datarange endpoint
+type AggregateResponse struct {
+	DatasetID      string `json:"dataset_id"`
+	StartKey       int64  `json:"start_key"`
+	EndKey         int64  `json:"end_key"`
+	RangesReplaced int    `json:"ranges_replaced"`
+	NewObjectKey   string `json:"new_object_key"`
+	SizeBytes      int64  `json:"size_bytes"`
 }
 
 // StatusError represents an error with an HTTP status code
@@ -59,4 +72,52 @@ func GetStatusCode(err error) int {
 	}
 
 	return 0
+}
+
+// AggregateDatarange aggregates multiple dataranges within the specified range into a single datarange
+func (c *Client) AggregateDatarange(ctx context.Context, datasetID string, startKey, endKey int64) (*AggregateResponse, error) {
+	// Build the URL
+	endpointPath := fmt.Sprintf("/api/v1/datas3t/%s/aggregate/%d/%d", datasetID, startKey, endKey)
+	endpointURL, err := url.Parse(endpointPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse endpoint path: %w", err)
+	}
+
+	requestURL := c.baseURL.ResolveReference(endpointURL)
+
+	// Create a new POST request
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Send the request
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read the response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	// Check if the response status code indicates an error
+	if resp.StatusCode != http.StatusOK {
+		return nil, &StatusError{
+			StatusCode: resp.StatusCode,
+			Body:       string(body),
+			Err:        fmt.Errorf("server returned non-OK status code"),
+		}
+	}
+
+	// Decode the response
+	var aggregateResponse AggregateResponse
+	if err := json.Unmarshal(body, &aggregateResponse); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return &aggregateResponse, nil
 }

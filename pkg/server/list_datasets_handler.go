@@ -28,17 +28,11 @@ func (s *Server) HandleListDatasets(w http.ResponseWriter, r *http.Request) {
 	// Convert SQL result to response format
 	response := make([]Dataset, len(datasets))
 	for i, ds := range datasets {
-		var totalSizeBytes int64 = 0
-		if ds.TotalSizeBytes != nil {
-			if val, ok := ds.TotalSizeBytes.(int64); ok {
-				totalSizeBytes = val
-			}
-		}
 
 		response[i] = Dataset{
-			ID:             ds.Name,
+			ID:             ds.ID,
 			DatarangeCount: ds.DatarangeCount,
-			TotalSizeBytes: totalSizeBytes,
+			TotalSizeBytes: ds.TotalSizeBytes,
 		}
 	}
 

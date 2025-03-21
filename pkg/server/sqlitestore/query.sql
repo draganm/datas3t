@@ -25,19 +25,34 @@ ORDER BY d.datapoint_key;
 
 -- name: GetSectionsOfDataranges :many
 SELECT 
+    dr.id,
     dr.object_key,
-    MIN(CASE WHEN d.datapoint_key >= @start_key THEN d.begin_offset END) as first_offset,
-    MAX(CASE WHEN d.datapoint_key <= @end_key THEN d.end_offset END) as last_offset
+    CAST((CASE 
+        WHEN dr.min_datapoint_key < @start_key THEN 
+            (SELECT d.begin_offset 
+             FROM datapoints d 
+             WHERE d.datarange_id = dr.id 
+             AND d.datapoint_key = @start_key 
+             LIMIT 1)
+        ELSE 
+            0
+    END) AS UNSIGNED BIGINT) as first_offset,
+    CAST((CASE 
+        WHEN dr.max_datapoint_key > @end_key THEN 
+            (SELECT d.end_offset 
+             FROM datapoints d 
+             WHERE d.datarange_id = dr.id 
+             AND d.datapoint_key <= @end_key 
+             ORDER BY d.datapoint_key DESC 
+             LIMIT 1)
+        ELSE 
+            dr.size_bytes-1024
+    END) AS UNSIGNED BIGINT) as last_offset,
+    dr.size_bytes
 FROM dataranges dr
-JOIN datapoints d ON d.datarange_id = dr.id
 WHERE dr.dataset_name = @dataset_name
-AND d.datapoint_key <= @end_key
-AND EXISTS (
-    SELECT 1 FROM datapoints d2 
-    WHERE d2.datarange_id = dr.id 
-    AND d2.datapoint_key >= @start_key
-)
-GROUP BY dr.object_key
+AND dr.min_datapoint_key <= @end_key
+AND dr.max_datapoint_key >= @start_key
 ORDER BY dr.object_key;
 
 -- name: CheckOverlappingDatapointRange :one
@@ -57,11 +72,43 @@ FROM dataranges
 WHERE dataset_name = ?
 ORDER BY min_datapoint_key ASC;
 
--- name: GetDatarangeOffsets :one
-SELECT dr.id, dr.dataset_name, dr.object_key,
-       MIN(dp.begin_offset) as min_offset,
-       MAX(dp.end_offset) as max_offset
-FROM dataranges dr
-JOIN datapoints dp ON dp.datarange_id = dr.id
-WHERE dr.id = ?
-GROUP BY dr.id;
+-- name: GetDatarangesForAggregation :many
+SELECT id, object_key, min_datapoint_key, max_datapoint_key, size_bytes 
+FROM dataranges 
+WHERE dataset_name = @dataset_name
+AND (
+    (min_datapoint_key <= @end_key AND max_datapoint_key >= @start_key)
+)
+ORDER BY min_datapoint_key ASC;
+
+-- name: GetDatapointsInRange :many
+SELECT d.id, d.datarange_id, d.datapoint_key, d.begin_offset, d.end_offset 
+FROM datapoints d
+JOIN dataranges dr ON d.datarange_id = dr.id
+WHERE dr.dataset_name = @dataset_name
+AND d.datapoint_key >= @start_key
+AND d.datapoint_key <= @end_key
+ORDER BY d.datapoint_key;
+
+-- name: UpdateDatapointsDatarangeID :exec
+UPDATE datapoints 
+SET datarange_id = @new_datarange_id
+WHERE datapoint_key >= @start_key
+AND datapoint_key <= @end_key
+AND datarange_id IN (
+    SELECT id FROM dataranges 
+    WHERE dataset_name = @dataset_name
+);
+
+-- name: DeleteDatarange :exec
+DELETE FROM dataranges WHERE id = ?;
+
+-- name: GetAllDatasets :many
+SELECT 
+    d.name as id,
+    (SELECT COUNT(id) FROM dataranges WHERE dataset_name = d.name) as datarange_count,
+    CAST(COALESCE((SELECT SUM(size_bytes) FROM dataranges WHERE dataset_name = d.name), 0) AS UNSIGNED BIGINT) as total_size_bytes,
+    CAST(COALESCE((SELECT MIN(min_datapoint_key) FROM dataranges WHERE dataset_name = d.name), 0) AS UNSIGNED BIGINT) as min_datapoint_key,
+    CAST(COALESCE((SELECT MAX(max_datapoint_key) FROM dataranges WHERE dataset_name = d.name), 0) AS UNSIGNED BIGINT) as max_datapoint_key
+FROM datasets d
+ORDER BY d.name;
