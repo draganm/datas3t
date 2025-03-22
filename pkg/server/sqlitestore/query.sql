@@ -19,8 +19,9 @@ SELECT id FROM dataranges WHERE dataset_name = ?;
 -- name: GetDatapointsForDataset :many
 SELECT d.id, d.datarange_id, d.datapoint_key, d.begin_offset, d.end_offset 
 FROM datapoints d
-JOIN dataranges dr ON d.datarange_id = dr.id
-WHERE dr.dataset_name = ?
+WHERE d.datarange_id IN (
+    SELECT id FROM dataranges WHERE dataset_name = ?
+)
 ORDER BY d.datapoint_key;
 
 -- name: GetSectionsOfDataranges :many
