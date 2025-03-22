@@ -13,6 +13,11 @@ This package is designed to handle scenarios where the database has been lost or
 - Downloads and decodes metadata files for each datarange
 - Reconstructs database records for datasets, dataranges, and datapoints
 - All restoration happens in a single transaction for atomicity
+- Smart handling of overlapping dataranges:
+  - Keeps larger dataranges that fully contain smaller ones
+  - Schedules redundant smaller dataranges for deletion
+  - Detects and errors on partial overlaps between dataranges
+  - Ensures data consistency by validating datarange boundaries
 
 ## Main Function
 
@@ -44,13 +49,27 @@ type Config struct {
 3. Begin a database transaction
 4. For each dataset:
    - Create the dataset in the database
-   - For each datarange:
+   - Filter overlapping dataranges:
+     - Check for partial overlaps (return error if detected)
+     - Keep larger dataranges that fully contain smaller ones
+     - Schedule redundant smaller dataranges for deletion
+   - For each kept datarange:
      - Extract metadata from object key (min/max keys)
      - Get object size via HeadObject
      - Insert datarange into database
      - Download and decode metadata file
      - Insert datapoints from metadata
 5. Commit the transaction
+
+## Overlap Handling
+
+The package handles different types of overlaps between dataranges:
+
+- **Full containment**: When one datarange completely contains another (e.g., range 1-6 contains 3-4), the larger range is kept and the smaller one is scheduled for deletion.
+- **Partial overlap**: When dataranges partially overlap (e.g., range 1-4 and 3-6), the restoration process will fail with an error, as this indicates inconsistent or corrupted data.
+- **No overlap**: Independent dataranges are all preserved.
+
+This ensures that the restored database only contains the most efficient set of dataranges while maintaining data integrity.
 
 ## Integration
 

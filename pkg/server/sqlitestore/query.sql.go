@@ -63,6 +63,125 @@ func (q *Queries) DeleteDatarange(ctx context.Context, id int64) error {
 	return err
 }
 
+const findDatarangesContainedBy = `-- name: FindDatarangesContainedBy :many
+SELECT 
+    smaller.id,
+    smaller.object_key,
+    smaller.min_datapoint_key,
+    smaller.max_datapoint_key
+FROM dataranges smaller
+JOIN dataranges larger ON smaller.dataset_name = larger.dataset_name
+WHERE smaller.dataset_name = ?
+AND smaller.id != larger.id
+AND larger.min_datapoint_key <= smaller.min_datapoint_key
+AND larger.max_datapoint_key >= smaller.max_datapoint_key
+AND smaller.size_bytes < larger.size_bytes
+`
+
+type FindDatarangesContainedByRow struct {
+	ID              int64
+	ObjectKey       string
+	MinDatapointKey int64
+	MaxDatapointKey int64
+}
+
+func (q *Queries) FindDatarangesContainedBy(ctx context.Context, datasetName string) ([]FindDatarangesContainedByRow, error) {
+	rows, err := q.db.QueryContext(ctx, findDatarangesContainedBy, datasetName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FindDatarangesContainedByRow
+	for rows.Next() {
+		var i FindDatarangesContainedByRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ObjectKey,
+			&i.MinDatapointKey,
+			&i.MaxDatapointKey,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const findOverlappingDataranges = `-- name: FindOverlappingDataranges :many
+SELECT 
+    a.id AS id_a,
+    b.id AS id_b,
+    a.object_key AS object_key_a,
+    b.object_key AS object_key_b,
+    a.min_datapoint_key AS min_key_a,
+    a.max_datapoint_key AS max_key_a,
+    b.min_datapoint_key AS min_key_b,
+    b.max_datapoint_key AS max_key_b,
+    a.size_bytes AS size_a,
+    b.size_bytes AS size_b
+FROM dataranges a
+JOIN dataranges b ON a.dataset_name = b.dataset_name
+WHERE a.id < b.id
+AND a.dataset_name = ?
+AND (
+    (a.min_datapoint_key <= b.max_datapoint_key AND a.max_datapoint_key >= b.min_datapoint_key)
+)
+ORDER BY a.min_datapoint_key, b.min_datapoint_key
+`
+
+type FindOverlappingDatarangesRow struct {
+	IDA        int64
+	IDB        int64
+	ObjectKeyA string
+	ObjectKeyB string
+	MinKeyA    int64
+	MaxKeyA    int64
+	MinKeyB    int64
+	MaxKeyB    int64
+	SizeA      int64
+	SizeB      int64
+}
+
+func (q *Queries) FindOverlappingDataranges(ctx context.Context, datasetName string) ([]FindOverlappingDatarangesRow, error) {
+	rows, err := q.db.QueryContext(ctx, findOverlappingDataranges, datasetName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FindOverlappingDatarangesRow
+	for rows.Next() {
+		var i FindOverlappingDatarangesRow
+		if err := rows.Scan(
+			&i.IDA,
+			&i.IDB,
+			&i.ObjectKeyA,
+			&i.ObjectKeyB,
+			&i.MinKeyA,
+			&i.MaxKeyA,
+			&i.MinKeyB,
+			&i.MaxKeyB,
+			&i.SizeA,
+			&i.SizeB,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getAllDatasets = `-- name: GetAllDatasets :many
 SELECT 
     d.name as id,
