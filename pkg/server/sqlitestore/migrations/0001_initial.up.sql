@@ -23,6 +23,16 @@ CREATE TABLE IF NOT EXISTS datapoints (
     FOREIGN KEY (datarange_id) REFERENCES dataranges(id) ON DELETE CASCADE
 );
 
+
+CREATE TABLE IF NOT EXISTS keys_to_delete (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    key TEXT NOT NULL UNIQUE,
+    delete_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_keys_to_delete_delete_at ON keys_to_delete(delete_at);
+
+
 CREATE INDEX IF NOT EXISTS idx_dataranges_dataset_name ON dataranges(dataset_name);
 CREATE INDEX IF NOT EXISTS idx_dataranges_key_range ON dataranges(min_datapoint_key, max_datapoint_key);
 CREATE INDEX IF NOT EXISTS idx_datapoints_datarange_id ON datapoints(datarange_id);

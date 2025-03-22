@@ -112,3 +112,7 @@ SELECT
     CAST(COALESCE((SELECT MAX(max_datapoint_key) FROM dataranges WHERE dataset_name = d.name), 0) AS UNSIGNED BIGINT) as max_datapoint_key
 FROM datasets d
 ORDER BY d.name;
+
+-- name: InsertKeyToDelete :exec
+INSERT INTO keys_to_delete (key, delete_at)
+VALUES (?, datetime('now', '+1 day'));

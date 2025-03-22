@@ -124,13 +124,12 @@ func (s *Server) HandleAggregateDatarange(w http.ResponseWriter, r *http.Request
 
 	objectKey := fmt.Sprintf("dataset/%s/datapoints/%020d-%020d.tar", datasetID, minDatapointKey, maxDatapointKey)
 
+	// Upload the new datarange to S3 first, before making any database changes
 	err = s.uploadDatapointsAndMetadata(r.Context(), tf.Name(), objectKey, metadata)
 	if err != nil {
 		s.handleError(w, err)
 		return
 	}
-
-	// Update the database by deleting the old dataranges and creating a new one
 
 	// Begin a transaction
 	tx, err := s.DB.BeginTx(r.Context(), nil)
@@ -142,9 +141,27 @@ func (s *Server) HandleAggregateDatarange(w http.ResponseWriter, r *http.Request
 
 	txStore := store.WithTx(tx)
 
-	// Delete the old dataranges
+	// Add object keys to delete list before removing dataranges
 	for _, dr := range dataranges {
-		err = txStore.DeleteDatarange(r.Context(), dr.FirstOffset)
+		// Add the main object key
+		err = txStore.InsertKeyToDelete(r.Context(), dr.ObjectKey)
+		if err != nil {
+			s.handleError(w, fmt.Errorf("failed to add key to deletion list: %w", err))
+			return
+		}
+
+		// Add the metadata key as well
+		metadataKey := dr.ObjectKey + ".metadata"
+		err = txStore.InsertKeyToDelete(r.Context(), metadataKey)
+		if err != nil {
+			s.handleError(w, fmt.Errorf("failed to add metadata key to deletion list: %w", err))
+			return
+		}
+	}
+
+	// Delete the old dataranges from database
+	for _, dr := range dataranges {
+		err = txStore.DeleteDatarange(r.Context(), dr.ID)
 		if err != nil {
 			s.handleError(w, fmt.Errorf("failed to delete old datarange: %w", err))
 			return
