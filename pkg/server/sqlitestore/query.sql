@@ -116,3 +116,11 @@ ORDER BY d.name;
 -- name: InsertKeyToDelete :exec
 INSERT INTO keys_to_delete (key, delete_at)
 VALUES (?, datetime('now', '+1 day'));
+
+-- name: GetKeysToDelete :many
+SELECT id, key FROM keys_to_delete 
+WHERE delete_at <= datetime('now')
+LIMIT 100;
+
+-- name: DeleteKeyToDeleteById :exec
+DELETE FROM keys_to_delete WHERE id = ?;
