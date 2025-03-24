@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strconv"
 
 	"github.com/draganm/datas3t/pkg/client"
 	"github.com/urfave/cli/v2"
@@ -14,8 +13,8 @@ func Command(log *slog.Logger) *cli.Command {
 	cfg := struct {
 		serverURL string
 		datasetID string
-		startKey  string
-		endKey    string
+		startKey  uint64
+		endKey    uint64
 	}{}
 
 	return &cli.Command{
@@ -40,13 +39,13 @@ The operation is atomic and will replace all affected dataranges with a single c
 				Destination: &cfg.datasetID,
 				EnvVars:     []string{"DATAS3T_DATASET_ID"},
 			},
-			&cli.StringFlag{
+			&cli.Uint64Flag{
 				Name:        "start-key",
 				Required:    true,
 				Usage:       "Start key of the datapoint range to aggregate",
 				Destination: &cfg.startKey,
 			},
-			&cli.StringFlag{
+			&cli.Uint64Flag{
 				Name:        "end-key",
 				Required:    true,
 				Usage:       "End key of the datapoint range to aggregate",
@@ -54,19 +53,9 @@ The operation is atomic and will replace all affected dataranges with a single c
 			},
 		},
 		Action: func(c *cli.Context) error {
-			// Parse start and end keys
-			startKey, err := strconv.ParseInt(cfg.startKey, 10, 64)
-			if err != nil {
-				return fmt.Errorf("invalid start key '%s': %w", cfg.startKey, err)
-			}
 
-			endKey, err := strconv.ParseInt(cfg.endKey, 10, 64)
-			if err != nil {
-				return fmt.Errorf("invalid end key '%s': %w", cfg.endKey, err)
-			}
-
-			if startKey > endKey {
-				return fmt.Errorf("start key (%d) must be less than or equal to end key (%d)", startKey, endKey)
+			if cfg.startKey > cfg.endKey {
+				return fmt.Errorf("start key (%d) must be less than or equal to end key (%d)", cfg.startKey, cfg.endKey)
 			}
 
 			// Create client
@@ -76,7 +65,7 @@ The operation is atomic and will replace all affected dataranges with a single c
 			}
 
 			// Call aggregate endpoint
-			result, err := cl.AggregateDatarange(context.Background(), cfg.datasetID, startKey, endKey)
+			result, err := cl.AggregateDatarange(context.Background(), cfg.datasetID, cfg.startKey, cfg.endKey)
 			if err != nil {
 				return fmt.Errorf("failed to aggregate dataranges: %w", err)
 			}

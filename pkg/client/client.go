@@ -13,19 +13,19 @@ import (
 // DataRange represents a range of data in a dataset
 type DataRange struct {
 	ObjectKey       string `json:"object_key"`
-	MinDatapointKey int64  `json:"min_datapoint_key"`
-	MaxDatapointKey int64  `json:"max_datapoint_key"`
-	SizeBytes       int64  `json:"size_bytes"`
+	MinDatapointKey uint64 `json:"min_datapoint_key"`
+	MaxDatapointKey uint64 `json:"max_datapoint_key"`
+	SizeBytes       uint64 `json:"size_bytes"`
 }
 
 // AggregateResponse represents the response from the aggregate datarange endpoint
 type AggregateResponse struct {
 	DatasetID      string `json:"dataset_id"`
-	StartKey       int64  `json:"start_key"`
-	EndKey         int64  `json:"end_key"`
-	RangesReplaced int    `json:"ranges_replaced"`
+	StartKey       uint64 `json:"start_key"`
+	EndKey         uint64 `json:"end_key"`
+	RangesReplaced uint64 `json:"ranges_replaced"`
 	NewObjectKey   string `json:"new_object_key"`
-	SizeBytes      int64  `json:"size_bytes"`
+	SizeBytes      uint64 `json:"size_bytes"`
 }
 
 // StatusError represents an error with an HTTP status code
@@ -75,7 +75,7 @@ func GetStatusCode(err error) int {
 }
 
 // AggregateDatarange aggregates multiple dataranges within the specified range into a single datarange
-func (c *Client) AggregateDatarange(ctx context.Context, datasetID string, startKey, endKey int64) (*AggregateResponse, error) {
+func (c *Client) AggregateDatarange(ctx context.Context, datasetID string, startKey, endKey uint64) (*AggregateResponse, error) {
 	// Build the URL
 	endpointPath := fmt.Sprintf("/api/v1/datas3t/%s/aggregate/%d/%d", datasetID, startKey, endKey)
 	endpointURL, err := url.Parse(endpointPath)

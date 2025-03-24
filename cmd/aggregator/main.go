@@ -25,9 +25,8 @@ func main() {
 	}))
 
 	cfg := struct {
-		serverURL           string
-		interval            time.Duration
-		targetDatarangeSize int64
+		serverURL string
+		interval  time.Duration
 	}{}
 
 	app := &cli.App{
@@ -48,19 +47,11 @@ func main() {
 				Destination: &cfg.interval,
 				EnvVars:     []string{"DATAS3T_AGGREGATION_INTERVAL"},
 			},
-			&cli.Int64Flag{
-				Name:        "target-size",
-				Usage:       "Target datarange size in bytes",
-				Value:       defaultTargetDatarangeSize,
-				Destination: &cfg.targetDatarangeSize,
-				EnvVars:     []string{"DATAS3T_TARGET_DATARANGE_SIZE"},
-			},
 		},
 		Action: func(c *cli.Context) error {
 			log.Info("starting aggregator",
 				"server_url", cfg.serverURL,
 				"interval", cfg.interval,
-				"min_datarange_size", cfg.targetDatarangeSize,
 			)
 
 			// Create client
@@ -79,7 +70,6 @@ func main() {
 				client,
 				log,
 				cfg.interval,
-				cfg.targetDatarangeSize,
 			)
 		},
 	}
@@ -96,13 +86,12 @@ func runAggregator(
 	c *client.Client,
 	log *slog.Logger,
 	interval time.Duration,
-	targetDatarangeSize int64,
 ) error {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	// Run once immediately
-	err := performAggregation(ctx, c, log, targetDatarangeSize)
+	err := performAggregation(ctx, c, log)
 	if err != nil {
 		log.Error("aggregation failed", "error", err)
 	}
@@ -111,7 +100,7 @@ func runAggregator(
 	for {
 		select {
 		case <-ticker.C:
-			err := performAggregation(ctx, c, log, targetDatarangeSize)
+			err := performAggregation(ctx, c, log)
 			if err != nil {
 				log.Error("aggregation failed", "error", err)
 			}
@@ -126,7 +115,6 @@ func performAggregation(
 	ctx context.Context,
 	c *client.Client,
 	log *slog.Logger,
-	targetDatarangeSize int64,
 ) error {
 	log.Info("starting aggregation cycle")
 
@@ -142,7 +130,7 @@ func performAggregation(
 	for _, dataset := range datasets {
 		log.Info("processing dataset", "id", dataset.ID)
 
-		err := processDataset(ctx, c, dataset.ID, log, targetDatarangeSize)
+		err := processDataset(ctx, c, dataset.ID, log)
 		if err != nil {
 			log.Error("failed to process dataset", "id", dataset.ID, "error", err)
 			// Continue with the next dataset
@@ -159,7 +147,6 @@ func processDataset(
 	c *client.Client,
 	datasetID string,
 	log *slog.Logger,
-	targetDatarangeSize int64,
 ) error {
 	// Get dataranges for the dataset
 	dataranges, err := c.GetDataranges(ctx, datasetID)
@@ -176,7 +163,7 @@ func processDataset(
 	}
 
 	// Create aggregation plan using the planner package
-	plans := planner.CreatePlans(dataranges, log, targetDatarangeSize)
+	plans := planner.CreatePlans(dataranges)
 	log.Info("created aggregation plans", "dataset", datasetID, "plan_count", len(plans))
 
 	// Execute each plan
@@ -196,15 +183,15 @@ func processDataset(
 	return nil
 }
 
-func executeAggregationPlan(ctx context.Context, c *client.Client, datasetID string, plan planner.AggregationPlan, log *slog.Logger) error {
+func executeAggregationPlan(ctx context.Context, c *client.Client, datasetID string, plan planner.AggregationOperation, log *slog.Logger) error {
 	log.Info("executing aggregation plan",
 		"dataset", datasetID,
-		"start_key", plan.StartKey,
-		"end_key", plan.EndKey,
-		"range_count", len(plan.Ranges))
+		"start_key", plan.StartKey(),
+		"end_key", plan.EndKey(),
+		"range_count", len(plan))
 
 	// Call the aggregate endpoint
-	resp, err := c.AggregateDatarange(ctx, datasetID, plan.StartKey, plan.EndKey)
+	resp, err := c.AggregateDatarange(ctx, datasetID, plan.StartKey(), plan.EndKey())
 	if err != nil {
 		return fmt.Errorf("failed to aggregate dataranges: %w", err)
 	}
