@@ -66,15 +66,26 @@ GLOBAL OPTIONS:
 
 ## Aggregation Logic
 
-The aggregator uses a hierarchical size-tiered approach to optimize datarange aggregation:
+The aggregator uses a tiered approach to optimize datarange aggregation:
 
-1. Dataranges are categorized into size tiers (starting at 0 bytes, then powers of 10: 10KB, 100KB, etc.)
-2. Adjacent ranges within the same tier are merged only when their combined size would promote to a higher tier
-3. If no within-tier merges are possible, the algorithm examines adjacent ranges across tiers:
-   - It identifies any consecutive ranges, regardless of their tier assignment
-   - It merges these ranges only if their combined size would result in a tier higher than any individual range in the group
-   - This provides additional optimization opportunities across tier boundaries
-4. Ranges in the highest tier are never merged since they can't be promoted further
+1. Dataranges are categorized into four tiers:
+   - Tier 0: < 10MB
+   - Tier 1: < 1GB
+   - Tier 2: < 100GB
+   - Tier 3: ≥ 100GB (top tier)
+
+2. The aggregation process:
+   - Sorts dataranges by their minimum datapoint key
+   - Creates aggregation operations by:
+     - Starting with all remaining ranges
+     - Reducing the operation size until it fits within the appropriate tier
+     - Ensuring the aggregation tier is not higher than the previous operation
+     - Creating a new plan entry when an appropriate aggregation is found
+
+3. Special handling for small datasets:
+   - When dealing with 1000 or more datasets, the planner checks the average number of datapoints per dataset
+   - If the average is less than 10 datapoints per dataset, all datasets are aggregated together regardless of size
+   - This helps prevent fragmentation when dealing with many small datasets
 
 This approach offers several benefits:
 - **Targeted Optimization**: Only performs aggregation when it results in tier promotion

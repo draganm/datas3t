@@ -278,8 +278,39 @@ func TestCreatePlans(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			plans := planner.CreatePlans(tt.dataranges)
+			plans := planner.CreatePlan(tt.dataranges)
 			assert.Equal(t, tt.expectedPlans, plans)
 		})
 	}
+}
+
+func TestCreatePlansWithManySmallDatasets(t *testing.T) {
+	// Create 1000 datasets, each with exactly one datapoint
+	dataranges := make([]client.DataRange, 1000)
+	for i := range 1000 {
+		dataranges[i] = client.DataRange{
+			MinDatapointKey: uint64(i),
+			MaxDatapointKey: uint64(i + 1),
+			SizeBytes:       1024, // 1KB each
+		}
+	}
+
+	// Create expected plan with all 1000 datasets in one operation
+	expectedOperation := make(planner.AggregationOperation, 1000)
+	for i := 0; i < 1000; i++ {
+		expectedOperation[i] = client.DataRange{
+			MinDatapointKey: uint64(i),
+			MaxDatapointKey: uint64(i + 1),
+			SizeBytes:       1024,
+		}
+	}
+
+	plans := planner.CreatePlan(dataranges)
+	assert.Equal(t, []planner.AggregationOperation{expectedOperation}, plans)
+
+	// Verify the aggregation operation properties
+	assert.Equal(t, uint64(1000), expectedOperation.NumberOfDatapoints())
+	assert.Equal(t, uint64(1024*1000), expectedOperation.SizeBytes())
+	assert.Equal(t, uint64(0), expectedOperation.StartKey())
+	assert.Equal(t, uint64(1000), expectedOperation.EndKey())
 }

@@ -163,7 +163,7 @@ func processDataset(
 	}
 
 	// Create aggregation plan using the planner package
-	plans := planner.CreatePlans(dataranges)
+	plans := planner.CreatePlan(dataranges)
 	log.Info("created aggregation plans", "dataset", datasetID, "plan_count", len(plans))
 
 	// Execute each plan

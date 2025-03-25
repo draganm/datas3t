@@ -33,6 +33,14 @@ func (p AggregationOperation) Level() int {
 	return topLevel
 }
 
+func (p AggregationOperation) NumberOfDatapoints() uint64 {
+	num := uint64(0)
+	for _, dr := range p {
+		num += dr.MaxDatapointKey - dr.MinDatapointKey
+	}
+	return num
+}
+
 func DatarangeLevel(dr client.DataRange) int {
 	for i, levelTreshold := range levelTresholds {
 		if dr.SizeBytes < levelTreshold {
@@ -50,7 +58,7 @@ var levelTresholds = []uint64{
 
 var topLevel = len(levelTresholds)
 
-func CreatePlans(dataranges []client.DataRange) []AggregationOperation {
+func CreatePlan(dataranges []client.DataRange) []AggregationOperation {
 	if len(dataranges) < 2 {
 		return []AggregationOperation{}
 	}
@@ -79,6 +87,21 @@ func CreatePlans(dataranges []client.DataRange) []AggregationOperation {
 			dataranges = dataranges[len(aggregation):]
 			prevLevel = aggregation.Level()
 			continue
+		}
+
+		// edge case: if datapoints are small, we can't rely on datasets size
+		if len(aggregation) >= 1000 {
+
+			numberOfDatasets := float64(len(aggregation))
+			numberOfDatapoints := float64(aggregation.NumberOfDatapoints())
+			datapointsPerDataset := numberOfDatapoints / numberOfDatasets
+
+			if datapointsPerDataset < 10 {
+				plan = append(plan, aggregation)
+				dataranges = dataranges[len(aggregation):]
+				prevLevel = aggregation.Level()
+				continue
+			}
 		}
 
 		dataranges = dataranges[1:]

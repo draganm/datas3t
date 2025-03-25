@@ -18,6 +18,10 @@ type DataRange struct {
 	SizeBytes       uint64 `json:"size_bytes"`
 }
 
+func (d DataRange) NumberOfDatapoints() uint64 {
+	return d.MaxDatapointKey - d.MinDatapointKey + 1
+}
+
 // AggregateResponse represents the response from the aggregate datarange endpoint
 type AggregateResponse struct {
 	DatasetID      string `json:"dataset_id"`
