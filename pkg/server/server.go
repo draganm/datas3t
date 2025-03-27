@@ -168,6 +168,7 @@ func CreateServer(
 	mux.HandleFunc("GET /api/v1/datas3t/{id}/dataranges", server.HandleGetDataranges)
 	mux.HandleFunc("GET /api/v1/datas3t/{id}/datarange/{start}/{end}", server.HandleGetDatarange)
 	mux.HandleFunc("POST /api/v1/datas3t/{id}/aggregate/{start}/{end}", server.HandleAggregateDatarange)
+	mux.HandleFunc("GET /healthy", server.HandleHealthCheck)
 
 	server.Handler = mux
 
@@ -294,4 +295,10 @@ func (s *Server) cleanupS3Keys(ctx context.Context) error {
 
 	logger.Info("completed S3 cleanup job", "total_deleted", totalDeleted)
 	return nil
+}
+
+// HandleHealthCheck returns a 200 OK status to indicate the server is running
+func (s *Server) HandleHealthCheck(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK"))
 }
