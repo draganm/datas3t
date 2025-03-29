@@ -57,6 +57,7 @@ services:
         condition: service_completed_successfully
     volumes:
       - db-data:/app/data
+      - uploads-data:/app/data/uploads
     ports:
       - "48080:8080"
     environment:
@@ -108,3 +109,5 @@ volumes:
     driver: local
   minio-data:
     driver: local 
+  uploads-data:
+    driver: local
