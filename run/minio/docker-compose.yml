@@ -63,7 +63,7 @@ services:
     environment:
       - DATAS3T_DB_URL=file:/app/data/datas3t.db
       - DATAS3T_ADDR=:8080
-      - DATAS3T_S3_ENDPOINT=http://minio:9000
+      - DATAS3T_S3_ENDPOINT=minio:9000
       - DATAS3T_S3_REGION=us-east-1
       - DATAS3T_S3_ACCESS_KEY_ID=minioadmin
       - DATAS3T_S3_SECRET_KEY=minioadmin
