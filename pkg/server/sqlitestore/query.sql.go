@@ -486,7 +486,7 @@ func (q *Queries) InsertDatapoint(ctx context.Context, arg InsertDatapointParams
 
 const insertKeyToDelete = `-- name: InsertKeyToDelete :exec
 INSERT INTO keys_to_delete (key, delete_at)
-VALUES (?, datetime('now', '+1 day'))
+VALUES (?, datetime('now', '+1 hour'))
 `
 
 func (q *Queries) InsertKeyToDelete(ctx context.Context, key string) error {
