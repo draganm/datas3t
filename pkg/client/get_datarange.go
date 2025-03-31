@@ -76,6 +76,8 @@ func DownloadDataranges(ctx context.Context, ranges []ObjectAndRange, file io.Wr
 
 	g, grCtx := errgroup.WithContext(ctx)
 
+	g.SetLimit(10)
+
 	for _, d := range downloads {
 		g.Go(func() error {
 			req, err := http.NewRequestWithContext(grCtx, "GET", d.url, nil)
