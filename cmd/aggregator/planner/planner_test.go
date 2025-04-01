@@ -264,7 +264,20 @@ func TestCreatePlans(t *testing.T) {
 				},
 			},
 		},
-
+		{
+			name: "group around holes",
+			dataranges: []client.DataRange{
+				{MinDatapointKey: 1, MaxDatapointKey: 10, SizeBytes: 1 * 1024 * 1024},  // 1MB
+				{MinDatapointKey: 12, MaxDatapointKey: 20, SizeBytes: 1 * 1024 * 1024}, // 1MB
+				{MinDatapointKey: 21, MaxDatapointKey: 30, SizeBytes: 9 * 1024 * 1024}, // 9MB
+			},
+			expectedPlans: []planner.AggregationOperation{
+				{
+					{MinDatapointKey: 12, MaxDatapointKey: 20, SizeBytes: 1 * 1024 * 1024}, // 1MB
+					{MinDatapointKey: 21, MaxDatapointKey: 30, SizeBytes: 9 * 1024 * 1024}, // 9MB
+				},
+			},
+		},
 		{
 			name: "don't change anything if no level change",
 			dataranges: []client.DataRange{
@@ -290,17 +303,17 @@ func TestCreatePlansWithManySmallDatasets(t *testing.T) {
 	for i := range 1000 {
 		dataranges[i] = client.DataRange{
 			MinDatapointKey: uint64(i),
-			MaxDatapointKey: uint64(i + 1),
+			MaxDatapointKey: uint64(i),
 			SizeBytes:       1024, // 1KB each
 		}
 	}
 
 	// Create expected plan with all 1000 datasets in one operation
 	expectedOperation := make(planner.AggregationOperation, 1000)
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		expectedOperation[i] = client.DataRange{
 			MinDatapointKey: uint64(i),
-			MaxDatapointKey: uint64(i + 1),
+			MaxDatapointKey: uint64(i),
 			SizeBytes:       1024,
 		}
 	}
@@ -312,5 +325,5 @@ func TestCreatePlansWithManySmallDatasets(t *testing.T) {
 	assert.Equal(t, uint64(1000), expectedOperation.NumberOfDatapoints())
 	assert.Equal(t, uint64(1024*1000), expectedOperation.SizeBytes())
 	assert.Equal(t, uint64(0), expectedOperation.StartKey())
-	assert.Equal(t, uint64(1000), expectedOperation.EndKey())
+	assert.Equal(t, uint64(1000-1), expectedOperation.EndKey())
 }

@@ -36,7 +36,7 @@ func (p AggregationOperation) Level() int {
 func (p AggregationOperation) NumberOfDatapoints() uint64 {
 	num := uint64(0)
 	for _, dr := range p {
-		num += dr.MaxDatapointKey - dr.MinDatapointKey
+		num += dr.MaxDatapointKey - dr.MinDatapointKey + 1
 	}
 	return num
 }
@@ -71,7 +71,23 @@ func CreatePlan(dataranges []client.DataRange) []AggregationOperation {
 	plan := []AggregationOperation{}
 
 	for len(dataranges) > 0 {
-		aggregation := AggregationOperation(dataranges)
+		// Find consecutive ranges
+
+		prev := dataranges[0]
+		aggregation := AggregationOperation{prev}
+
+		for _, dr := range dataranges[1:] {
+			if prev.MaxDatapointKey+1 != dr.MinDatapointKey {
+				break
+			}
+			aggregation = append(aggregation, dr)
+			prev = dr
+		}
+
+		if len(aggregation) == 1 {
+			dataranges = dataranges[1:]
+			continue
+		}
 
 		for aggregation.Level() >= prevLevel && len(aggregation) > 1 {
 			aggregation = aggregation[:len(aggregation)-1]
@@ -91,7 +107,6 @@ func CreatePlan(dataranges []client.DataRange) []AggregationOperation {
 
 		// edge case: if datapoints are small, we can't rely on datasets size
 		if len(aggregation) >= 1000 {
-
 			numberOfDatasets := float64(len(aggregation))
 			numberOfDatapoints := float64(aggregation.NumberOfDatapoints())
 			datapointsPerDataset := numberOfDatapoints / numberOfDatasets
@@ -105,7 +120,6 @@ func CreatePlan(dataranges []client.DataRange) []AggregationOperation {
 		}
 
 		dataranges = dataranges[1:]
-
 	}
 
 	return plan
