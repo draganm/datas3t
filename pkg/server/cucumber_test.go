@@ -29,7 +29,8 @@ func TestMain(m *testing.M) {
 		Paths:    []string{"features"},
 		NoColors: true,
 		// StopOnFailure: true,
-		Strict: true,
+		Strict:      true,
+		Concurrency: 1,
 		// Tags:   "wip",
 	}
 

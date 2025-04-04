@@ -100,7 +100,12 @@ func CreateServer(
 	}
 
 	err = m.Up()
-	if err != nil && err != migrate.ErrNoChange {
+	switch err {
+	case nil:
+		log.Info("Applied database migrations")
+	case migrate.ErrNoChange:
+		log.Info("No migrations applied")
+	default:
 		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 	log.Info("Applied database migrations")

@@ -3,7 +3,6 @@ Feature: Aggregate datarange
   I want to aggregate multiple dataranges into a single one
   So that I can optimize storage and access performance
 
-@wip
   Scenario: Aggregating multiple dataranges
     Given a dataset with ID "aggregate-test" exists
     And I upload a datapoint range containing 2 datapoints with keys 1 and 2
