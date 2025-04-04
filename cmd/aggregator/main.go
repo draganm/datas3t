@@ -163,7 +163,10 @@ func processDataset(
 	}
 
 	// Create aggregation plan using the planner package
-	plans := planner.CreatePlan(dataranges)
+	plans, err := planner.CreatePlan(dataranges)
+	if err != nil {
+		return fmt.Errorf("failed to create aggregation plan: %w", err)
+	}
 	log.Info("created aggregation plans", "dataset", datasetID, "plan_count", len(plans))
 
 	// Execute each plan
@@ -172,8 +175,8 @@ func processDataset(
 		if err != nil {
 			log.Error("failed to execute aggregation plan",
 				"dataset", datasetID,
-				"start_key", plan.StartKey,
-				"end_key", plan.EndKey,
+				"start_key", plan.FromDatapointKey,
+				"end_key", plan.ToDatapointKey,
 				"error", err)
 			// Continue with the next plan
 			continue
@@ -183,15 +186,15 @@ func processDataset(
 	return nil
 }
 
-func executeAggregationPlan(ctx context.Context, c *client.Client, datasetID string, plan planner.AggregationOperation, log *slog.Logger) error {
+func executeAggregationPlan(ctx context.Context, c *client.Client, datasetID string, plan planner.ContinuousRange, log *slog.Logger) error {
 	log.Info("executing aggregation plan",
 		"dataset", datasetID,
-		"start_key", plan.StartKey(),
-		"end_key", plan.EndKey(),
-		"range_count", len(plan))
+		"start_key", plan.FromDatapointKey,
+		"end_key", plan.ToDatapointKey,
+	)
 
 	// Call the aggregate endpoint
-	resp, err := c.AggregateDatarange(ctx, datasetID, plan.StartKey(), plan.EndKey())
+	resp, err := c.AggregateDatarange(ctx, datasetID, plan.FromDatapointKey, plan.ToDatapointKey)
 	if err != nil {
 		return fmt.Errorf("failed to aggregate dataranges: %w", err)
 	}

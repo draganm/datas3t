@@ -1,7 +1,7 @@
 package planner
 
 import (
-	"slices"
+	"fmt"
 
 	"github.com/draganm/datas3t/pkg/client"
 )
@@ -11,16 +11,16 @@ type AggregationOperation []client.DataRange
 func (p AggregationOperation) SizeBytes() uint64 {
 	size := uint64(0)
 	for _, dr := range p {
-		size += dr.SizeBytes
+		size += dr.SizeBytes - 1024
 	}
-	return size
+	return size + 1024
 }
 
-func (p AggregationOperation) StartKey() uint64 {
+func (p AggregationOperation) FromKey() uint64 {
 	return p[0].MinDatapointKey
 }
 
-func (p AggregationOperation) EndKey() uint64 {
+func (p AggregationOperation) ToKey() uint64 {
 	return p[len(p)-1].MaxDatapointKey
 }
 
@@ -53,74 +53,73 @@ func DatarangeLevel(dr client.DataRange) int {
 var levelTresholds = []uint64{
 	10 * 1024 * 1024,         // 10MB
 	1 * 1024 * 1024 * 1024,   // 1GB
-	100 * 1024 * 1024 * 1024, // 100GB
+	100 * 1024 * 1024 * 1024, // 100MB
 }
 
 var topLevel = len(levelTresholds)
 
-func CreatePlan(dataranges []client.DataRange) []AggregationOperation {
-	if len(dataranges) < 2 {
-		return []AggregationOperation{}
-	}
-	slices.SortFunc(dataranges, func(a, b client.DataRange) int {
-		return int(a.MinDatapointKey - b.MaxDatapointKey)
-	})
+type ContinuousRange struct {
+	FromDatapointKey uint64
+	ToDatapointKey   uint64
+}
 
-	prevLevel := topLevel
+type AggregationOperationPlan []ContinuousRange
 
-	plan := []AggregationOperation{}
+func CreatePlan(dataranges []client.DataRange) (AggregationOperationPlan, error) {
+	plan := AggregationOperationPlan{}
 
 	for len(dataranges) > 0 {
-		// Find consecutive ranges
-
-		prev := dataranges[0]
-		aggregation := AggregationOperation{prev}
+		toCompact := AggregationOperation{dataranges[0]}
+		// step 1: find the first continuous range
 
 		for _, dr := range dataranges[1:] {
-			if prev.MaxDatapointKey+1 != dr.MinDatapointKey {
-				break
-			}
-			aggregation = append(aggregation, dr)
-			prev = dr
-		}
 
-		if len(aggregation) == 1 {
-			dataranges = dataranges[1:]
-			continue
-		}
-
-		for aggregation.Level() >= prevLevel && len(aggregation) > 1 {
-			aggregation = aggregation[:len(aggregation)-1]
-		}
-
-		if len(aggregation) == 1 {
-			dataranges = dataranges[1:]
-			continue
-		}
-
-		if aggregation.Level() > DatarangeLevel(aggregation[0]) {
-			plan = append(plan, aggregation)
-			dataranges = dataranges[len(aggregation):]
-			prevLevel = aggregation.Level()
-			continue
-		}
-
-		// edge case: if datapoints are small, we can't rely on datasets size
-		if len(aggregation) >= 1000 {
-			numberOfDatasets := float64(len(aggregation))
-			numberOfDatapoints := float64(aggregation.NumberOfDatapoints())
-			datapointsPerDataset := numberOfDatapoints / numberOfDatasets
-
-			if datapointsPerDataset < 10 {
-				plan = append(plan, aggregation)
-				dataranges = dataranges[len(aggregation):]
-				prevLevel = aggregation.Level()
+			if dr.MinDatapointKey == toCompact[len(toCompact)-1].MaxDatapointKey+1 {
+				toCompact = append(toCompact, dr)
 				continue
 			}
+
+			if dr.MinDatapointKey > toCompact[len(toCompact)-1].MaxDatapointKey+1 {
+				break
+			}
+
+			// TODO proper error
+			return nil, fmt.Errorf("overlapping dataranges")
 		}
 
-		dataranges = dataranges[1:]
+		if !shouldCompact(toCompact) {
+			dataranges = dataranges[1:]
+			continue
+		}
+
+		plan = append(plan, ContinuousRange{
+			FromDatapointKey: toCompact.FromKey(),
+			ToDatapointKey:   toCompact.ToKey(),
+		})
+
+		dataranges = dataranges[len(toCompact):]
+
 	}
 
-	return plan
+	return plan, nil
+
+}
+
+func shouldCompact(dataranges AggregationOperation) bool {
+	if len(dataranges) == 1 {
+		return false
+	}
+
+	firstLevel := DatarangeLevel(dataranges[0])
+	newLevel := dataranges.Level()
+
+	if newLevel > firstLevel {
+		return true
+	}
+
+	numberOfDatapoints := dataranges.NumberOfDatapoints()
+	numberOfDatasets := float64(len(dataranges))
+	datapointsPerDataset := float64(numberOfDatapoints) / numberOfDatasets
+
+	return datapointsPerDataset < 10.0
 }
