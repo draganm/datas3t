@@ -50,14 +50,14 @@ func TestGetKeysToDeleteAndCleanup(t *testing.T) {
 	require.NoError(t, err)
 
 	// Add keys that should be deleted (already expired)
-	pastTime := time.Now().Add(-24 * time.Hour).Format(time.RFC3339)
+	pastTime := time.Now().Add(-24 * time.Hour).UTC().Format(time.RFC3339)
 	_, err = tx.Exec("INSERT INTO keys_to_delete (key, delete_at) VALUES (?, ?)", "key1.tar", pastTime)
 	require.NoError(t, err)
 	_, err = tx.Exec("INSERT INTO keys_to_delete (key, delete_at) VALUES (?, ?)", "key2.tar", pastTime)
 	require.NoError(t, err)
 
 	// Add a key that should not be deleted yet
-	futureTime := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
+	futureTime := time.Now().Add(24 * time.Hour).UTC().Format(time.RFC3339)
 	_, err = tx.Exec("INSERT INTO keys_to_delete (key, delete_at) VALUES (?, ?)", "future-key.tar", futureTime)
 	require.NoError(t, err)
 
