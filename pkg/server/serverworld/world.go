@@ -127,7 +127,7 @@ func New(ctx context.Context) (*World, error) {
 	srv, err := server.CreateServer(
 		ctx,
 		log,
-		":memory:",
+		"file::memory:?cache=shared",
 		s3Config,
 		uploadsPath,
 	)
