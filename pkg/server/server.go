@@ -69,6 +69,12 @@ func CreateServer(
 		}
 	})
 
+	// Enable foreign key constraints in SQLite
+	_, err = db.Exec("PRAGMA foreign_keys = ON;")
+	if err != nil {
+		return nil, fmt.Errorf("failed to enable foreign key constraints: %w", err)
+	}
+
 	// Ping the database to ensure it's accessible
 	err = db.Ping()
 	if err != nil {
