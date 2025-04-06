@@ -137,3 +137,18 @@ DELETE FROM keys_to_delete WHERE id = ?;
 
 -- name: CheckKeysScheduledForDeletion :one
 SELECT count(*) > 0 FROM keys_to_delete WHERE key LIKE ?;
+
+-- name: GetFirstAndLastDatapoint :one
+SELECT 
+    CAST(COALESCE(MIN(min_datapoint_key), 0) AS UNSIGNED BIGINT) as first_datapoint_key,
+    CAST(COALESCE(MAX(max_datapoint_key), 0) AS UNSIGNED BIGINT) as last_datapoint_key
+FROM dataranges
+WHERE dataset_name = ?;
+
+-- name: GetDatarangesForMissingRanges :many
+SELECT 
+    min_datapoint_key, 
+    max_datapoint_key
+FROM dataranges 
+WHERE dataset_name = ?
+ORDER BY min_datapoint_key ASC;

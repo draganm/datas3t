@@ -91,6 +91,11 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the aggregated datarange should have start key (\d+)$`, theAggregatedDatarangeShouldHaveStartKey)
 	ctx.Step(`^the aggregated datarange should have end key (\d+)$`, theAggregatedDatarangeShouldHaveEndKey)
 	ctx.Step(`^the aggregated datarange should have replaced (\d+) ranges$`, theAggregatedDatarangeShouldHaveReplacedRanges)
+	ctx.Step(`^the response should contain empty missing ranges$`, theResponseShouldContainEmptyMissingRanges)
+	ctx.Step(`^the response should have first datapoint (\d+)$`, theResponseShouldHaveFirstDatapoint)
+	ctx.Step(`^the response should have last datapoint (\d+)$`, theResponseShouldHaveLastDatapoint)
+	ctx.Step(`^the response should contain (\d+) missing ranges$`, theResponseShouldContainMissingRanges)
+	ctx.Step(`^missing range (\d+) should have start (\d+) and end (\d+)$`, missingRangeShouldHaveStartAndEnd)
 }
 
 func iSendAPUTRequestTo(ctx context.Context, path string) error {
@@ -1139,6 +1144,103 @@ func theDatasetsObjectsShouldBeScheduledForDeletion(ctx context.Context) error {
 
 	if !hasPendingDeletions {
 		return fmt.Errorf("expected dataset objects to be scheduled for deletion, but none were found")
+	}
+
+	return nil
+}
+
+// Implementation of missing ranges steps
+func theResponseShouldContainEmptyMissingRanges(ctx context.Context) error {
+	w, ok := serverworld.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("world not found in context")
+	}
+
+	var response server.MissingRangesResponse
+	if err := json.Unmarshal(w.LastResponseBody, &response); err != nil {
+		return fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	if response.FirstDatapoint != 0 || response.LastDatapoint != 0 || len(response.MissingRanges) != 0 {
+		return fmt.Errorf("expected empty response with zero datapoints and no missing ranges, got %+v", response)
+	}
+
+	return nil
+}
+
+func theResponseShouldHaveFirstDatapoint(ctx context.Context, expectedFirstDatapoint int64) error {
+	w, ok := serverworld.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("world not found in context")
+	}
+
+	var response server.MissingRangesResponse
+	if err := json.Unmarshal(w.LastResponseBody, &response); err != nil {
+		return fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	if response.FirstDatapoint != expectedFirstDatapoint {
+		return fmt.Errorf("expected first datapoint to be %d, got %d", expectedFirstDatapoint, response.FirstDatapoint)
+	}
+
+	return nil
+}
+
+func theResponseShouldHaveLastDatapoint(ctx context.Context, expectedLastDatapoint int64) error {
+	w, ok := serverworld.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("world not found in context")
+	}
+
+	var response server.MissingRangesResponse
+	if err := json.Unmarshal(w.LastResponseBody, &response); err != nil {
+		return fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	if response.LastDatapoint != expectedLastDatapoint {
+		return fmt.Errorf("expected last datapoint to be %d, got %d", expectedLastDatapoint, response.LastDatapoint)
+	}
+
+	return nil
+}
+
+func theResponseShouldContainMissingRanges(ctx context.Context, expectedCount int) error {
+	w, ok := serverworld.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("world not found in context")
+	}
+
+	var response server.MissingRangesResponse
+	if err := json.Unmarshal(w.LastResponseBody, &response); err != nil {
+		return fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	if len(response.MissingRanges) != expectedCount {
+		return fmt.Errorf("expected %d missing ranges, got %d", expectedCount, len(response.MissingRanges))
+	}
+
+	return nil
+}
+
+func missingRangeShouldHaveStartAndEnd(ctx context.Context, index, expectedStart, expectedEnd int) error {
+	w, ok := serverworld.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("world not found in context")
+	}
+
+	var response server.MissingRangesResponse
+	if err := json.Unmarshal(w.LastResponseBody, &response); err != nil {
+		return fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	if index >= len(response.MissingRanges) {
+		return fmt.Errorf("missing range index %d out of bounds, only have %d ranges", index, len(response.MissingRanges))
+	}
+
+	missingRange := response.MissingRanges[index]
+	if missingRange.Start != int64(expectedStart) || missingRange.End != int64(expectedEnd) {
+		return fmt.Errorf("expected missing range %d to have start %d and end %d, got start %d and end %d",
+			index, expectedStart, expectedEnd, missingRange.Start, missingRange.End)
 	}
 
 	return nil
