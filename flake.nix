@@ -32,6 +32,7 @@
               sqlite
               overmind
               minio
+              docker
             ];
           };
         });
