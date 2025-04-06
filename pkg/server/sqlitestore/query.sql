@@ -127,6 +127,10 @@ ORDER BY d.name;
 INSERT INTO keys_to_delete (key, delete_at)
 VALUES (?, datetime('now', '+1 hour'));
 
+-- name: InsertKeyToDeleteImmediately :exec
+INSERT INTO keys_to_delete (key, delete_at)
+VALUES (?, datetime('now'));
+
 -- name: GetKeysToDelete :many
 SELECT id, key FROM keys_to_delete 
 WHERE delete_at <= datetime('now')
