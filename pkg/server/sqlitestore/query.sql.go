@@ -9,6 +9,17 @@ import (
 	"context"
 )
 
+const checkKeysScheduledForDeletion = `-- name: CheckKeysScheduledForDeletion :one
+SELECT count(*) > 0 FROM keys_to_delete WHERE key LIKE ?
+`
+
+func (q *Queries) CheckKeysScheduledForDeletion(ctx context.Context, key string) (bool, error) {
+	row := q.db.QueryRowContext(ctx, checkKeysScheduledForDeletion, key)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const checkOverlappingDatapointRange = `-- name: CheckOverlappingDatapointRange :one
 SELECT count(*) > 0 FROM dataranges
 WHERE dataset_name = ?1
@@ -60,6 +71,15 @@ DELETE FROM dataranges WHERE id = ?
 
 func (q *Queries) DeleteDatarange(ctx context.Context, id int64) error {
 	_, err := q.db.ExecContext(ctx, deleteDatarange, id)
+	return err
+}
+
+const deleteDataset = `-- name: DeleteDataset :exec
+DELETE FROM datasets WHERE name = ?
+`
+
+func (q *Queries) DeleteDataset(ctx context.Context, name string) error {
+	_, err := q.db.ExecContext(ctx, deleteDataset, name)
 	return err
 }
 
@@ -220,6 +240,65 @@ func (q *Queries) GetDatarangeIDsForDataset(ctx context.Context, datasetName str
 			return nil, err
 		}
 		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getDatarangeObjectKeysForDataset = `-- name: GetDatarangeObjectKeysForDataset :many
+SELECT object_key FROM dataranges WHERE dataset_name = ?
+`
+
+func (q *Queries) GetDatarangeObjectKeysForDataset(ctx context.Context, datasetName string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, getDatarangeObjectKeysForDataset, datasetName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var object_key string
+		if err := rows.Scan(&object_key); err != nil {
+			return nil, err
+		}
+		items = append(items, object_key)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getDatarangesByDatasetName = `-- name: GetDatarangesByDatasetName :many
+SELECT id, object_key FROM dataranges WHERE dataset_name = ?
+`
+
+type GetDatarangesByDatasetNameRow struct {
+	ID        int64
+	ObjectKey string
+}
+
+func (q *Queries) GetDatarangesByDatasetName(ctx context.Context, datasetName string) ([]GetDatarangesByDatasetNameRow, error) {
+	rows, err := q.db.QueryContext(ctx, getDatarangesByDatasetName, datasetName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetDatarangesByDatasetNameRow
+	for rows.Next() {
+		var i GetDatarangesByDatasetNameRow
+		if err := rows.Scan(&i.ID, &i.ObjectKey); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

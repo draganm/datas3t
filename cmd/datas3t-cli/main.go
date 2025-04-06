@@ -7,6 +7,7 @@ import (
 	"github.com/draganm/datas3t/cmd/datas3t-cli/commands/aggregate"
 	"github.com/draganm/datas3t/cmd/datas3t-cli/commands/create"
 	"github.com/draganm/datas3t/cmd/datas3t-cli/commands/datarange"
+	"github.com/draganm/datas3t/cmd/datas3t-cli/commands/delete"
 	"github.com/draganm/datas3t/cmd/datas3t-cli/commands/get"
 	"github.com/draganm/datas3t/cmd/datas3t-cli/commands/list"
 	"github.com/urfave/cli/v2"
@@ -20,6 +21,7 @@ func main() {
 		Usage: "Command line interface for Datas3t",
 		Commands: []*cli.Command{
 			create.Command(log),
+			delete.Command(log),
 			list.Command(log),
 			datarange.Command(log),
 			get.Command(log),

@@ -4,6 +4,15 @@ SELECT count(*) > 0 FROM datasets WHERE name = ?;
 -- name: CreateDataset :exec
 INSERT INTO datasets (name) VALUES (?);
 
+-- name: DeleteDataset :exec
+DELETE FROM datasets WHERE name = ?;
+
+-- name: GetDatarangeObjectKeysForDataset :many
+SELECT object_key FROM dataranges WHERE dataset_name = ?;
+
+-- name: GetDatarangesByDatasetName :many
+SELECT id, object_key FROM dataranges WHERE dataset_name = ?;
+
 -- name: InsertDataRange :one
 INSERT INTO dataranges (dataset_name, object_key, min_datapoint_key, max_datapoint_key, size_bytes) 
 VALUES (?, ?, ?, ?, ?)
@@ -125,3 +134,6 @@ LIMIT 100;
 
 -- name: DeleteKeyToDeleteById :exec
 DELETE FROM keys_to_delete WHERE id = ?;
+
+-- name: CheckKeysScheduledForDeletion :one
+SELECT count(*) > 0 FROM keys_to_delete WHERE key LIKE ?;

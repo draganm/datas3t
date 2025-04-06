@@ -69,6 +69,12 @@ func CreateServer(
 		}
 	})
 
+	// Enable foreign key constraints in SQLite
+	_, err = db.Exec("PRAGMA foreign_keys = ON;")
+	if err != nil {
+		return nil, fmt.Errorf("failed to enable foreign key constraints: %w", err)
+	}
+
 	// Ping the database to ensure it's accessible
 	err = db.Ping()
 	if err != nil {
@@ -168,6 +174,7 @@ func CreateServer(
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/datas3t", server.HandleListDatasets)
 	mux.HandleFunc("PUT /api/v1/datas3t/{id}", server.HandleCreateDataset)
+	mux.HandleFunc("DELETE /api/v1/datas3t/{id}", server.HandleDeleteDataset)
 	mux.HandleFunc("GET /api/v1/datas3t/{id}", server.HandleGetDataset)
 	mux.HandleFunc("POST /api/v1/datas3t/{id}", server.HandleUploadDatarange)
 	mux.HandleFunc("GET /api/v1/datas3t/{id}/dataranges", server.HandleGetDataranges)
