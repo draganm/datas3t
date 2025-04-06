@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -30,7 +31,7 @@ func TestMain(m *testing.M) {
 		NoColors: true,
 		// StopOnFailure: true,
 		Strict:      true,
-		Concurrency: 1,
+		Concurrency: runtime.NumCPU(),
 		// Tags:   "wip",
 	}
 
