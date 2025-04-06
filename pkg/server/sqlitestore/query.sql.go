@@ -573,6 +573,16 @@ func (q *Queries) InsertKeyToDelete(ctx context.Context, key string) error {
 	return err
 }
 
+const insertKeyToDeleteImmediately = `-- name: InsertKeyToDeleteImmediately :exec
+INSERT INTO keys_to_delete (key, delete_at)
+VALUES (?, datetime('now'))
+`
+
+func (q *Queries) InsertKeyToDeleteImmediately(ctx context.Context, key string) error {
+	_, err := q.db.ExecContext(ctx, insertKeyToDeleteImmediately, key)
+	return err
+}
+
 const updateDatapointsDatarangeID = `-- name: UpdateDatapointsDatarangeID :exec
 UPDATE datapoints 
 SET datarange_id = ?1
