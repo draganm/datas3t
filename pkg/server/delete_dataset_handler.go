@@ -43,12 +43,20 @@ func (s *Server) HandleDeleteDataset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Schedule all S3 objects for immediate deletion
+	// Schedule all S3 objects and their metadata for immediate deletion
 	for _, objectKey := range objectKeys {
 		// Insert the object key into keys_to_delete with immediate deletion time
 		err = txStore.InsertKeyToDeleteImmediately(r.Context(), objectKey)
 		if err != nil {
 			s.logger.Error("failed to schedule S3 object for immediate deletion", "key", objectKey, "error", err)
+			// Continue with other objects
+		}
+
+		// Also schedule the metadata file for deletion
+		metadataKey := objectKey + ".metadata"
+		err = txStore.InsertKeyToDelete(r.Context(), metadataKey)
+		if err != nil {
+			s.logger.Error("failed to schedule S3 metadata for deletion", "key", metadataKey, "error", err)
 			// Continue with other objects
 		}
 	}

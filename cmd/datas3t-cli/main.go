@@ -10,6 +10,7 @@ import (
 	"github.com/draganm/datas3t/cmd/datas3t-cli/commands/delete"
 	"github.com/draganm/datas3t/cmd/datas3t-cli/commands/get"
 	"github.com/draganm/datas3t/cmd/datas3t-cli/commands/list"
+	"github.com/draganm/datas3t/cmd/datas3t-cli/commands/missing"
 	"github.com/urfave/cli/v2"
 )
 
@@ -26,6 +27,7 @@ func main() {
 			datarange.Command(log),
 			get.Command(log),
 			aggregate.Command(log),
+			missing.Command(log),
 		},
 	}
 
