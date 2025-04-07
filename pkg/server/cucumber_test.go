@@ -1181,7 +1181,7 @@ func theResponseShouldHaveFirstDatapoint(ctx context.Context, expectedFirstDatap
 		return fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
-	if response.FirstDatapoint == nil || *response.FirstDatapoint != expectedFirstDatapoint {
+	if response.FirstDatapoint == nil || *response.FirstDatapoint != uint64(expectedFirstDatapoint) {
 		return fmt.Errorf("expected first datapoint to be %d, got %v", expectedFirstDatapoint, response.FirstDatapoint)
 	}
 
@@ -1199,7 +1199,7 @@ func theResponseShouldHaveLastDatapoint(ctx context.Context, expectedLastDatapoi
 		return fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
-	if response.LastDatapoint == nil || *response.LastDatapoint != expectedLastDatapoint {
+	if response.LastDatapoint == nil || *response.LastDatapoint != uint64(expectedLastDatapoint) {
 		return fmt.Errorf("expected last datapoint to be %d, got %v", expectedLastDatapoint, response.LastDatapoint)
 	}
 
@@ -1240,7 +1240,7 @@ func missingRangeShouldHaveStartAndEnd(ctx context.Context, index, expectedStart
 	}
 
 	missingRange := response.MissingRanges[index]
-	if missingRange.Start != int64(expectedStart) || missingRange.End != int64(expectedEnd) {
+	if missingRange.Start != uint64(expectedStart) || missingRange.End != uint64(expectedEnd) {
 		return fmt.Errorf("expected missing range %d to have start %d and end %d, got start %d and end %d",
 			index, expectedStart, expectedEnd, missingRange.Start, missingRange.End)
 	}
