@@ -68,6 +68,10 @@
           {
             "pattern": "(make|cmake|cargo|yarn|pnpm)",
             "message": "Run build tools within the Nix devshell environment for consistent dependencies."
+          },
+          {
+            "pattern": "sqlc",
+            "message": "Run sqlc within the Nix devshell environment for consistent dependencies."
           }
         ],
         "prefer": [
@@ -87,13 +91,15 @@
           "pip install -r requirements.txt",
           "go test ./...",
           "go generate",
-          "make build"
+          "make build",
+          "sqlc generate"
         ],
         "correct": [
           "nix develop",
           "nix develop -c go test ./...",
           "nix develop -c go generate",
-          "nix develop -c make build"
+          "nix develop -c make build",
+          "nix develop -c sqlc generate"
         ]
       },
       "documentation": {
@@ -103,6 +109,44 @@
           {
             "title": "Nix Flakes Documentation",
             "url": "https://nixos.wiki/wiki/Flakes"
+          }
+        ]
+      }
+    },
+    {
+      "name": "database-migrations",
+      "description": "Guidelines for managing database schema changes through migrations",
+      "patterns": {
+        "avoid": [
+          {
+            "pattern": "ALTER TABLE|CREATE TABLE|DROP TABLE|CREATE INDEX|DROP INDEX",
+            "message": "Avoid direct SQL schema changes. Create a new migration file instead."
+          }
+        ],
+        "prefer": [
+          {
+            "pattern": "000[0-9]+_.*\\.up\\.sql",
+            "message": "Create new migration files with sequential numbering and descriptive names."
+          }
+        ]
+      },
+      "examples": {
+        "incorrect": [
+          "ALTER TABLE users ADD COLUMN email TEXT;",
+          "CREATE TABLE posts (id INTEGER PRIMARY KEY);"
+        ],
+        "correct": [
+          "Create new file: migrations/0002_add_user_email.up.sql",
+          "Create new file: migrations/0003_create_posts_table.up.sql"
+        ]
+      },
+      "documentation": {
+        "title": "Database Migration Best Practices",
+        "description": "All database schema changes must be tracked through migration files. Create new migration files in the migrations directory with sequential numbering and descriptive names. Never modify existing migration files.",
+        "references": [
+          {
+            "title": "SQLite Migration Guide",
+            "url": "https://www.sqlite.org/lang_altertable.html"
           }
         ]
       }
