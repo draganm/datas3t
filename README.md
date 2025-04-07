@@ -12,6 +12,8 @@ A Go service for managing datasets with S3 storage integration.
 - Command-line interface (CLI) for easy interaction
 - Automatic database restoration from S3 metadata if database is empty
 - Atomic aggregation of multiple dataranges into a single consolidated range
+- Detection of missing data ranges to identify gaps in datasets
+- Clean deletion of datasets with cascading removal of related data and objects
 
 ## Components
 
@@ -21,10 +23,12 @@ The server provides a REST API with the following endpoints:
 - `GET /api/v1/datas3t` - List all datasets
 - `PUT /api/v1/datas3t/{id}` - Create a dataset
 - `GET /api/v1/datas3t/{id}` - Get dataset information
+- `DELETE /api/v1/datas3t/{id}` - Delete a dataset and all associated data
 - `POST /api/v1/datas3t/{id}` - Upload data to a dataset
 - `GET /api/v1/datas3t/{id}/dataranges` - Get all data ranges for a dataset
 - `GET /api/v1/datas3t/{id}/datarange/{start}/{end}` - Get specific data range with start/end keys
 - `POST /api/v1/datas3t/{id}/aggregate/{start}/{end}` - Aggregate multiple dataranges into a single consolidated range
+- `GET /api/v1/datas3t/{id}/missing-ranges` - Identify gaps in dataset by calculating missing datapoint ranges
 
 ### Client Library
 
@@ -32,20 +36,24 @@ The client library (`pkg/client`) provides a Go interface for interacting with t
 - List all available datasets
 - Create datasets
 - Retrieve dataset information
+- Delete datasets with all associated data
 - Upload data ranges
 - Get data ranges (all or specific range)
 - Retrieve individual data points
 - Aggregate multiple dataranges into a single consolidated range
+- Identify missing data ranges and gaps in datasets
 
 ### Command-Line Interface (CLI)
 
 The CLI (`cmd/datas3t-cli`) provides commands for:
 - Creating datasets
 - Getting dataset information
+- Deleting datasets and their associated data
 - Uploading data ranges
 - Listing datasets
 - Querying specific data ranges
 - Aggregating multiple dataranges into a single consolidated range
+- Detecting missing data ranges to identify completeness of datasets
 
 ### Restore Package
 
