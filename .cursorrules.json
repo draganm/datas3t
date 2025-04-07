@@ -150,6 +150,54 @@
           }
         ]
       }
+    },
+    {
+      "name": "api-consistency",
+      "description": "Guidelines for maintaining consistency between server, client, and CLI components",
+      "patterns": {
+        "avoid": [
+          {
+            "pattern": "func \\(s \\*Server\\) Handle[A-Z][a-zA-Z]+\\(.*\\)",
+            "message": "Avoid modifying server handlers without updating corresponding client and CLI components."
+          },
+          {
+            "pattern": "mux\\.HandleFunc\\(.*\\)",
+            "message": "Avoid adding or modifying HTTP endpoints without updating corresponding client and CLI components."
+          }
+        ],
+        "prefer": [
+          {
+            "pattern": "pkg/client/.*\\.go",
+            "message": "Update client package when modifying server endpoints or handlers."
+          },
+          {
+            "pattern": "cmd/datas3t-cli/commands/.*\\.go",
+            "message": "Update CLI commands when modifying server endpoints or handlers."
+          }
+        ]
+      },
+      "examples": {
+        "incorrect": [
+          "Modifying server.go without checking client.go",
+          "Adding new HTTP endpoint without CLI command",
+          "Changing response format without updating client"
+        ],
+        "correct": [
+          "Update server.go, client.go, and CLI commands together",
+          "Add new endpoint in server.go, implement in client.go, and add CLI command",
+          "Update all components when changing API contract"
+        ]
+      },
+      "documentation": {
+        "title": "API Consistency Best Practices",
+        "description": "When making changes to the server component, always check and update the corresponding client and CLI components. This includes:\n1. Adding new endpoints\n2. Modifying existing endpoints\n3. Changing request/response formats\n4. Updating error handling\n5. Modifying data structures",
+        "references": [
+          {
+            "title": "REST API Design Best Practices",
+            "url": "https://www.moesif.com/blog/technical/api-design/REST-API-Design-Best-Practices/"
+          }
+        ]
+      }
     }
   ]
 } 
