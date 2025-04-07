@@ -27,6 +27,7 @@ When making changes to the server component, always check and update the corresp
   - `cmd/datas3t-cli/commands/*.go`
   - `pkg/server/cucumber_tests.go`
   - `pkg/server/features/*.feature`
+  - `README.md`
 
 ## References
 
