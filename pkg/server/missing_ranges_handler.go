@@ -15,8 +15,8 @@ type Range struct {
 
 // MissingRangesResponse represents the response for the missing ranges endpoint
 type MissingRangesResponse struct {
-	FirstDatapoint int64   `json:"first_datapoint"`
-	LastDatapoint  int64   `json:"last_datapoint"`
+	FirstDatapoint *int64  `json:"first_datapoint"`
+	LastDatapoint  *int64  `json:"last_datapoint"`
 	MissingRanges  []Range `json:"missing_ranges"`
 }
 
@@ -46,11 +46,11 @@ func (s *Server) HandleGetMissingRanges(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// If there are no datapoints, return empty response
-	if firstAndLast.FirstDatapointKey == 0 && firstAndLast.LastDatapointKey == 0 {
+	// If there are no datapoints, return empty response with nulls
+	if !firstAndLast.FirstDatapointKey.Valid || !firstAndLast.LastDatapointKey.Valid {
 		response := MissingRangesResponse{
-			FirstDatapoint: 0,
-			LastDatapoint:  0,
+			FirstDatapoint: nil,
+			LastDatapoint:  nil,
 			MissingRanges:  []Range{},
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -70,9 +70,9 @@ func (s *Server) HandleGetMissingRanges(w http.ResponseWriter, r *http.Request) 
 	var missingRanges []Range
 
 	// Check if there's a gap at the beginning
-	if len(ranges) > 0 && ranges[0].MinDatapointKey > firstAndLast.FirstDatapointKey {
+	if len(ranges) > 0 && ranges[0].MinDatapointKey > firstAndLast.FirstDatapointKey.Int64 {
 		missingRanges = append(missingRanges, Range{
-			Start: firstAndLast.FirstDatapointKey,
+			Start: firstAndLast.FirstDatapointKey.Int64,
 			End:   ranges[0].MinDatapointKey - 1,
 		})
 	}
@@ -92,17 +92,21 @@ func (s *Server) HandleGetMissingRanges(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Check if there's a gap at the end
-	if len(ranges) > 0 && ranges[len(ranges)-1].MaxDatapointKey < firstAndLast.LastDatapointKey {
+	if len(ranges) > 0 && ranges[len(ranges)-1].MaxDatapointKey < firstAndLast.LastDatapointKey.Int64 {
 		missingRanges = append(missingRanges, Range{
 			Start: ranges[len(ranges)-1].MaxDatapointKey + 1,
-			End:   firstAndLast.LastDatapointKey,
+			End:   firstAndLast.LastDatapointKey.Int64,
 		})
 	}
 
+	// Convert to pointers for JSON response
+	first := firstAndLast.FirstDatapointKey.Int64
+	last := firstAndLast.LastDatapointKey.Int64
+
 	// Prepare response
 	response := MissingRangesResponse{
-		FirstDatapoint: firstAndLast.FirstDatapointKey,
-		LastDatapoint:  firstAndLast.LastDatapointKey,
+		FirstDatapoint: &first,
+		LastDatapoint:  &last,
 		MissingRanges:  missingRanges,
 	}
 
