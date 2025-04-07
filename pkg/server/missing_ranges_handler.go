@@ -9,14 +9,14 @@ import (
 
 // Range represents a range of datapoint keys
 type Range struct {
-	Start int64 `json:"start"`
-	End   int64 `json:"end"`
+	Start uint64 `json:"start"`
+	End   uint64 `json:"end"`
 }
 
 // MissingRangesResponse represents the response for the missing ranges endpoint
 type MissingRangesResponse struct {
-	FirstDatapoint int64   `json:"first_datapoint"`
-	LastDatapoint  int64   `json:"last_datapoint"`
+	FirstDatapoint *uint64 `json:"first_datapoint"`
+	LastDatapoint  *uint64 `json:"last_datapoint"`
 	MissingRanges  []Range `json:"missing_ranges"`
 }
 
@@ -46,11 +46,11 @@ func (s *Server) HandleGetMissingRanges(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// If there are no datapoints, return empty response
-	if firstAndLast.FirstDatapointKey == 0 && firstAndLast.LastDatapointKey == 0 {
+	// If there are no datapoints, return empty response with nulls
+	if !firstAndLast.FirstDatapointKey.Valid || !firstAndLast.LastDatapointKey.Valid {
 		response := MissingRangesResponse{
-			FirstDatapoint: 0,
-			LastDatapoint:  0,
+			FirstDatapoint: nil,
+			LastDatapoint:  nil,
 			MissingRanges:  []Range{},
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -70,10 +70,10 @@ func (s *Server) HandleGetMissingRanges(w http.ResponseWriter, r *http.Request) 
 	var missingRanges []Range
 
 	// Check if there's a gap at the beginning
-	if len(ranges) > 0 && ranges[0].MinDatapointKey > firstAndLast.FirstDatapointKey {
+	if len(ranges) > 0 && uint64(ranges[0].MinDatapointKey) > uint64(firstAndLast.FirstDatapointKey.Int64) {
 		missingRanges = append(missingRanges, Range{
-			Start: firstAndLast.FirstDatapointKey,
-			End:   ranges[0].MinDatapointKey - 1,
+			Start: uint64(firstAndLast.FirstDatapointKey.Int64),
+			End:   uint64(ranges[0].MinDatapointKey) - 1,
 		})
 	}
 
@@ -83,26 +83,30 @@ func (s *Server) HandleGetMissingRanges(w http.ResponseWriter, r *http.Request) 
 		next := ranges[i+1]
 
 		// If there's a gap between the current range's end and the next range's start
-		if current.MaxDatapointKey+1 < next.MinDatapointKey {
+		if uint64(current.MaxDatapointKey)+1 < uint64(next.MinDatapointKey) {
 			missingRanges = append(missingRanges, Range{
-				Start: current.MaxDatapointKey + 1,
-				End:   next.MinDatapointKey - 1,
+				Start: uint64(current.MaxDatapointKey) + 1,
+				End:   uint64(next.MinDatapointKey) - 1,
 			})
 		}
 	}
 
 	// Check if there's a gap at the end
-	if len(ranges) > 0 && ranges[len(ranges)-1].MaxDatapointKey < firstAndLast.LastDatapointKey {
+	if len(ranges) > 0 && uint64(ranges[len(ranges)-1].MaxDatapointKey) < uint64(firstAndLast.LastDatapointKey.Int64) {
 		missingRanges = append(missingRanges, Range{
-			Start: ranges[len(ranges)-1].MaxDatapointKey + 1,
-			End:   firstAndLast.LastDatapointKey,
+			Start: uint64(ranges[len(ranges)-1].MaxDatapointKey) + 1,
+			End:   uint64(firstAndLast.LastDatapointKey.Int64),
 		})
 	}
 
+	// Convert to pointers for JSON response
+	first := uint64(firstAndLast.FirstDatapointKey.Int64)
+	last := uint64(firstAndLast.LastDatapointKey.Int64)
+
 	// Prepare response
 	response := MissingRangesResponse{
-		FirstDatapoint: firstAndLast.FirstDatapointKey,
-		LastDatapoint:  firstAndLast.LastDatapointKey,
+		FirstDatapoint: &first,
+		LastDatapoint:  &last,
 		MissingRanges:  missingRanges,
 	}
 

@@ -7,6 +7,7 @@ package sqlitestore
 
 import (
 	"context"
+	"database/sql"
 )
 
 const checkKeysScheduledForDeletion = `-- name: CheckKeysScheduledForDeletion :one
@@ -443,15 +444,15 @@ func (q *Queries) GetDatarangesForMissingRanges(ctx context.Context, datasetName
 
 const getFirstAndLastDatapoint = `-- name: GetFirstAndLastDatapoint :one
 SELECT 
-    CAST(COALESCE(MIN(min_datapoint_key), 0) AS UNSIGNED BIGINT) as first_datapoint_key,
-    CAST(COALESCE(MAX(max_datapoint_key), 0) AS UNSIGNED BIGINT) as last_datapoint_key
+    CAST(CASE WHEN COUNT(*) = 0 THEN NULL ELSE MIN(min_datapoint_key) END AS BIGINT) as first_datapoint_key,
+    CAST(CASE WHEN COUNT(*) = 0 THEN NULL ELSE MAX(max_datapoint_key) END AS BIGINT) as last_datapoint_key
 FROM dataranges
 WHERE dataset_name = ?
 `
 
 type GetFirstAndLastDatapointRow struct {
-	FirstDatapointKey int64
-	LastDatapointKey  int64
+	FirstDatapointKey sql.NullInt64
+	LastDatapointKey  sql.NullInt64
 }
 
 func (q *Queries) GetFirstAndLastDatapoint(ctx context.Context, datasetName string) (GetFirstAndLastDatapointRow, error) {

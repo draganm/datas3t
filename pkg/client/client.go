@@ -24,14 +24,14 @@ func (d DataRange) NumberOfDatapoints() uint64 {
 
 // Range represents a range of datapoint keys
 type Range struct {
-	Start int64 `json:"start"`
-	End   int64 `json:"end"`
+	Start uint64 `json:"start"`
+	End   uint64 `json:"end"`
 }
 
 // MissingRangesResponse represents the response for the missing ranges endpoint
 type MissingRangesResponse struct {
-	FirstDatapoint int64   `json:"first_datapoint"`
-	LastDatapoint  int64   `json:"last_datapoint"`
+	FirstDatapoint *uint64 `json:"first_datapoint"`
+	LastDatapoint  *uint64 `json:"last_datapoint"`
 	MissingRanges  []Range `json:"missing_ranges"`
 }
 

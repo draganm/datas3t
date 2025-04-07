@@ -44,8 +44,17 @@ func Command(log *slog.Logger) *cli.Command {
 			}
 
 			fmt.Printf("Dataset: %s\n", datasetID)
-			fmt.Printf("First datapoint: %d\n", missingRanges.FirstDatapoint)
-			fmt.Printf("Last datapoint: %d\n", missingRanges.LastDatapoint)
+			if missingRanges.FirstDatapoint != nil {
+				fmt.Printf("First datapoint: %d\n", *missingRanges.FirstDatapoint)
+			} else {
+				fmt.Println("First datapoint: none")
+			}
+
+			if missingRanges.LastDatapoint != nil {
+				fmt.Printf("Last datapoint: %d\n", *missingRanges.LastDatapoint)
+			} else {
+				fmt.Println("Last datapoint: none")
+			}
 
 			if len(missingRanges.MissingRanges) == 0 {
 				fmt.Println("No missing ranges found.")
