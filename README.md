@@ -89,8 +89,23 @@ For information about how datasets, dataranges, and metadata are stored in S3, s
 ### Running the server
 
 ```bash
-go run cmd/server/server_main.go --db-url <sqlite-db-url> --addr <listen-address> --s3-endpoint <s3-endpoint> --s3-region <region> --s3-access-key-id <access-key> --s3-secret-key <secret-key> --s3-bucket-name <bucket> --s3-use-ssl <true/false> --uploads-path <path>
+# Run the server
+go run cmd/server/server_main.go run --db-url <sqlite-db-url> --addr <listen-address> --s3-endpoint <s3-endpoint> --s3-region <region> --s3-access-key-id <access-key> --s3-secret-key <secret-key> --s3-bucket-name <bucket> --s3-use-ssl <true/false> --uploads-path <path>
+
+# Restore database from S3 storage (separate command)
+go run cmd/server/server_main.go restore --db-url <sqlite-db-url> --s3-endpoint <s3-endpoint> --s3-region <region> --s3-access-key-id <access-key> --s3-secret-key <secret-key> --s3-bucket-name <bucket> --s3-use-ssl <true/false>
 ```
+
+All server parameters can also be configured using environment variables:
+- `DATAS3T_DB_URL`: SQLite database URL
+- `DATAS3T_ADDR`: Server listen address (for run command)
+- `DATAS3T_S3_ENDPOINT`: S3 endpoint URL
+- `DATAS3T_S3_REGION`: S3 region
+- `DATAS3T_S3_ACCESS_KEY_ID`: S3 access key ID
+- `DATAS3T_S3_SECRET_KEY`: S3 secret access key
+- `DATAS3T_S3_BUCKET_NAME`: S3 bucket name
+- `DATAS3T_S3_USE_SSL`: Use SSL for S3 connection (true/false)
+- `DATAS3T_UPLOADS_PATH`: Path for temporary file uploads (for run command)
 
 ## Testing
 

@@ -12,21 +12,14 @@ import (
 func Command(log *slog.Logger) *cli.Command {
 	cfg := struct {
 		serverURL string
-		id        string
 		file      string
 	}{}
 
 	return &cli.Command{
-		Name:  "upload",
-		Usage: "Upload datarange to a dataset",
+		Name:      "upload",
+		Usage:     "Upload datarange to a dataset",
+		ArgsUsage: "DATASET_ID",
 		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:        "id",
-				Required:    true,
-				Usage:       "Dataset ID",
-				Destination: &cfg.id,
-				EnvVars:     []string{"DATAS3T_DATASET_ID"},
-			},
 			&cli.PathFlag{
 				Name:        "file",
 				Required:    true,
@@ -43,6 +36,12 @@ func Command(log *slog.Logger) *cli.Command {
 			},
 		},
 		Action: func(c *cli.Context) error {
+			if c.NArg() != 1 {
+				return fmt.Errorf("expected exactly one argument: DATASET_ID")
+			}
+
+			datasetID := c.Args().Get(0)
+
 			cl, err := client.NewClient(cfg.serverURL)
 			if err != nil {
 				return fmt.Errorf("failed to create client: %w", err)
@@ -54,12 +53,12 @@ func Command(log *slog.Logger) *cli.Command {
 			}
 			defer file.Close()
 
-			err = cl.UploadDatarange(c.Context, cfg.id, file)
+			err = cl.UploadDatarange(c.Context, datasetID, file)
 			if err != nil {
 				return fmt.Errorf("failed to upload datarange: %w", err)
 			}
 
-			log.Info("Data uploaded successfully", "id", cfg.id, "file", cfg.file)
+			log.Info("Data uploaded successfully", "id", datasetID, "file", cfg.file)
 			return nil
 		},
 	}

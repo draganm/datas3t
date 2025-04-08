@@ -12,23 +12,16 @@ import (
 func Command(log *slog.Logger) *cli.Command {
 	cfg := struct {
 		serverURL string
-		id        string
 		start     uint64
 		end       uint64
 		output    string
 	}{}
 
 	return &cli.Command{
-		Name:  "datarange",
-		Usage: "Get dataset datarange and save it to a file",
+		Name:      "download",
+		Usage:     "Get dataset datarange and save it to a file",
+		ArgsUsage: "DATASET_ID",
 		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:        "id",
-				Required:    true,
-				Usage:       "Dataset ID",
-				Destination: &cfg.id,
-				EnvVars:     []string{"DATAS3T_DATASET_ID"},
-			},
 			&cli.StringFlag{
 				Name:        "server-url",
 				Required:    true,
@@ -56,13 +49,19 @@ func Command(log *slog.Logger) *cli.Command {
 			},
 		},
 		Action: func(c *cli.Context) error {
+			if c.NArg() != 1 {
+				return fmt.Errorf("expected exactly one argument: DATASET_ID")
+			}
+
+			datasetID := c.Args().Get(0)
+
 			cl, err := client.NewClient(cfg.serverURL)
 			if err != nil {
 				return fmt.Errorf("failed to create client: %w", err)
 			}
 
 			// Get list of dataranges from server
-			ranges, err := cl.GetDatarange(c.Context, cfg.id, cfg.start, cfg.end)
+			ranges, err := cl.GetDatarange(c.Context, datasetID, cfg.start, cfg.end)
 			if err != nil {
 				return fmt.Errorf("failed to get datarange info: %w", err)
 			}
@@ -79,7 +78,7 @@ func Command(log *slog.Logger) *cli.Command {
 			}
 
 			log.Info("successfully saved datarange",
-				"id", cfg.id,
+				"id", datasetID,
 				"start", cfg.start,
 				"end", cfg.end,
 				"output", cfg.output,

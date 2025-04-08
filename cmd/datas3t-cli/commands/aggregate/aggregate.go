@@ -12,14 +12,14 @@ import (
 func Command(log *slog.Logger) *cli.Command {
 	cfg := struct {
 		serverURL string
-		datasetID string
 		startKey  uint64
 		endKey    uint64
 	}{}
 
 	return &cli.Command{
-		Name:  "aggregate",
-		Usage: "Aggregate multiple dataranges into a single consolidated datarange",
+		Name:      "aggregate",
+		Usage:     "Aggregate multiple dataranges into a single consolidated datarange",
+		ArgsUsage: "DATASET_ID",
 		Description: `This command consolidates multiple dataranges within a specified key range 
 into a single datarange, optimizing storage and improving access performance.
 The operation is atomic and will replace all affected dataranges with a single consolidated datarange.`,
@@ -30,14 +30,6 @@ The operation is atomic and will replace all affected dataranges with a single c
 				Usage:       "URL of the Datas3t server",
 				Destination: &cfg.serverURL,
 				EnvVars:     []string{"DATAS3T_SERVER_URL"},
-			},
-			&cli.StringFlag{
-				Name:        "dataset-id",
-				Aliases:     []string{"id"},
-				Required:    true,
-				Usage:       "Dataset ID",
-				Destination: &cfg.datasetID,
-				EnvVars:     []string{"DATAS3T_DATASET_ID"},
 			},
 			&cli.Uint64Flag{
 				Name:        "start-key",
@@ -53,6 +45,11 @@ The operation is atomic and will replace all affected dataranges with a single c
 			},
 		},
 		Action: func(c *cli.Context) error {
+			if c.NArg() != 1 {
+				return fmt.Errorf("expected exactly one argument: DATASET_ID")
+			}
+
+			datasetID := c.Args().Get(0)
 
 			if cfg.startKey > cfg.endKey {
 				return fmt.Errorf("start key (%d) must be less than or equal to end key (%d)", cfg.startKey, cfg.endKey)
@@ -65,7 +62,7 @@ The operation is atomic and will replace all affected dataranges with a single c
 			}
 
 			// Call aggregate endpoint
-			result, err := cl.AggregateDatarange(context.Background(), cfg.datasetID, cfg.startKey, cfg.endKey)
+			result, err := cl.AggregateDatarange(context.Background(), datasetID, cfg.startKey, cfg.endKey)
 			if err != nil {
 				return fmt.Errorf("failed to aggregate dataranges: %w", err)
 			}

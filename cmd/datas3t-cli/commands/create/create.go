@@ -11,20 +11,13 @@ import (
 func Command(log *slog.Logger) *cli.Command {
 	cfg := struct {
 		serverURL string
-		id        string
 	}{}
 
 	return &cli.Command{
-		Name:  "create",
-		Usage: "Create a new dataset",
+		Name:      "create",
+		Usage:     "Create a new dataset",
+		ArgsUsage: "DATASET_ID",
 		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:        "id",
-				Required:    true,
-				Usage:       "Dataset ID",
-				Destination: &cfg.id,
-				EnvVars:     []string{"DATAS3T_DATASET_ID"},
-			},
 			&cli.StringFlag{
 				Name:        "server-url",
 				Required:    true,
@@ -34,17 +27,23 @@ func Command(log *slog.Logger) *cli.Command {
 			},
 		},
 		Action: func(c *cli.Context) error {
+			if c.NArg() != 1 {
+				return fmt.Errorf("expected exactly one argument: DATASET_ID")
+			}
+
+			datasetID := c.Args().Get(0)
+
 			cl, err := client.NewClient(cfg.serverURL)
 			if err != nil {
 				return fmt.Errorf("failed to create client: %w", err)
 			}
 
-			err = cl.CreateDataset(c.Context, cfg.id)
+			err = cl.CreateDataset(c.Context, datasetID)
 			if err != nil {
 				return fmt.Errorf("failed to create dataset: %w", err)
 			}
 
-			log.Info("Dataset created successfully", "id", cfg.id)
+			log.Info("Dataset created successfully", "id", datasetID)
 			return nil
 		},
 	}
