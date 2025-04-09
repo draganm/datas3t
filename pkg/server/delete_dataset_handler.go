@@ -54,7 +54,7 @@ func (s *Server) HandleDeleteDataset(w http.ResponseWriter, r *http.Request) {
 
 		// Also schedule the metadata file for deletion
 		metadataKey := objectKey + ".metadata"
-		err = txStore.InsertKeyToDelete(r.Context(), metadataKey)
+		err = txStore.InsertKeyToDeleteImmediately(r.Context(), metadataKey)
 		if err != nil {
 			s.logger.Error("failed to schedule S3 metadata for deletion", "key", metadataKey, "error", err)
 			// Continue with other objects
