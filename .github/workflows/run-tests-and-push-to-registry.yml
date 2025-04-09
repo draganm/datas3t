@@ -5,7 +5,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  tests:
+    name: Run Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -14,6 +15,12 @@ jobs:
       - name: Run tests
         # Some tests fail on the runner, but because they're not relevant to our work, we disable them.
         run: nix develop --command go test ./...
+
+  docker:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - name: Docker build
         run: docker build -t dmilhdef/datas3t:latest .
       - name: Push to Docker Hub (main branch)
