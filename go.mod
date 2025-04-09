@@ -17,7 +17,7 @@ require (
 	github.com/spf13/cobra v1.9.1
 	github.com/testcontainers/testcontainers-go/modules/minio v0.35.0
 	github.com/urfave/cli/v2 v2.27.6
-	golang.org/x/sync v0.12.0
+	golang.org/x/sync v0.13.0
 )
 
 require (

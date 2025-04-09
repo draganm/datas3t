@@ -1,6 +1,7 @@
 package fillmissing
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -8,12 +9,14 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/cheggaaa/pb/v3"
 	"github.com/draganm/datas3t/pkg/client"
 	tarmmap "github.com/draganm/tar-mmap-go"
 	"github.com/urfave/cli/v2"
+	"golang.org/x/sync/errgroup"
 )
 
 // Matches the same pattern as in the server: 20-digit number followed by extension
@@ -26,11 +29,18 @@ type SectionRange struct {
 	IDs         []uint64
 }
 
+// Chunk represents a group of datapoints to be uploaded together
+type Chunk struct {
+	Index int
+	IDs   []uint64
+}
+
 func Command(log *slog.Logger) *cli.Command {
 	cfg := struct {
-		serverURL string
-		tarFile   string
-		chunkSize int
+		serverURL       string
+		tarFile         string
+		chunkSize       int
+		parallelUploads int
 	}{}
 
 	return &cli.Command{
@@ -59,6 +69,13 @@ func Command(log *slog.Logger) *cli.Command {
 				Destination: &cfg.chunkSize,
 				EnvVars:     []string{"DATAS3T_CHUNK_SIZE"},
 			},
+			&cli.IntFlag{
+				Name:        "parallel",
+				Value:       5,
+				Usage:       "Number of parallel uploads",
+				Destination: &cfg.parallelUploads,
+				EnvVars:     []string{"DATAS3T_PARALLEL_UPLOADS"},
+			},
 		},
 		Action: func(c *cli.Context) error {
 			if c.NArg() != 1 {
@@ -66,6 +83,11 @@ func Command(log *slog.Logger) *cli.Command {
 			}
 
 			datasetID := c.Args().Get(0)
+
+			// Validate parallelUploads
+			if cfg.parallelUploads < 1 {
+				return fmt.Errorf("parallel uploads must be at least 1")
+			}
 
 			// Create a client
 			cl, err := client.NewClient(cfg.serverURL)
@@ -183,7 +205,8 @@ func Command(log *slog.Logger) *cli.Command {
 
 			log.Info("Found datapoints to upload",
 				"datasetID", datasetID,
-				"foundDatapoints", len(datapointsToUpload))
+				"foundDatapoints", len(datapointsToUpload),
+				"parallelUploads", cfg.parallelUploads)
 
 			// Create progress bar
 			bar := pb.New64(int64(len(datapointsToUpload)))
@@ -192,85 +215,157 @@ func Command(log *slog.Logger) *cli.Command {
 			bar.Start()
 
 			startTime := time.Now()
-			var processedDatapoints uint64
 
-			// Group the datapointsToUpload into chunks
+			// Create chunks for uploading
+			var chunks []Chunk
 			for i := 0; i < len(datapointsToUpload); i += cfg.chunkSize {
 				end := i + cfg.chunkSize
 				if end > len(datapointsToUpload) {
 					end = len(datapointsToUpload)
 				}
 
-				// Get the IDs for this chunk
-				chunkIDs := datapointsToUpload[i:end]
+				chunks = append(chunks, Chunk{
+					Index: i / cfg.chunkSize,
+					IDs:   datapointsToUpload[i:end],
+				})
+			}
 
-				// Create ranges for efficient extraction
-				ranges := createOptimalRanges(tarMmap, chunkIDs, idToSection)
+			// Setup synchronization for progress tracking
+			var mu sync.Mutex
+			var processedDatapoints uint64
 
-				// Create a temporary file for this chunk
-				tmpFile, err := os.CreateTemp("", "datas3t-upload-*.tar")
-				if err != nil {
-					return fmt.Errorf("failed to create temporary file: %w", err)
+			// Setup a worker group for parallel uploads
+			g, ctx := errgroup.WithContext(c.Context)
+
+			// Create a channel to feed chunks to workers
+			chunkCh := make(chan Chunk, len(chunks))
+
+			// Start worker goroutines
+			for w := 0; w < cfg.parallelUploads; w++ {
+				workerID := w
+				g.Go(func() error {
+					return uploadWorker(ctx, workerID, chunkCh, cl, datasetID, tarMmap, idToSection, bar, &mu, &processedDatapoints, startTime, log)
+				})
+			}
+
+			// Feed chunks to workers
+			for _, chunk := range chunks {
+				select {
+				case chunkCh <- chunk:
+					// Successfully sent to a worker
+				case <-ctx.Done():
+					// Context canceled, stop sending
+					break
 				}
-				tmpFilePath := tmpFile.Name()
-				defer os.Remove(tmpFilePath)
+			}
 
-				// Write the tar data for all ranges
-				for _, r := range ranges {
-					// Get the raw memory-mapped data for this range
-					rawData := tarMmap.Mmap[r.StartOffset:r.EndOffset]
+			// Close the channel to signal no more chunks
+			close(chunkCh)
 
-					// Write the raw data to the temporary file
-					_, err := tmpFile.Write(rawData)
-					if err != nil {
-						tmpFile.Close()
-						return fmt.Errorf("failed to write tar data: %w", err)
-					}
-				}
-
-				// Add trailing blocks of zeros to properly terminate the tar file
-				// (standard tar files end with at least two zero blocks)
-				trailer := make([]byte, 1024) // 2 blocks of 512 zeros
-				_, err = tmpFile.Write(trailer)
-				if err != nil {
-					tmpFile.Close()
-					return fmt.Errorf("failed to write tar trailer: %w", err)
-				}
-
-				// Sync and rewind the file
-				tmpFile.Sync()
-				tmpFile.Seek(0, 0)
-
-				// Upload this chunk
-				err = cl.UploadDatarange(c.Context, datasetID, tmpFile)
-				if err != nil {
-					tmpFile.Close()
-					return fmt.Errorf("failed to upload data chunk %d-%d: %w", i, end-1, err)
-				}
-				tmpFile.Close()
-
-				// Update progress tracking
-				chunkSize := end - i
-				processedDatapoints += uint64(chunkSize)
-				bar.Add64(int64(chunkSize))
-
-				elapsed := time.Since(startTime)
-				if processedDatapoints > 0 && elapsed.Seconds() > 0 {
-					dataPointsPerSecond := float64(processedDatapoints) / elapsed.Seconds()
-					remaining := float64(len(datapointsToUpload)-int(processedDatapoints)) / dataPointsPerSecond
-					remainingDuration := time.Second * time.Duration(remaining)
-					bar.Set("timeLeft", remainingDuration.Round(time.Second).String())
-				}
+			// Wait for all workers to complete
+			if err := g.Wait(); err != nil {
+				bar.Finish()
+				return fmt.Errorf("error during upload: %w", err)
 			}
 
 			bar.Finish()
 			log.Info("Upload complete",
 				"datasetID", datasetID,
 				"totalDatapoints", len(datapointsToUpload),
-				"duration", time.Since(startTime).Round(time.Second))
+				"duration", time.Since(startTime).Round(time.Second),
+				"workers", cfg.parallelUploads)
 
 			return nil
 		},
+	}
+}
+
+// uploadWorker handles uploading chunks in parallel
+func uploadWorker(
+	ctx context.Context,
+	workerID int,
+	chunkCh <-chan Chunk,
+	cl *client.Client,
+	datasetID string,
+	tarMmap *tarmmap.TarMmap,
+	idToSection map[uint64]int,
+	bar *pb.ProgressBar,
+	mu *sync.Mutex,
+	processedDatapoints *uint64,
+	startTime time.Time,
+	log *slog.Logger,
+) error {
+	for {
+		select {
+		case chunk, ok := <-chunkCh:
+			if !ok {
+				// Channel closed, worker is done
+				return nil
+			}
+
+			// Create ranges for efficient extraction
+			ranges := createOptimalRanges(tarMmap, chunk.IDs, idToSection)
+
+			// Create a temporary file for this chunk
+			tmpFile, err := os.CreateTemp("", fmt.Sprintf("datas3t-upload-%d-*.tar", workerID))
+			if err != nil {
+				return fmt.Errorf("worker %d: failed to create temporary file: %w", workerID, err)
+			}
+			tmpFilePath := tmpFile.Name()
+			defer os.Remove(tmpFilePath)
+
+			// Write the tar data for all ranges
+			for _, r := range ranges {
+				// Get the raw memory-mapped data for this range
+				rawData := tarMmap.Mmap[r.StartOffset:r.EndOffset]
+
+				// Write the raw data to the temporary file
+				_, err := tmpFile.Write(rawData)
+				if err != nil {
+					tmpFile.Close()
+					return fmt.Errorf("worker %d: failed to write tar data: %w", workerID, err)
+				}
+			}
+
+			// Add trailing blocks of zeros to properly terminate the tar file
+			trailer := make([]byte, 1024) // 2 blocks of 512 zeros
+			_, err = tmpFile.Write(trailer)
+			if err != nil {
+				tmpFile.Close()
+				return fmt.Errorf("worker %d: failed to write tar trailer: %w", workerID, err)
+			}
+
+			// Sync and rewind the file
+			tmpFile.Sync()
+			tmpFile.Seek(0, 0)
+
+			// Upload this chunk
+			err = cl.UploadDatarange(ctx, datasetID, tmpFile)
+			if err != nil {
+				tmpFile.Close()
+				return fmt.Errorf("worker %d: failed to upload chunk %d: %w", workerID, chunk.Index, err)
+			}
+			tmpFile.Close()
+
+			// Update progress tracking (synchronized)
+			mu.Lock()
+			*processedDatapoints += uint64(len(chunk.IDs))
+			bar.Add64(int64(len(chunk.IDs)))
+
+			// Update time remaining estimate
+			elapsed := time.Since(startTime)
+			if *processedDatapoints > 0 && elapsed.Seconds() > 0 {
+				dataPointsPerSecond := float64(*processedDatapoints) / elapsed.Seconds()
+				remaining := float64(bar.Total()-int64(*processedDatapoints)) / dataPointsPerSecond
+				remainingDuration := time.Second * time.Duration(remaining)
+				bar.Set("timeLeft", remainingDuration.Round(time.Second).String())
+			}
+			mu.Unlock()
+
+		case <-ctx.Done():
+			// Context canceled
+			return ctx.Err()
+		}
 	}
 }
 
