@@ -15,6 +15,7 @@ import (
 	"strconv"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/cespare/xxhash/v2"
 	"github.com/draganm/datas3t/pkg/server/sqlitestore"
@@ -338,7 +339,11 @@ func (s *Server) uploadDatapointsAndMetadata(ctx context.Context, filename, obje
 	}
 	defer file.Close()
 
-	_, err = s.s3Client.PutObject(ctx, &s3.PutObjectInput{
+	// Create uploader
+	uploader := manager.NewUploader(s.s3Client)
+
+	// Upload file to S3 using Upload Manager
+	_, err = uploader.Upload(ctx, &s3.PutObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(objectKey),
 		Body:   file,
@@ -350,7 +355,8 @@ func (s *Server) uploadDatapointsAndMetadata(ctx context.Context, filename, obje
 	// Upload metadata file to S3
 	metadataKey := objectKey + ".metadata"
 
-	_, err = s.s3Client.PutObject(ctx, &s3.PutObjectInput{
+	// Upload metadata using Upload Manager
+	_, err = uploader.Upload(ctx, &s3.PutObjectInput{
 		Bucket:      aws.String(s.bucket),
 		Key:         aws.String(metadataKey),
 		Body:        bytes.NewReader(compressedBuf.Bytes()),
@@ -361,5 +367,4 @@ func (s *Server) uploadDatapointsAndMetadata(ctx context.Context, filename, obje
 	}
 
 	return nil
-
 }
