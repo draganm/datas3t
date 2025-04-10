@@ -227,18 +227,8 @@ func (s *Server) cleanupS3Keys(ctx context.Context) error {
 			return ctx.Err()
 		}
 
-		// Start a transaction for each batch
-		tx, err := s.DB.BeginTx(ctx, nil)
-		if err != nil {
-			logger.Error("failed to begin transaction", "error", err)
-			return err
-		}
-		defer tx.Rollback() // Will be ignored if transaction is committed
-
-		txStore := store.WithTx(tx)
-
-		// Get keys that are due for deletion (limited to 100 at a time)
-		keys, err := txStore.GetKeysToDelete(ctx)
+		// Get keys that are due for deletion outside of a transaction
+		keys, err := store.GetKeysToDelete(ctx)
 		if err != nil {
 			logger.Error("failed to get keys to delete", "error", err)
 			return err
@@ -250,6 +240,7 @@ func (s *Server) cleanupS3Keys(ctx context.Context) error {
 		}
 
 		logger.Info("processing batch of keys to delete", "count", len(keys))
+		batchDeleted := 0
 
 		for _, key := range keys {
 			// Check if context is done (for cancellation)
@@ -260,7 +251,7 @@ func (s *Server) cleanupS3Keys(ctx context.Context) error {
 				// Continue processing
 			}
 
-			// Delete from S3
+			// Delete from S3 outside of transaction
 			_, err := s.s3Client.DeleteObject(ctx, &s3.DeleteObjectInput{
 				Bucket: aws.String(s.bucket),
 				Key:    aws.String(key.Key),
@@ -272,25 +263,37 @@ func (s *Server) cleanupS3Keys(ctx context.Context) error {
 				continue
 			}
 
-			// Delete from database
+			// Only start a transaction after S3 delete succeeds, keeping it short-lived
+			tx, err := s.DB.BeginTx(ctx, nil)
+			if err != nil {
+				logger.Error("failed to begin transaction", "key", key.Key, "error", err)
+				continue
+			}
+
+			// Delete from database within a short transaction
+			txStore := store.WithTx(tx)
 			err = txStore.DeleteKeyToDeleteById(ctx, key.ID)
+
 			if err != nil {
 				logger.Error("failed to delete key from database", "key", key.Key, "error", err)
+				tx.Rollback()
+				continue
+			}
+
+			// Commit immediately after database operation
+			err = tx.Commit()
+			if err != nil {
+				logger.Error("failed to commit transaction", "key", key.Key, "error", err)
+				tx.Rollback()
 				continue
 			}
 
 			logger.Info("deleted S3 object", "key", key.Key)
+			batchDeleted++
 		}
 
-		// Commit the transaction for this batch
-		err = tx.Commit()
-		if err != nil {
-			logger.Error("failed to commit transaction", "error", err)
-			return err
-		}
-
-		totalDeleted += len(keys)
-		logger.Info("completed batch deletion", "deleted", len(keys), "total_deleted", totalDeleted)
+		totalDeleted += batchDeleted
+		logger.Info("completed batch deletion", "deleted", batchDeleted, "total_deleted", totalDeleted)
 
 		// If we got fewer keys than the limit, we're done
 		if len(keys) < 100 {
