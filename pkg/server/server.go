@@ -2,13 +2,13 @@ package server
 
 import (
 	"context"
-	"log/slog"
-	"net/http"
-
 	"database/sql"
 	"embed"
 	"fmt"
 	"io/fs"
+	"log/slog"
+	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -19,6 +19,7 @@ import (
 	"github.com/golang-migrate/migrate/v4/database/sqlite3"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	_ "github.com/mattn/go-sqlite3"
+	"golang.org/x/sync/errgroup"
 )
 
 //go:embed sqlitestore/migrations/*.sql
@@ -240,59 +241,76 @@ func (s *Server) cleanupS3Keys(ctx context.Context) error {
 		}
 
 		logger.Info("processing batch of keys to delete", "count", len(keys))
-		batchDeleted := 0
 
+		// Create a new errgroup with concurrency limited to 5
+		g, gCtx := errgroup.WithContext(ctx)
+		g.SetLimit(5)
+
+		// Use atomic counter instead of mutex
+		var batchDeleted int64
+
+		// Process S3 deletions in parallel with limited concurrency
 		for _, key := range keys {
-			// Check if context is done (for cancellation)
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			default:
-				// Continue processing
+			key := key // Create a new variable for goroutine closure
+
+			if gCtx.Err() != nil {
+				continue
 			}
 
-			// Delete from S3 outside of transaction
-			_, err := s.s3Client.DeleteObject(ctx, &s3.DeleteObjectInput{
-				Bucket: aws.String(s.bucket),
-				Key:    aws.String(key.Key),
+			g.Go(func() error {
+				// Delete from S3
+				_, err := s.s3Client.DeleteObject(gCtx, &s3.DeleteObjectInput{
+					Bucket: aws.String(s.bucket),
+					Key:    aws.String(key.Key),
+				})
+
+				if err != nil {
+					logger.Error("failed to delete object from S3", "key", key.Key, "error", err)
+					return nil // Don't fail the entire errgroup for a single failure
+				}
+
+				// Only start a transaction after S3 delete succeeds
+				tx, err := s.DB.BeginTx(gCtx, nil)
+				if err != nil {
+					logger.Error("failed to begin transaction", "key", key.Key, "error", err)
+					return nil
+				}
+
+				// Use a deferred rollback that will be ignored if we commit successfully
+				defer tx.Rollback()
+
+				// Delete from database within a short transaction
+				txStore := store.WithTx(tx)
+				err = txStore.DeleteKeyToDeleteById(gCtx, key.ID)
+
+				if err != nil {
+					logger.Error("failed to delete key from database", "key", key.Key, "error", err)
+					return nil
+				}
+
+				// Commit immediately after database operation
+				err = tx.Commit()
+				if err != nil {
+					logger.Error("failed to commit transaction", "key", key.Key, "error", err)
+					return nil
+				}
+
+				logger.Info("deleted S3 object", "key", key.Key)
+
+				// Atomically increment counter
+				atomic.AddInt64(&batchDeleted, 1)
+
+				return nil
 			})
-
-			if err != nil {
-				logger.Error("failed to delete object from S3", "key", key.Key, "error", err)
-				// Continue with next key rather than stopping the entire process
-				continue
-			}
-
-			// Only start a transaction after S3 delete succeeds, keeping it short-lived
-			tx, err := s.DB.BeginTx(ctx, nil)
-			if err != nil {
-				logger.Error("failed to begin transaction", "key", key.Key, "error", err)
-				continue
-			}
-
-			// Delete from database within a short transaction
-			txStore := store.WithTx(tx)
-			err = txStore.DeleteKeyToDeleteById(ctx, key.ID)
-
-			if err != nil {
-				logger.Error("failed to delete key from database", "key", key.Key, "error", err)
-				tx.Rollback()
-				continue
-			}
-
-			// Commit immediately after database operation
-			err = tx.Commit()
-			if err != nil {
-				logger.Error("failed to commit transaction", "key", key.Key, "error", err)
-				tx.Rollback()
-				continue
-			}
-
-			logger.Info("deleted S3 object", "key", key.Key)
-			batchDeleted++
 		}
 
-		totalDeleted += batchDeleted
+		// Wait for all goroutines to complete
+		err = g.Wait()
+		if err != nil {
+			logger.Error("error in deletion goroutines", "error", err)
+		}
+
+		totalDeleted += int(batchDeleted)
 		logger.Info("completed batch deletion", "deleted", batchDeleted, "total_deleted", totalDeleted)
 
 		// If we got fewer keys than the limit, we're done
