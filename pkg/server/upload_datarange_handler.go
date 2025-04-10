@@ -350,9 +350,20 @@ func (s *Server) uploadDatapointsAndMetadata(ctx context.Context, filename, obje
 	switch {
 	case st.Size() > 1024*1024*1024:
 		uploader.PartSize = 10 * 1024 * 1024
-		uploader.Concurrency = 20
-	case st.Size() > 128*1024*1024:
 		uploader.Concurrency = 10
+		uploader.MaxUploadParts = 1000
+		uploader.ClientOptions = []func(*s3.Options){
+			func(o *s3.Options) {
+				o.RetryMaxAttempts = 10
+			},
+		}
+	case st.Size() > 128*1024*1024:
+		uploader.Concurrency = 7
+		uploader.ClientOptions = []func(*s3.Options){
+			func(o *s3.Options) {
+				o.RetryMaxAttempts = 5
+			},
+		}
 	}
 	// Upload file to S3 using Upload Manager
 	_, err = uploader.Upload(ctx, &s3.PutObjectInput{
