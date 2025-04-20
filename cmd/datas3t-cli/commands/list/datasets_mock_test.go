@@ -1,6 +1,7 @@
 package list
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"testing"
@@ -9,6 +10,13 @@ import (
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/jedib0t/go-pretty/v6/text"
 )
+
+// formatTestBytesAsGB normalizes all sizes to gigabytes for easier comparison in test
+func formatTestBytesAsGB(bytes uint64, precision int) string {
+	// Convert to GB with fixed precision
+	gbValue := float64(bytes) / (1024 * 1024 * 1024)
+	return fmt.Sprintf("%.*f GB", precision, gbValue)
+}
 
 func TestFormattedMockOutput(t *testing.T) {
 	// This test demonstrates the fixed precision number formatting in a mock table
@@ -28,7 +36,7 @@ func TestFormattedMockOutput(t *testing.T) {
 		{ID: "analytics-2023-q1-very-long-id-name", DatarangeCount: 234, TotalSizeBytes: 1024 * 1024 * 1024 * 9.25},
 	}
 
-	t.Log("Demonstrating fixed precision formatting (2 decimal places) for sizes")
+	t.Log("Demonstrating normalized GB formatting with fixed precision (2 decimal places)")
 
 	tw := table.NewWriter()
 
@@ -36,14 +44,14 @@ func TestFormattedMockOutput(t *testing.T) {
 	tw.SetStyle(table.StyleLight)
 
 	// Add header
-	tw.AppendHeader(table.Row{"ID", "DATARANGES", "SIZE"})
+	tw.AppendHeader(table.Row{"ID", "DATARANGES", "SIZE (GB)"})
 
-	// Add rows with fixed precision formatting
+	// Add rows with normalized GB sizes and fixed precision
 	for _, ds := range mockDatasets {
 		tw.AppendRow(table.Row{
 			ds.ID,
 			ds.DatarangeCount,
-			formatTestBytes(uint64(ds.TotalSizeBytes), 2), // Use 2 decimal places
+			FormatBytesAsGB(uint64(ds.TotalSizeBytes), 2), // Use 2 decimal places
 		})
 	}
 
@@ -58,9 +66,13 @@ func TestFormattedMockOutput(t *testing.T) {
 	renderedTable := tw.Render()
 	t.Log("\n" + renderedTable)
 
-	t.Log("Note how all sizes have a consistent 2 decimal places, making visual comparison easier")
-	t.Log("For example:")
-	t.Log("- 500.00 MB (instead of 500 MB)")
-	t.Log("- 3.50 GB (instead of 3.5 GB)")
-	t.Log("- 9.25 GB (instead of 9.2 GB)")
+	t.Log("Note how all sizes are now normalized to gigabytes for direct comparison:")
+	t.Log("Before:")
+	t.Log("- 500.00 MB (hard to compare with GB values)")
+	t.Log("- 3.50 GB")
+	t.Log("- 787.00 MB (hard to compare with GB values)")
+	t.Log("After:")
+	t.Log("- 0.49 GB (directly comparable)")
+	t.Log("- 3.50 GB")
+	t.Log("- 0.77 GB (directly comparable)")
 }

@@ -1,43 +1,18 @@
 package list
 
 import (
-	"fmt"
 	"log/slog"
 	"os"
 	"regexp"
-	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/draganm/datas3t/pkg/client"
-	"github.com/dustin/go-humanize"
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/jedib0t/go-pretty/v6/text"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// formatTestBytes is the same as formatBytes in datasets.go for consistent formatting in tests
-func formatTestBytes(bytes uint64, precision int) string {
-	// Use humanize to get the base formatting
-	humanized := humanize.Bytes(bytes)
-
-	// Split into numeric and unit parts
-	parts := strings.Fields(humanized)
-	if len(parts) != 2 {
-		return humanized // Return original if format is unexpected
-	}
-
-	// Parse the numeric part and format with fixed precision
-	value, err := strconv.ParseFloat(parts[0], 64)
-	if err != nil {
-		return humanized // Return original if parsing fails
-	}
-
-	// Format with fixed precision
-	formatted := fmt.Sprintf("%.*f %s", precision, value, parts[1])
-	return formatted
-}
 
 func TestTableRendering(t *testing.T) {
 	// This is just a visual test you can run manually with:
@@ -63,7 +38,7 @@ func TestTableRendering(t *testing.T) {
 	// Pre-compute expected formatted sizes for test assertions
 	expectedSizes := make([]string, len(mockDatasets))
 	for i, ds := range mockDatasets {
-		expectedSizes[i] = formatTestBytes(uint64(ds.TotalSizeBytes), PRECISION)
+		expectedSizes[i] = FormatBytesAsGB(uint64(ds.TotalSizeBytes), PRECISION)
 	}
 
 	// Create the table using the same code as in the actual implementation
@@ -77,14 +52,14 @@ func TestTableRendering(t *testing.T) {
 	tw.SetStyle(table.StyleLight)
 
 	// Add header
-	tw.AppendHeader(table.Row{"ID", "DATARANGES", "SIZE"})
+	tw.AppendHeader(table.Row{"ID", "DATARANGES", "SIZE (GB)"})
 
-	// Add rows with humanized sizes and fixed precision
+	// Add rows with normalized GB sizes
 	for i, ds := range mockDatasets {
 		tw.AppendRow(table.Row{
 			ds.ID,
 			ds.DatarangeCount,
-			expectedSizes[i], // Use our pre-computed sizes with fixed precision
+			expectedSizes[i], // Use our pre-computed GB sizes with fixed precision
 		})
 	}
 
@@ -107,7 +82,7 @@ func TestTableRendering(t *testing.T) {
 
 	// Verify the structural elements of the table
 	topBorderPattern := regexp.MustCompile(`^┌─+┬─+┬─+┐$`)
-	headerRowPattern := regexp.MustCompile(`^│\s+ID\s+│\s+DATARANGES\s+│\s+SIZE\s+│$`)
+	headerRowPattern := regexp.MustCompile(`^│\s+ID\s+│\s+DATARANGES\s+│\s+SIZE \(GB\)\s+│$`)
 	separatorPattern := regexp.MustCompile(`^├─+┼─+┼─+┤$`)
 
 	// Create patterns for data rows with the expected sizes
@@ -164,8 +139,8 @@ func TestTableRendering(t *testing.T) {
 			// The "10" should be right-aligned (spaces before the number)
 			assert.Regexp(t, `│\s+10\s+│`, line)
 			// The size should be right-aligned (spaces before the size)
-			// Must have exactly 2 decimal places
-			assert.Regexp(t, `│\s+\d+\.\d{2} \w+\s+│`, line)
+			// Size should now be in GB format
+			assert.Regexp(t, `│\s+\d+\.\d{2} GB\s+│`, line)
 			break
 		}
 	}
