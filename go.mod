@@ -4,13 +4,13 @@ go 1.23.6
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.36.3
-	github.com/aws/aws-sdk-go-v2/credentials v1.17.66
-	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.17.46
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.72.3
+	github.com/aws/aws-sdk-go-v2/credentials v1.17.67
+	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.17.72
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.79.2
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/cheggaaa/pb/v3 v3.1.7
 	github.com/cucumber/godog v0.15.0
-	github.com/draganm/tar-mmap-go v0.0.4
+	github.com/draganm/tar-mmap-go v0.0.5
 	github.com/dustin/go-humanize v1.0.1
 	github.com/golang-migrate/migrate/v4 v4.18.2
 	github.com/klauspost/compress v1.18.0
