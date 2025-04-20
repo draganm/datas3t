@@ -3,11 +3,38 @@ package list
 import (
 	"fmt"
 	"log/slog"
+	"os"
+	"strconv"
+	"strings"
 
 	"github.com/draganm/datas3t/pkg/client"
 	"github.com/dustin/go-humanize"
+	"github.com/jedib0t/go-pretty/v6/table"
+	"github.com/jedib0t/go-pretty/v6/text"
 	"github.com/urfave/cli/v2"
 )
+
+// formatBytes formats bytes with a fixed number of decimal places for better visual comparison
+func formatBytes(bytes uint64, precision int) string {
+	// Use humanize to get the base formatting
+	humanized := humanize.Bytes(bytes)
+
+	// Split into numeric and unit parts
+	parts := strings.Fields(humanized)
+	if len(parts) != 2 {
+		return humanized // Return original if format is unexpected
+	}
+
+	// Parse the numeric part and format with fixed precision
+	value, err := strconv.ParseFloat(parts[0], 64)
+	if err != nil {
+		return humanized // Return original if parsing fails
+	}
+
+	// Format with fixed precision
+	formatted := fmt.Sprintf("%.*f %s", precision, value, parts[1])
+	return formatted
+}
 
 func Command(log *slog.Logger) *cli.Command {
 	cfg := struct {
@@ -42,15 +69,32 @@ func Command(log *slog.Logger) *cli.Command {
 				return nil
 			}
 
-			fmt.Printf("%-20s %-15s %-15s\n", "ID", "DATARANGES", "SIZE")
-			fmt.Println("-------------------------------------------------------")
+			t := table.NewWriter()
+			t.SetOutputMirror(os.Stdout)
+
+			// Configure table style
+			t.SetStyle(table.StyleLight)
+
+			// Add header
+			t.AppendHeader(table.Row{"ID", "DATARANGES", "SIZE"})
+
+			// Add rows
 			for _, ds := range datasets {
-				fmt.Printf("%-20s %-15d %-15s\n",
+				t.AppendRow(table.Row{
 					ds.ID,
 					ds.DatarangeCount,
-					humanize.Bytes(uint64(ds.TotalSizeBytes)),
-				)
+					formatBytes(uint64(ds.TotalSizeBytes), 2), // Use fixed precision (2 decimal places)
+				})
 			}
+
+			// Configure column alignment
+			t.SetColumnConfigs([]table.ColumnConfig{
+				{Number: 1, AlignHeader: text.AlignLeft, Align: text.AlignLeft},
+				{Number: 2, AlignHeader: text.AlignRight, Align: text.AlignRight},
+				{Number: 3, AlignHeader: text.AlignRight, Align: text.AlignRight},
+			})
+
+			t.Render()
 
 			return nil
 		},
