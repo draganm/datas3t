@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -39,11 +40,13 @@ type S3Config struct {
 }
 
 type Server struct {
-	DB          *sql.DB
-	s3Client    *s3.Client
-	bucket      string
-	uploadsPath string
-	logger      *slog.Logger
+	DB                    *sql.DB
+	s3Client              *s3.Client
+	bucket                string
+	uploadsPath           string
+	logger                *slog.Logger
+	multipartUploads      map[string]*MultipartUpload
+	multipartUploadsMutex sync.RWMutex
 	http.Handler
 }
 
@@ -157,11 +160,12 @@ func CreateServer(
 	}
 
 	server := &Server{
-		DB:          db,
-		s3Client:    s3Client,
-		bucket:      bucket,
-		uploadsPath: uploadsPath,
-		logger:      log,
+		DB:               db,
+		s3Client:         s3Client,
+		bucket:           bucket,
+		uploadsPath:      uploadsPath,
+		logger:           log,
+		multipartUploads: make(map[string]*MultipartUpload),
 	}
 
 	mux := http.NewServeMux()
@@ -170,6 +174,12 @@ func CreateServer(
 	mux.HandleFunc("DELETE /api/v1/datas3t/{id}", server.HandleDeleteDataset)
 	mux.HandleFunc("GET /api/v1/datas3t/{id}", server.HandleGetDataset)
 	mux.HandleFunc("POST /api/v1/datas3t/{id}", server.HandleUploadDatarange)
+	mux.HandleFunc("POST /api/v1/datas3t/{id}/multipart", server.HandleInitiateMultipartUpload)
+	mux.HandleFunc("GET /api/v1/datas3t/{id}/multipart", server.HandleListMultipartUploads)
+	mux.HandleFunc("POST /api/v1/datas3t/{id}/multipart/{upload_id}/{part_number}", server.HandleUploadPart)
+	mux.HandleFunc("POST /api/v1/datas3t/{id}/multipart/{upload_id}/complete", server.HandleCompleteMultipartUpload)
+	mux.HandleFunc("DELETE /api/v1/datas3t/{id}/multipart/{upload_id}", server.HandleCancelMultipartUpload)
+	mux.HandleFunc("GET /api/v1/datas3t/{id}/multipart/{upload_id}", server.HandleGetMultipartUploadStatus)
 	mux.HandleFunc("GET /api/v1/datas3t/{id}/dataranges", server.HandleGetDataranges)
 	mux.HandleFunc("GET /api/v1/datas3t/{id}/datarange/{start}/{end}", server.HandleGetDatarange)
 	mux.HandleFunc("POST /api/v1/datas3t/{id}/aggregate/{start}/{end}", server.HandleAggregateDatarange)
@@ -181,6 +191,7 @@ func CreateServer(
 	// Start periodic cleanup job if S3 is configured
 	if s3Client != nil && bucket != "" {
 		server.startCleanupJob(ctx)
+		server.StartMultipartUploadCleanupJob(ctx)
 	}
 
 	return server, nil
