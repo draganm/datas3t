@@ -45,6 +45,51 @@ type AggregateResponse struct {
 	SizeBytes      uint64 `json:"size_bytes"`
 }
 
+// InitiateMultipartUploadResponse represents the response from initiating a multipart upload
+type InitiateMultipartUploadResponse struct {
+	UploadID  string `json:"upload_id"`
+	DatasetID string `json:"dataset_id"`
+}
+
+// UploadPartResponse represents the response from uploading a part
+type UploadPartResponse struct {
+	PartID string `json:"part_id"`
+}
+
+// CompleteMultipartUploadRequest represents the request for completing a multipart upload
+type CompleteMultipartUploadRequest struct {
+	PartIDs []string `json:"part_ids"`
+}
+
+// CompleteMultipartUploadResponse represents the response from completing a multipart upload
+type CompleteMultipartUploadResponse struct {
+	DatasetID     string `json:"dataset_id"`
+	NumDataPoints int    `json:"num_data_points"`
+}
+
+// MultipartUploadStatus represents the status of a multipart upload
+type MultipartUploadStatus struct {
+	UploadID      string `json:"upload_id"`
+	DatasetID     string `json:"dataset_id"`
+	CreatedAt     string `json:"created_at"`
+	LastUpdated   string `json:"last_updated"`
+	UploadedParts []int  `json:"uploaded_parts"`
+}
+
+// MultipartUploadInfo provides summary information about a multipart upload
+type MultipartUploadInfo struct {
+	UploadID    string `json:"upload_id"`
+	CreatedAt   string `json:"created_at"`
+	LastUpdated string `json:"last_updated"`
+	PartCount   int    `json:"part_count"`
+}
+
+// ListMultipartUploadsResponse represents the response from listing multipart uploads
+type ListMultipartUploadsResponse struct {
+	DatasetID string                `json:"dataset_id"`
+	Uploads   []MultipartUploadInfo `json:"uploads"`
+}
+
 // StatusError represents an error with an HTTP status code
 type StatusError struct {
 	StatusCode int
