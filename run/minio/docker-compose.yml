@@ -58,6 +58,8 @@ services:
     volumes:
       - db-data:/app/data
       - uploads-data:/app/data/uploads
+    entrypoint: ["/app/server"]
+    command: ["run"]
     ports:
       - "48080:8080"
     environment:
@@ -70,6 +72,7 @@ services:
       - DATAS3T_S3_BUCKET_NAME=datas3t-bucket
       - DATAS3T_S3_USE_SSL=false
       - DATAS3T_UPLOADS_PATH=/app/data/uploads
+      - AWS_REQUEST_CHECKSUM_CALCULATION=when_required
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/healthy"]
       interval: 10s
