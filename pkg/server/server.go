@@ -176,7 +176,7 @@ func CreateServer(
 	mux.HandleFunc("POST /api/v1/datas3t/{id}", server.HandleUploadDatarange)
 	mux.HandleFunc("POST /api/v1/datas3t/{id}/multipart", server.HandleInitiateMultipartUpload)
 	mux.HandleFunc("GET /api/v1/datas3t/{id}/multipart", server.HandleListMultipartUploads)
-	mux.HandleFunc("POST /api/v1/datas3t/{id}/multipart/{upload_id}/{part_number}", server.HandleUploadPart)
+	mux.HandleFunc("PUT /api/v1/datas3t/{id}/multipart/{upload_id}/{part_number}", server.HandleUploadPart)
 	mux.HandleFunc("POST /api/v1/datas3t/{id}/multipart/{upload_id}/complete", server.HandleCompleteMultipartUpload)
 	mux.HandleFunc("DELETE /api/v1/datas3t/{id}/multipart/{upload_id}", server.HandleCancelMultipartUpload)
 	mux.HandleFunc("GET /api/v1/datas3t/{id}/multipart/{upload_id}", server.HandleGetMultipartUploadStatus)

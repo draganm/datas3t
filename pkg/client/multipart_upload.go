@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"sync"
 
 	"golang.org/x/sync/errgroup"
@@ -21,13 +22,18 @@ type ProgressCallback func(partNumber, totalParts int, partBytes, uploadedBytes,
 
 // InitiateMultipartUpload starts a new multipart upload for a dataset
 func (c *Client) InitiateMultipartUpload(ctx context.Context, datasetID string) (*InitiateMultipartUploadResponse, error) {
-	endpointPath := fmt.Sprintf("/api/v1/datas3t/%s/multipart", datasetID)
-	endpointURL, err := url.Parse(endpointPath)
+	// Use JoinPath for cleaner URL construction
+	urlPath, err := url.JoinPath("/api/v1/datas3t", datasetID, "multipart")
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse endpoint path: %w", err)
+		return nil, fmt.Errorf("failed to construct URL path: %w", err)
 	}
 
-	requestURL := c.baseURL.ResolveReference(endpointURL)
+	// Create the full request URL
+	requestURL, err := url.Parse(c.baseURL.String())
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse base URL: %w", err)
+	}
+	requestURL.Path = urlPath
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL.String(), nil)
 	if err != nil {
@@ -63,13 +69,18 @@ func (c *Client) InitiateMultipartUpload(ctx context.Context, datasetID string) 
 
 // UploadPart uploads a single part of a multipart upload
 func (c *Client) UploadPart(ctx context.Context, datasetID, uploadID string, partNumber int, partData []byte) (*UploadPartResponse, error) {
-	endpointPath := fmt.Sprintf("/api/v1/datas3t/%s/multipart/%s/%d", datasetID, uploadID, partNumber)
-	endpointURL, err := url.Parse(endpointPath)
+	// Use JoinPath for cleaner URL construction
+	urlPath, err := url.JoinPath("/api/v1/datas3t", datasetID, "multipart", uploadID, strconv.Itoa(partNumber))
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse endpoint path: %w", err)
+		return nil, fmt.Errorf("failed to construct URL path: %w", err)
 	}
 
-	requestURL := c.baseURL.ResolveReference(endpointURL)
+	// Create the full request URL
+	requestURL, err := url.Parse(c.baseURL.String())
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse base URL: %w", err)
+	}
+	requestURL.Path = urlPath
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, requestURL.String(), bytes.NewReader(partData))
 	if err != nil {
@@ -105,13 +116,18 @@ func (c *Client) UploadPart(ctx context.Context, datasetID, uploadID string, par
 
 // CompleteMultipartUpload finalizes a multipart upload
 func (c *Client) CompleteMultipartUpload(ctx context.Context, datasetID, uploadID string, partIDs []string) (*CompleteMultipartUploadResponse, error) {
-	endpointPath := fmt.Sprintf("/api/v1/datas3t/%s/multipart/%s", datasetID, uploadID)
-	endpointURL, err := url.Parse(endpointPath)
+	// Use JoinPath for cleaner URL construction
+	urlPath, err := url.JoinPath("/api/v1/datas3t", datasetID, "multipart", uploadID, "complete")
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse endpoint path: %w", err)
+		return nil, fmt.Errorf("failed to construct URL path: %w", err)
 	}
 
-	requestURL := c.baseURL.ResolveReference(endpointURL)
+	// Create the full request URL
+	requestURL, err := url.Parse(c.baseURL.String())
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse base URL: %w", err)
+	}
+	requestURL.Path = urlPath
 
 	request := CompleteMultipartUploadRequest{
 		PartIDs: partIDs,
@@ -157,13 +173,18 @@ func (c *Client) CompleteMultipartUpload(ctx context.Context, datasetID, uploadI
 
 // CancelMultipartUpload cancels a multipart upload and cleans up resources
 func (c *Client) CancelMultipartUpload(ctx context.Context, datasetID, uploadID string) error {
-	endpointPath := fmt.Sprintf("/api/v1/datas3t/%s/multipart/%s", datasetID, uploadID)
-	endpointURL, err := url.Parse(endpointPath)
+	// Use JoinPath for cleaner URL construction
+	urlPath, err := url.JoinPath("/api/v1/datas3t", datasetID, "multipart", uploadID)
 	if err != nil {
-		return fmt.Errorf("failed to parse endpoint path: %w", err)
+		return fmt.Errorf("failed to construct URL path: %w", err)
 	}
 
-	requestURL := c.baseURL.ResolveReference(endpointURL)
+	// Create the full request URL
+	requestURL, err := url.Parse(c.baseURL.String())
+	if err != nil {
+		return fmt.Errorf("failed to parse base URL: %w", err)
+	}
+	requestURL.Path = urlPath
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, requestURL.String(), nil)
 	if err != nil {
@@ -194,13 +215,18 @@ func (c *Client) CancelMultipartUpload(ctx context.Context, datasetID, uploadID 
 
 // GetMultipartUploadStatus retrieves the status of a multipart upload
 func (c *Client) GetMultipartUploadStatus(ctx context.Context, datasetID, uploadID string) (*MultipartUploadStatus, error) {
-	endpointPath := fmt.Sprintf("/api/v1/datas3t/%s/multipart/%s/status", datasetID, uploadID)
-	endpointURL, err := url.Parse(endpointPath)
+	// Use JoinPath for cleaner URL construction
+	urlPath, err := url.JoinPath("/api/v1/datas3t", datasetID, "multipart", uploadID, "status")
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse endpoint path: %w", err)
+		return nil, fmt.Errorf("failed to construct URL path: %w", err)
 	}
 
-	requestURL := c.baseURL.ResolveReference(endpointURL)
+	// Create the full request URL
+	requestURL, err := url.Parse(c.baseURL.String())
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse base URL: %w", err)
+	}
+	requestURL.Path = urlPath
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL.String(), nil)
 	if err != nil {
@@ -236,13 +262,18 @@ func (c *Client) GetMultipartUploadStatus(ctx context.Context, datasetID, upload
 
 // ListMultipartUploads lists all active multipart uploads for a dataset
 func (c *Client) ListMultipartUploads(ctx context.Context, datasetID string) (*ListMultipartUploadsResponse, error) {
-	endpointPath := fmt.Sprintf("/api/v1/datas3t/%s/multipart", datasetID)
-	endpointURL, err := url.Parse(endpointPath)
+	// Use JoinPath for cleaner URL construction
+	urlPath, err := url.JoinPath("/api/v1/datas3t", datasetID, "multipart")
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse endpoint path: %w", err)
+		return nil, fmt.Errorf("failed to construct URL path: %w", err)
 	}
 
-	requestURL := c.baseURL.ResolveReference(endpointURL)
+	// Create the full request URL
+	requestURL, err := url.Parse(c.baseURL.String())
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse base URL: %w", err)
+	}
+	requestURL.Path = urlPath
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL.String(), nil)
 	if err != nil {
