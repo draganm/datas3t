@@ -14,6 +14,8 @@ A Go service for managing datasets with S3 storage integration.
 - Atomic aggregation of multiple dataranges into a single consolidated range
 - Detection of missing data ranges to identify gaps in datasets
 - Clean deletion of datasets with cascading removal of related data and objects
+- Efficient multipart uploads with progress tracking for large datasets
+- Display of dataset sizes in gigabytes for easier comprehension
 
 ## Components
 
@@ -29,6 +31,12 @@ The server provides a REST API with the following endpoints:
 - `GET /api/v1/datas3t/{id}/datarange/{start}/{end}` - Get specific data range with start/end keys
 - `POST /api/v1/datas3t/{id}/aggregate/{start}/{end}` - Aggregate multiple dataranges into a single consolidated range
 - `GET /api/v1/datas3t/{id}/missing-ranges` - Identify gaps in dataset by calculating missing datapoint ranges
+- `POST /api/v1/datas3t/{id}/multipart` - Initiate a multipart upload
+- `PUT /api/v1/datas3t/{id}/multipart/{upload_id}/{part_number}` - Upload a part of a multipart upload
+- `POST /api/v1/datas3t/{id}/multipart/{upload_id}/complete` - Complete a multipart upload
+- `DELETE /api/v1/datas3t/{id}/multipart/{upload_id}` - Cancel a multipart upload
+- `GET /api/v1/datas3t/{id}/multipart/{upload_id}` - Get status of a multipart upload
+- `GET /api/v1/datas3t/{id}/multipart` - List all multipart uploads for a dataset
 
 ### Client Library
 
@@ -42,6 +50,7 @@ The client library (`pkg/client`) provides a Go interface for interacting with t
 - Retrieve individual data points
 - Aggregate multiple dataranges into a single consolidated range
 - Identify missing data ranges and gaps in datasets
+- Perform efficient multipart uploads with progress tracking
 
 ### Command-Line Interface (CLI)
 
@@ -54,6 +63,7 @@ The CLI (`cmd/datas3t-cli`) provides commands for:
 - Querying specific data ranges
 - Aggregating multiple dataranges into a single consolidated range
 - Detecting missing data ranges to identify completeness of datasets
+- Uploading large files with multipart upload and real-time progress tracking
 
 ### Restore Package
 
@@ -62,6 +72,15 @@ The restore package (`pkg/restore`) provides functionality to:
 - Discover datasets and dataranges from S3 storage
 - Restore database records from S3 metadata
 - Rebuild the complete database state in a single transaction
+
+## Recent Changes
+
+- **Multipart Upload Support**: Added efficient chunked upload capability for handling large datasets with parallel processing
+- **Progress Tracking**: Real-time progress tracking during uploads showing completion percentage, transfer speed, and ETA
+- **Improved Dataset Listing**: Dataset sizes now displayed in gigabytes for better readability
+- **Performance Optimizations**: Switched to latest tar-mmap for improved performance
+- **Dependency Updates**: Updated AWS SDK to version 1.72.3 for improved S3 compatibility
+- **Reliability Enhancements**: Reduced parallelism with increased retry attempts for better stability
 
 ## Data Dictionary
 
