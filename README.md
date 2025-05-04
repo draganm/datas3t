@@ -13,6 +13,7 @@ A Go service for managing datasets with S3 storage integration.
 - Automatic database restoration from S3 metadata if database is empty
 - Atomic aggregation of multiple dataranges into a single consolidated range
 - Detection of missing data ranges to identify gaps in datasets
+- Long-polling endpoint to wait for datasets to reach specific datapoints
 - Clean deletion of datasets with cascading removal of related data and objects
 - Efficient multipart uploads with progress tracking for large datasets
 - Display of dataset sizes in gigabytes for easier comprehension
@@ -31,6 +32,7 @@ The server provides a REST API with the following endpoints:
 - `GET /api/v1/datas3t/{id}/datarange/{start}/{end}` - Get specific data range with start/end keys
 - `POST /api/v1/datas3t/{id}/aggregate/{start}/{end}` - Aggregate multiple dataranges into a single consolidated range
 - `GET /api/v1/datas3t/{id}/missing-ranges` - Identify gaps in dataset by calculating missing datapoint ranges
+- `POST /api/v1/datas3t/wait` - Wait for datasets to reach specific datapoints (long-polling)
 - `POST /api/v1/datas3t/{id}/multipart` - Initiate a multipart upload
 - `PUT /api/v1/datas3t/{id}/multipart/{upload_id}/{part_number}` - Upload a part of a multipart upload
 - `POST /api/v1/datas3t/{id}/multipart/{upload_id}/complete` - Complete a multipart upload
@@ -75,6 +77,7 @@ The restore package (`pkg/restore`) provides functionality to:
 
 ## Recent Changes
 
+- **Long-Polling Support**: Added endpoint to wait for datasets to reach specific datapoints
 - **Multipart Upload Support**: Added efficient chunked upload capability for handling large datasets with parallel processing
 - **Progress Tracking**: Real-time progress tracking during uploads showing completion percentage, transfer speed, and ETA
 - **Improved Dataset Listing**: Dataset sizes now displayed in gigabytes for better readability
