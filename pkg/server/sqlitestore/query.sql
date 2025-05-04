@@ -144,8 +144,8 @@ SELECT count(*) > 0 FROM keys_to_delete WHERE key LIKE ?;
 
 -- name: GetFirstAndLastDatapoint :one
 SELECT 
-    CAST(CASE WHEN COUNT(*) = 0 THEN NULL ELSE MIN(min_datapoint_key) END AS BIGINT) as first_datapoint_key,
-    CAST(CASE WHEN COUNT(*) = 0 THEN NULL ELSE MAX(max_datapoint_key) END AS BIGINT) as last_datapoint_key
+    CAST(CASE WHEN COUNT(*) = 0 THEN -1 ELSE MIN(min_datapoint_key) END AS BIGINT) as first_datapoint_key,
+    CAST(CASE WHEN COUNT(*) = 0 THEN -1 ELSE MAX(max_datapoint_key) END AS BIGINT) as last_datapoint_key
 FROM dataranges
 WHERE dataset_name = ?;
 

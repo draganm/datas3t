@@ -47,7 +47,7 @@ func (s *Server) HandleGetMissingRanges(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// If there are no datapoints, return empty response with nulls
-	if !firstAndLast.FirstDatapointKey.Valid || !firstAndLast.LastDatapointKey.Valid {
+	if firstAndLast.FirstDatapointKey < 0 || firstAndLast.LastDatapointKey < 0 {
 		response := MissingRangesResponse{
 			FirstDatapoint: nil,
 			LastDatapoint:  nil,
@@ -70,9 +70,9 @@ func (s *Server) HandleGetMissingRanges(w http.ResponseWriter, r *http.Request) 
 	var missingRanges []Range
 
 	// Check if there's a gap at the beginning
-	if len(ranges) > 0 && uint64(ranges[0].MinDatapointKey) > uint64(firstAndLast.FirstDatapointKey.Int64) {
+	if len(ranges) > 0 && uint64(ranges[0].MinDatapointKey) > uint64(firstAndLast.FirstDatapointKey) {
 		missingRanges = append(missingRanges, Range{
-			Start: uint64(firstAndLast.FirstDatapointKey.Int64),
+			Start: uint64(firstAndLast.FirstDatapointKey),
 			End:   uint64(ranges[0].MinDatapointKey) - 1,
 		})
 	}
@@ -92,16 +92,16 @@ func (s *Server) HandleGetMissingRanges(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Check if there's a gap at the end
-	if len(ranges) > 0 && uint64(ranges[len(ranges)-1].MaxDatapointKey) < uint64(firstAndLast.LastDatapointKey.Int64) {
+	if len(ranges) > 0 && uint64(ranges[len(ranges)-1].MaxDatapointKey) < uint64(firstAndLast.LastDatapointKey) {
 		missingRanges = append(missingRanges, Range{
 			Start: uint64(ranges[len(ranges)-1].MaxDatapointKey) + 1,
-			End:   uint64(firstAndLast.LastDatapointKey.Int64),
+			End:   uint64(firstAndLast.LastDatapointKey),
 		})
 	}
 
 	// Convert to pointers for JSON response
-	first := uint64(firstAndLast.FirstDatapointKey.Int64)
-	last := uint64(firstAndLast.LastDatapointKey.Int64)
+	first := uint64(firstAndLast.FirstDatapointKey)
+	last := uint64(firstAndLast.LastDatapointKey)
 
 	// Prepare response
 	response := MissingRangesResponse{
