@@ -78,7 +78,7 @@ outer:
 		}
 
 		if len(missingDatasets) > 0 {
-			response := map[string]interface{}{
+			response := map[string]any{
 				"error":           "One or more datasets do not exist",
 				"missingDatasets": missingDatasets,
 			}
@@ -102,7 +102,7 @@ outer:
 		// Wait a short time before checking again
 		select {
 		case <-ctx.Done():
-			return
+			break outer
 		case <-time.After(500 * time.Millisecond):
 			// Continue checking
 		}
