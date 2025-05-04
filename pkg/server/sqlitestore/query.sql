@@ -156,3 +156,12 @@ SELECT
 FROM dataranges 
 WHERE dataset_name = ?
 ORDER BY min_datapoint_key ASC;
+
+-- name: GetLargestDatapointForDatasets :many
+SELECT 
+    dataset_name,
+    CAST(MAX(max_datapoint_key) AS UNSIGNED BIGINT) as largest_datapoint_key
+FROM dataranges
+WHERE dataset_name IN (sqlc.slice('dataset_names'))
+GROUP BY dataset_name
+ORDER BY dataset_name;

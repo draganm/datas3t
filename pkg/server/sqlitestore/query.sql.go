@@ -496,6 +496,54 @@ func (q *Queries) GetKeysToDelete(ctx context.Context) ([]GetKeysToDeleteRow, er
 	return items, nil
 }
 
+const getLargestDatapointForDatasets = `-- name: GetLargestDatapointForDatasets :many
+SELECT 
+    dataset_name,
+    CAST(MAX(max_datapoint_key) AS UNSIGNED BIGINT) as largest_datapoint_key
+FROM dataranges
+WHERE dataset_name IN (/*SLICE:dataset_names*/?)
+GROUP BY dataset_name
+ORDER BY dataset_name
+`
+
+type GetLargestDatapointForDatasetsRow struct {
+	DatasetName         string
+	LargestDatapointKey int64
+}
+
+func (q *Queries) GetLargestDatapointForDatasets(ctx context.Context, datasetNames []string) ([]GetLargestDatapointForDatasetsRow, error) {
+	query := getLargestDatapointForDatasets
+	var queryParams []interface{}
+	if len(datasetNames) > 0 {
+		for _, v := range datasetNames {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:dataset_names*/?", strings.Repeat(",?", len(datasetNames))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:dataset_names*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetLargestDatapointForDatasetsRow
+	for rows.Next() {
+		var i GetLargestDatapointForDatasetsRow
+		if err := rows.Scan(&i.DatasetName, &i.LargestDatapointKey); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getSectionsOfDataranges = `-- name: GetSectionsOfDataranges :many
 SELECT 
     dr.id,

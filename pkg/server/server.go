@@ -184,6 +184,7 @@ func CreateServer(
 	mux.HandleFunc("GET /api/v1/datas3t/{id}/datarange/{start}/{end}", server.HandleGetDatarange)
 	mux.HandleFunc("POST /api/v1/datas3t/{id}/aggregate/{start}/{end}", server.HandleAggregateDatarange)
 	mux.HandleFunc("GET /api/v1/datas3t/{id}/missing-ranges", server.HandleGetMissingRanges)
+	mux.HandleFunc("POST /api/v1/datas3t/wait", server.HandleWaitDatasets)
 	mux.HandleFunc("GET /healthy", server.HandleHealthCheck)
 
 	server.Handler = mux
