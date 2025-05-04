@@ -11,6 +11,7 @@ import (
 	"github.com/draganm/datas3t/cmd/datas3t-cli/commands/get"
 	"github.com/draganm/datas3t/cmd/datas3t-cli/commands/list"
 	"github.com/draganm/datas3t/cmd/datas3t-cli/commands/missing"
+	"github.com/draganm/datas3t/cmd/datas3t-cli/commands/wait"
 	"github.com/urfave/cli/v2"
 )
 
@@ -28,6 +29,7 @@ func main() {
 			get.Command(log),
 			aggregate.Command(log),
 			missing.Command(log),
+			wait.Command(log),
 		},
 	}
 

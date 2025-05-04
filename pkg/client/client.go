@@ -45,6 +45,16 @@ type AggregateResponse struct {
 	SizeBytes      uint64 `json:"size_bytes"`
 }
 
+// WaitDatasetsRequest represents the request structure for the wait datasets endpoint
+type WaitDatasetsRequest struct {
+	Datasets map[string]uint64 `json:"datasets"` // Map of dataset name to desired datapoint
+}
+
+// WaitDatasetsResponse represents the response structure for the wait datasets endpoint
+type WaitDatasetsResponse struct {
+	Datasets map[string]uint64 `json:"datasets"` // Map of dataset name to max datapoint
+}
+
 // InitiateMultipartUploadResponse represents the response from initiating a multipart upload
 type InitiateMultipartUploadResponse struct {
 	UploadID  string `json:"upload_id"`

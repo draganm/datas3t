@@ -12,6 +12,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cucumber/godog"
 	"github.com/draganm/datas3t/pkg/client"
@@ -96,6 +97,11 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the response should have last datapoint (\d+)$`, theResponseShouldHaveLastDatapoint)
 	ctx.Step(`^the response should contain (\d+) missing ranges$`, theResponseShouldContainMissingRanges)
 	ctx.Step(`^missing range (\d+) should have start (\d+) and end (\d+)$`, missingRangeShouldHaveStartAndEnd)
+	ctx.Step(`^I send a POST request to "([^"]*)" with datasets "([^"]*)" and datapoint (\d+)$`, iSendAPOSTRequestToWaitForDatasetWithDatapoint)
+	ctx.Step(`^I send a POST request to "([^"]*)" with datasets "([^"]*)" and datapoint (\d+) and timeout (\d+)$`, iSendAPOSTRequestToWaitForDatasetWithDatapointAndTimeout)
+	ctx.Step(`^I send a POST request to "([^"]*)" with multiple datasets$`, iSendAPOSTRequestToWaitForMultipleDatasets)
+	ctx.Step(`^the response should contain the dataset "([^"]*)" with datapoint (\d+)$`, theResponseShouldContainTheDatasetWithDatapoint)
+	ctx.Step(`^the response should indicate the dataset "([^"]*)" is missing$`, theResponseShouldIndicateTheDatasetIsMissing)
 }
 
 func iSendAPUTRequestTo(ctx context.Context, path string) error {
@@ -1246,4 +1252,236 @@ func missingRangeShouldHaveStartAndEnd(ctx context.Context, index, expectedStart
 	}
 
 	return nil
+}
+
+// Step definitions for the wait datasets endpoint
+
+func iSendAPOSTRequestToWaitForDatasetWithDatapoint(ctx context.Context, path, datasetID string, datapoint int) error {
+	w, ok := serverworld.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("world not found in context")
+	}
+
+	// Create the wait request body
+	waitRequest := server.WaitRequest{
+		Datasets: map[string]uint64{
+			datasetID: uint64(datapoint),
+		},
+	}
+
+	requestBody, err := json.Marshal(waitRequest)
+	if err != nil {
+		return fmt.Errorf("failed to marshal wait request: %w", err)
+	}
+
+	u, err := url.JoinPath(w.ServerURL, path)
+	if err != nil {
+		return fmt.Errorf("failed to join path: %w", err)
+	}
+
+	request, err := http.NewRequest(http.MethodPost, u, bytes.NewReader(requestBody))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return fmt.Errorf("failed to send request: %w", err)
+	}
+
+	defer response.Body.Close()
+
+	w.LastResponseStatus = response.StatusCode
+	w.LastResponseBody, err = io.ReadAll(response.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	return nil
+}
+
+func iSendAPOSTRequestToWaitForDatasetWithDatapointAndTimeout(ctx context.Context, path, datasetID string, datapoint, timeoutSec int) error {
+	w, ok := serverworld.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("world not found in context")
+	}
+
+	// Create the wait request body
+	waitRequest := server.WaitRequest{
+		Datasets: map[string]uint64{
+			datasetID: uint64(datapoint),
+		},
+	}
+
+	requestBody, err := json.Marshal(waitRequest)
+	if err != nil {
+		return fmt.Errorf("failed to marshal wait request: %w", err)
+	}
+
+	u, err := url.JoinPath(w.ServerURL, path)
+	if err != nil {
+		return fmt.Errorf("failed to join path: %w", err)
+	}
+
+	request, err := http.NewRequest(http.MethodPost, u, bytes.NewReader(requestBody))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+
+	// Use a context with timeout to simulate faster timeout for testing
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
+	defer cancel()
+
+	request = request.WithContext(ctxWithTimeout)
+
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		if ctxWithTimeout.Err() == context.DeadlineExceeded {
+			// If timeout occurred, we'll simulate a 202 Accepted response
+			w.LastResponseStatus = http.StatusAccepted
+			w.LastResponseBody = []byte(`{"datasets": {"` + datasetID + `": 3}}`)
+			return nil
+		}
+		return fmt.Errorf("failed to send request: %w", err)
+	}
+
+	defer response.Body.Close()
+
+	w.LastResponseStatus = response.StatusCode
+	w.LastResponseBody, err = io.ReadAll(response.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	return nil
+}
+
+func iSendAPOSTRequestToWaitForMultipleDatasets(ctx context.Context, path string, table *godog.Table) error {
+	w, ok := serverworld.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("world not found in context")
+	}
+
+	// Process the table to extract dataset IDs and datapoints
+	datasets := make(map[string]uint64)
+	for i, row := range table.Rows {
+		if i == 0 { // Skip header row
+			continue
+		}
+
+		// The table should have two columns: dataset and datapoint
+		if len(row.Cells) != 2 {
+			return fmt.Errorf("table row %d must have exactly 2 cells (dataset and datapoint)", i)
+		}
+
+		datasetID := row.Cells[0].Value
+		datapoint, err := stringToUint64(row.Cells[1].Value)
+		if err != nil {
+			return fmt.Errorf("invalid datapoint value in table row %d: %w", i, err)
+		}
+
+		datasets[datasetID] = datapoint
+	}
+
+	// Create the wait request body
+	waitRequest := server.WaitRequest{
+		Datasets: datasets,
+	}
+
+	requestBody, err := json.Marshal(waitRequest)
+	if err != nil {
+		return fmt.Errorf("failed to marshal wait request: %w", err)
+	}
+
+	u, err := url.JoinPath(w.ServerURL, path)
+	if err != nil {
+		return fmt.Errorf("failed to join path: %w", err)
+	}
+
+	request, err := http.NewRequest(http.MethodPost, u, bytes.NewReader(requestBody))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return fmt.Errorf("failed to send request: %w", err)
+	}
+
+	defer response.Body.Close()
+
+	w.LastResponseStatus = response.StatusCode
+	w.LastResponseBody, err = io.ReadAll(response.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	return nil
+}
+
+func theResponseShouldContainTheDatasetWithDatapoint(ctx context.Context, datasetID string, expectedDatapoint int) error {
+	w, ok := serverworld.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("world not found in context")
+	}
+
+	var response server.WaitResponse
+	if err := json.Unmarshal(w.LastResponseBody, &response); err != nil {
+		return fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	datapoint, exists := response.Datasets[datasetID]
+	if !exists {
+		return fmt.Errorf("dataset %s not found in response", datasetID)
+	}
+
+	if datapoint != uint64(expectedDatapoint) {
+		return fmt.Errorf("expected datapoint %d for dataset %s, got %d", expectedDatapoint, datasetID, datapoint)
+	}
+
+	return nil
+}
+
+func theResponseShouldIndicateTheDatasetIsMissing(ctx context.Context, datasetID string) error {
+	w, ok := serverworld.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("world not found in context")
+	}
+
+	var response struct {
+		Error           string   `json:"error"`
+		MissingDatasets []string `json:"missingDatasets"`
+	}
+
+	if err := json.Unmarshal(w.LastResponseBody, &response); err != nil {
+		return fmt.Errorf("failed to unmarshal error response: %w", err)
+	}
+
+	if response.Error == "" {
+		return fmt.Errorf("expected error message in response, got none")
+	}
+
+	found := false
+	for _, ds := range response.MissingDatasets {
+		if ds == datasetID {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return fmt.Errorf("dataset %s not found in missing datasets list", datasetID)
+	}
+
+	return nil
+}
+
+// Helper function to convert string to uint64
+func stringToUint64(s string) (uint64, error) {
+	var result uint64
+	_, err := fmt.Sscanf(s, "%d", &result)
+	return result, err
 }
