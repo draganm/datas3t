@@ -32,35 +32,25 @@ func (s *Server) HandleWaitDatasets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if any datasets are missing
 	store := sqlitestore.New(s.DB)
-	// missingDatasets := []string{}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
 
-	// // Return error if any datasets are missing
-	// if len(missingDatasets) > 0 {
-	// 	response := map[string]interface{}{
-	// 		"error":           "One or more datasets do not exist",
-	// 		"missingDatasets": missingDatasets,
-	// 	}
-	// 	w.Header().Set("Content-Type", "application/json")
-	// 	w.WriteHeader(http.StatusBadRequest)
-	// 	json.NewEncoder(w).Encode(response)
-	// 	return
-	// }
+	datasetMaxPoints := make(map[string]uint64)
 
 	// Keep checking until all conditions are met or timeout is reached
-	datasetMaxPoints := make(map[string]uint64)
+outer:
 	for {
 		allConditionsMet := true
 
 		datapoints, err := store.GetLargestDatapointForDatasets(ctx, slices.Collect(maps.Keys(req.Datasets)))
-		if err == context.DeadlineExceeded {
-			break
-		}
-		if err != nil {
+		switch err {
+		case context.DeadlineExceeded, context.Canceled:
+			break outer
+		case nil:
+			// Do nothing
+		default:
 			s.logger.Error("failed to get largest datapoint", "error", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
@@ -117,17 +107,6 @@ func (s *Server) HandleWaitDatasets(w http.ResponseWriter, r *http.Request) {
 			// Continue checking
 		}
 	}
-
-	// // Include current max datapoints for each dataset
-	// for datasetName := range req.Datasets {
-	// 	maxDatapoint, err := store.GetMaxDatapointForDataset(r.Context(), datasetName)
-	// 	if err != nil {
-	// 		s.logger.Error("failed to get max datapoint", "dataset", datasetName, "error", err)
-	// 		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	// 		return
-	// 	}
-	// 	response.Datasets[datasetName] = maxDatapoint
-	// }
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Retry-After", "1") // Suggest client retry after 1 second
