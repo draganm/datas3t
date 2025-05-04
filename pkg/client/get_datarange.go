@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"iter"
+
 	"golang.org/x/sync/errgroup"
 )
 
@@ -61,34 +63,77 @@ func (c *Client) GetDatarange(ctx context.Context, id string, start, end uint64)
 	return ranges, nil
 }
 
-func DownloadDataranges(ctx context.Context, ranges []ObjectAndRange, file io.WriterAt) error {
-	downloads := make([]toDownload, len(ranges))
-	localFileOffset := uint64(0)
-	for i, r := range ranges {
-		downloads[i] = toDownload{
-			url:              r.GETURL,
-			localFileOffset:  localFileOffset,
-			remoteRangeStart: r.Start,
-			remoteRangeEnd:   r.End,
+type DownloadRanges []ObjectAndRange
+
+type downloadSegment struct {
+	objectAndRange  ObjectAndRange
+	localFileOffset uint64
+}
+
+func (r DownloadRanges) Iterate(maxChunkSize uint64) iter.Seq[downloadSegment] {
+
+	return func(yield func(downloadSegment) bool) {
+
+		localFileOffset := uint64(0)
+
+		for _, item := range r {
+
+			currentItemStart := item.Start
+
+			for item.End-currentItemStart+1 > maxChunkSize {
+
+				cnt := yield(downloadSegment{
+					objectAndRange: ObjectAndRange{
+						GETURL: item.GETURL,
+						Start:  currentItemStart,
+						End:    currentItemStart + maxChunkSize - 1,
+					},
+					localFileOffset: localFileOffset,
+				})
+				if !cnt {
+					return
+				}
+
+				localFileOffset += maxChunkSize
+				currentItemStart += maxChunkSize
+
+			}
+
+			cnt := yield(downloadSegment{
+				objectAndRange: ObjectAndRange{
+					GETURL: item.GETURL,
+					Start:  currentItemStart,
+					End:    item.End,
+				},
+				localFileOffset: localFileOffset,
+			})
+			if !cnt {
+				return
+			}
+
+			localFileOffset += item.End - currentItemStart + 1
+
 		}
-		localFileOffset += r.End - r.Start + 1
 	}
+}
+
+func DownloadDataranges(ctx context.Context, ranges DownloadRanges, file io.WriterAt) error {
 
 	g, grCtx := errgroup.WithContext(ctx)
 
 	g.SetLimit(10)
 
-	for _, d := range downloads {
+	lastByteOffset := uint64(0)
+	for d := range ranges.Iterate(5 * 1024 * 1024) {
+		lastByteOffset = max(lastByteOffset, d.localFileOffset+d.objectAndRange.End-d.objectAndRange.Start+1)
 		g.Go(func() error {
-			req, err := http.NewRequestWithContext(grCtx, "GET", d.url, nil)
+			req, err := http.NewRequestWithContext(grCtx, "GET", d.objectAndRange.GETURL, nil)
 			if err != nil {
 				return fmt.Errorf("failed to create request: %w", err)
 			}
 
-			rangeHeader := fmt.Sprintf("bytes=%d-%d", d.remoteRangeStart, d.remoteRangeEnd)
+			rangeHeader := fmt.Sprintf("bytes=%d-%d", d.objectAndRange.Start, d.objectAndRange.End)
 			req.Header.Set("Range", rangeHeader)
-
-			fmt.Println("downloading", d.url, rangeHeader, d.localFileOffset)
 
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
@@ -120,14 +165,10 @@ func DownloadDataranges(ctx context.Context, ranges []ObjectAndRange, file io.Wr
 		return fmt.Errorf("failed to download data: %w", err)
 	}
 
-	emptyBlock := make([]byte, 512)
-	_, err = file.WriteAt(emptyBlock, int64(localFileOffset))
+	emptyTwoBlocks := make([]byte, 512*2)
+	_, err = file.WriteAt(emptyTwoBlocks, int64(lastByteOffset))
 	if err != nil {
 		return fmt.Errorf("failed to write first empty block: %w", err)
-	}
-	_, err = file.WriteAt(emptyBlock, int64(localFileOffset+512))
-	if err != nil {
-		return fmt.Errorf("failed to write second empty block: %w", err)
 	}
 
 	return nil
