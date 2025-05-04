@@ -1,11 +1,13 @@
 package wait
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/draganm/datas3t/pkg/client"
 	"github.com/jedib0t/go-pretty/v6/table"
@@ -16,6 +18,7 @@ import (
 func Command(log *slog.Logger) *cli.Command {
 	cfg := struct {
 		serverURL string
+		timeout   time.Duration
 	}{}
 
 	return &cli.Command{
@@ -29,6 +32,13 @@ func Command(log *slog.Logger) *cli.Command {
 				Destination: &cfg.serverURL,
 				EnvVars:     []string{"DATAS3T_SERVER_URL"},
 			},
+			&cli.DurationFlag{
+				Name:        "timeout",
+				Value:       20 * time.Second,
+				Usage:       "Timeout duration (default: 20s)",
+				Destination: &cfg.timeout,
+				EnvVars:     []string{"DATAS3T_TIMEOUT"},
+			},
 		},
 		ArgsUsage: "DATASET1:DATAPOINT1 [DATASET2:DATAPOINT2 ...]",
 		Description: `Wait for one or more datasets to reach specific datapoints.
@@ -36,8 +46,8 @@ Example:
   datas3t-cli wait --server-url http://localhost:8080 my-dataset:100 another-dataset:500
 
 This will wait until my-dataset has datapoint 100 and another-dataset has datapoint 500.
-The command will keep polling until the conditions are met or the operation is cancelled.
-Returns 0 if all conditions are met, 1 if any error occurs.`,
+The command will keep polling until the conditions are met, the operation is cancelled, or timeout is reached.
+Returns 0 if all conditions are met, 1 if any error occurs or timeout is reached.`,
 		Action: func(c *cli.Context) error {
 			// Parse dataset:datapoint arguments
 			datasets := make(map[string]uint64)
@@ -64,11 +74,22 @@ Returns 0 if all conditions are met, 1 if any error occurs.`,
 				return fmt.Errorf("failed to create client: %w", err)
 			}
 
-			log.Info("Waiting for datasets to reach specified datapoints",
-				"datasets", datasets)
+			log.Info(
+				"Waiting for datasets to reach specified datapoints",
+				"datasets", datasets,
+				"timeout", cfg.timeout.String(),
+			)
 
-			response, err := cl.WaitDatasets(c.Context, datasets)
+			// Create context with timeout
+			ctx, cancel := context.WithTimeout(c.Context, cfg.timeout)
+			defer cancel()
+
+			response, err := cl.WaitDatasets(ctx, datasets)
 			if err != nil {
+				if ctx.Err() == context.DeadlineExceeded {
+					return cli.Exit("Timeout waiting for datasets to reach specified datapoints", 1)
+				}
+
 				statusCode := client.GetStatusCode(err)
 				if statusCode == 400 {
 					return fmt.Errorf("one or more datasets do not exist: %w", err)

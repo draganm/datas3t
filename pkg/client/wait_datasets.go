@@ -75,7 +75,12 @@ func (c *Client) WaitDatasets(ctx context.Context, datasets map[string]uint64) (
 			// If we get 202 Accepted, continue polling
 			if resp.StatusCode == http.StatusAccepted {
 				// Brief pause to avoid hammering the server
-				time.Sleep(500 * time.Millisecond)
+				select {
+				case <-ctx.Done():
+					return nil, fmt.Errorf("operation canceled: %w", ctx.Err())
+				case <-time.After(500 * time.Millisecond):
+					// Continue polling
+				}
 				continue
 			}
 		}
