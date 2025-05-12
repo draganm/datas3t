@@ -1,6 +1,8 @@
 module github.com/draganm/datas3t
 
-go 1.23.0
+go 1.23.3
+
+toolchain go1.23.6
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.36.3
@@ -13,6 +15,8 @@ require (
 	github.com/draganm/tar-mmap-go v0.0.5
 	github.com/dustin/go-humanize v1.0.1
 	github.com/golang-migrate/migrate/v4 v4.18.2
+	github.com/google/uuid v1.6.0
+	github.com/jedib0t/go-pretty/v6 v6.6.7
 	github.com/klauspost/compress v1.18.0
 	github.com/mattn/go-sqlite3 v1.14.24
 	github.com/minio/minio-go/v7 v7.0.88
@@ -59,13 +63,11 @@ require (
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/gofrs/uuid v4.3.1+incompatible // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
 	github.com/hashicorp/go-memdb v1.3.4 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/golang-lru v0.5.4 // indirect
-	github.com/jedib0t/go-pretty/v6 v6.6.7 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
