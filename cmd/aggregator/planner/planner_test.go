@@ -116,21 +116,21 @@ func TestAggregationOperationLevel(t *testing.T) {
 			expected: 0,
 		},
 		{
-			name: "level 1 - between 10MB and 1GB",
+			name: "level 1 - between 10MB and 100MB",
 			op: planner.AggregationOperation{
-				{SizeBytes: 500 * 1024 * 1024}, // 500MB
+				{SizeBytes: 50 * 1024 * 1024}, // 50MB
 			},
 			expected: 1,
 		},
 		{
-			name: "level 2 - between 1GB and 100GB",
+			name: "level 2 - between 100MB and 1GB",
 			op: planner.AggregationOperation{
-				{SizeBytes: 50 * 1024 * 1024 * 1024}, // 50GB
+				{SizeBytes: 500 * 1024 * 1024}, // 50MB
 			},
 			expected: 2,
 		},
 		{
-			name: "level 3 - over 100GB",
+			name: "level 3 - over 1GB",
 			op: planner.AggregationOperation{
 				{SizeBytes: 200 * 1024 * 1024 * 1024}, // 200GB
 			},
@@ -157,17 +157,17 @@ func TestDatarangeLevel(t *testing.T) {
 			expected: 0,
 		},
 		{
-			name:     "level 1 - between 10MB and 1GB",
-			dr:       client.DataRange{SizeBytes: 500 * 1024 * 1024}, // 500MB
+			name:     "level 1 - between 10MB and 100MB",
+			dr:       client.DataRange{SizeBytes: 50 * 1024 * 1024}, // 50MB
 			expected: 1,
 		},
 		{
-			name:     "level 2 - between 1GB and 100GB",
-			dr:       client.DataRange{SizeBytes: 50 * 1024 * 1024 * 1024}, // 50GB
+			name:     "level 2 - between 100MB and 1GB",
+			dr:       client.DataRange{SizeBytes: 300 * 1024 * 1024}, // 300MB
 			expected: 2,
 		},
 		{
-			name:     "level 3 - over 100GB",
+			name:     "level 3 - over 1GB",
 			dr:       client.DataRange{SizeBytes: 200 * 1024 * 1024 * 1024}, // 200GB
 			expected: 3,
 		},

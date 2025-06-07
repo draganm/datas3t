@@ -51,9 +51,9 @@ func DatarangeLevel(dr client.DataRange) int {
 }
 
 var levelTresholds = []uint64{
-	10 * 1024 * 1024,         // 10MB
-	1 * 1024 * 1024 * 1024,   // 1GB
-	100 * 1024 * 1024 * 1024, // 100MB
+	10 * 1024 * 1024,       // 10MB
+	100 * 1024 * 1024,      // 100MB
+	1 * 1024 * 1024 * 1024, // 1GB
 }
 
 var topLevel = len(levelTresholds)
