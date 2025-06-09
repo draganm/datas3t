@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/draganm/datas3t/cmd/aggregator/planner"
+	"github.com/draganm/datas3t/cmd/aggregator/optimizer"
 	"github.com/draganm/datas3t/pkg/client"
 	"github.com/urfave/cli/v2"
 )
@@ -18,6 +18,12 @@ const (
 	defaultTargetDatarangeSize = 100 * 1024 * 1024 // 100MB
 	defaultInterval            = 30 * time.Minute  // Default interval
 )
+
+// ContinuousRange represents a range with datapoint keys
+type ContinuousRange struct {
+	FromDatapointKey uint64
+	ToDatapointKey   uint64
+}
 
 func main() {
 	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
@@ -162,31 +168,95 @@ func processDataset(
 		return nil
 	}
 
-	// Create aggregation plan using the planner package
-	plans, err := planner.CreatePlan(dataranges)
-	if err != nil {
-		return fmt.Errorf("failed to create aggregation plan: %w", err)
-	}
-	log.Info("created aggregation plans", "dataset", datasetID, "plan_count", len(plans))
+	// Iteratively apply optimization steps until there's nothing more to optimize
+	optimizationRounds := 0
+	totalMergesApplied := 0
 
-	// Execute each plan
-	for _, plan := range plans {
+	for {
+		// Create optimizer with current dataranges
+		opt := optimizer.NewDataRangeMergeOptimizer(dataranges)
+
+		// Get the next best merge proposal
+		proposal := opt.ProposeNextMerge()
+		if proposal == nil {
+			log.Info("optimization complete - no more merges possible",
+				"dataset", datasetID,
+				"final_ranges", len(dataranges),
+				"rounds", optimizationRounds,
+				"total_merges", totalMergesApplied)
+			break
+		}
+
+		optimizationRounds++
+
+		log.Info("applying optimization",
+			"dataset", datasetID,
+			"round", optimizationRounds,
+			"merging_ranges", len(proposal.DataRangeIndices),
+			"result_size_mb", float64(proposal.ResultSize)/(1024*1024),
+			"efficiency", proposal.Efficiency)
+
+		// Convert the merge proposal to continuous range format for executeAggregationPlan
+		// First, find the min and max datapoint keys from the ranges to be merged
+		var minKey, maxKey uint64
+		for i, rangeIdx := range proposal.DataRangeIndices {
+			rangeToMerge := dataranges[rangeIdx]
+			if i == 0 {
+				minKey = rangeToMerge.MinDatapointKey
+				maxKey = rangeToMerge.MaxDatapointKey
+			} else {
+				if rangeToMerge.MinDatapointKey < minKey {
+					minKey = rangeToMerge.MinDatapointKey
+				}
+				if rangeToMerge.MaxDatapointKey > maxKey {
+					maxKey = rangeToMerge.MaxDatapointKey
+				}
+			}
+		}
+
+		// Create a ContinuousRange structure for executeAggregationPlan
+		plan := ContinuousRange{
+			FromDatapointKey: minKey,
+			ToDatapointKey:   maxKey,
+		}
+
+		// Execute the aggregation
 		err := executeAggregationPlan(ctx, c, datasetID, plan, log)
 		if err != nil {
-			log.Error("failed to execute aggregation plan",
+			log.Error("failed to execute optimization",
 				"dataset", datasetID,
-				"start_key", plan.FromDatapointKey,
-				"end_key", plan.ToDatapointKey,
+				"round", optimizationRounds,
 				"error", err)
-			// Continue with the next plan
-			continue
+			// Stop optimization on error
+			return fmt.Errorf("failed to execute optimization round %d: %w", optimizationRounds, err)
+		}
+
+		totalMergesApplied++
+
+		// Get updated dataranges after the merge
+		dataranges, err = c.GetDataranges(ctx, datasetID)
+		if err != nil {
+			return fmt.Errorf("failed to get updated dataranges after optimization: %w", err)
+		}
+
+		log.Info("optimization applied successfully",
+			"dataset", datasetID,
+			"round", optimizationRounds,
+			"new_range_count", len(dataranges))
+
+		// Safety check to prevent infinite loops
+		if optimizationRounds > 1000 {
+			log.Warn("stopping optimization due to maximum rounds limit",
+				"dataset", datasetID,
+				"rounds", optimizationRounds)
+			break
 		}
 	}
 
 	return nil
 }
 
-func executeAggregationPlan(ctx context.Context, c *client.Client, datasetID string, plan planner.ContinuousRange, log *slog.Logger) error {
+func executeAggregationPlan(ctx context.Context, c *client.Client, datasetID string, plan ContinuousRange, log *slog.Logger) error {
 	log.Info("executing aggregation plan",
 		"dataset", datasetID,
 		"start_key", plan.FromDatapointKey,
