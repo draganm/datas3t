@@ -339,32 +339,15 @@ func (s *Server) uploadDatapointsAndMetadata(ctx context.Context, filename, obje
 	}
 	defer file.Close()
 
-	st, err := file.Stat()
-	if err != nil {
-		return fmt.Errorf("failed to get file info: %w", err)
-	}
-
 	// Create uploader
 	uploader := manager.NewUploader(s.s3Client)
 
-	switch {
-	case st.Size() > 1024*1024*1024:
-		uploader.PartSize = 10 * 1024 * 1024
-		uploader.Concurrency = 10
-		uploader.MaxUploadParts = 1000
-		uploader.ClientOptions = []func(*s3.Options){
-			func(o *s3.Options) {
-				o.RetryMaxAttempts = 10
-			},
-		}
-	case st.Size() > 128*1024*1024:
-		uploader.Concurrency = 7
-		uploader.ClientOptions = []func(*s3.Options){
-			func(o *s3.Options) {
-				o.RetryMaxAttempts = 5
-			},
-		}
+	uploader.ClientOptions = []func(*s3.Options){
+		func(o *s3.Options) {
+			o.RetryMaxAttempts = 20
+		},
 	}
+
 	// Upload file to S3 using Upload Manager
 	_, err = uploader.Upload(ctx, &s3.PutObjectInput{
 		Bucket: aws.String(s.bucket),
