@@ -28,22 +28,22 @@ jobs:
         env:
           AWS_REQUEST_CHECKSUM_CALCULATION: "when_required"
 
-  # docker:
-  #   name: Build and Push Docker Image
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - name: Docker build
-  #       run: docker build -t dmilhdef/datas3t:latest .
-  #     - name: Push to Docker Hub (main branch)
-  #       if: github.ref == 'refs/heads/main'
-  #       run: |
-  #         echo ${{ secrets.DOCKER_HUB_TOKEN }} | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
-  #         docker push dmilhdef/datas3t:latest
-  #     - name: Push to Docker Hub (tag)
-  #       if: startsWith(github.ref, 'refs/tags/')
-  #       run: |
-  #         echo ${{ secrets.DOCKER_HUB_TOKEN }} | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
-  #         TAG=${GITHUB_REF#refs/tags/}
-  #         docker tag dmilhdef/datas3t:latest dmilhdef/datas3t:$TAG
-  #         docker push dmilhdef/datas3t:$TAG
+  docker:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Docker build
+        run: docker build -t dmilhdef/datas3t:latest .
+      - name: Push to Docker Hub (main branch)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          echo ${{ secrets.DOCKER_HUB_TOKEN }} | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
+          docker push dmilhdef/datas3t:latest
+      - name: Push to Docker Hub (tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          echo ${{ secrets.DOCKER_HUB_TOKEN }} | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
+          TAG=${GITHUB_REF#refs/tags/}
+          docker tag dmilhdef/datas3t:latest dmilhdef/datas3t:$TAG
+          docker push dmilhdef/datas3t:$TAG
