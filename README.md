@@ -1,136 +1,365 @@
-# Datas3t
+# datas3t
 
-A Go service for managing datasets with S3 storage integration.
+A high-performance data management system for storing, indexing, and retrieving large-scale datasets in S3-compatible object storage.
 
-## Features
+## Overview
 
-- Create and manage datasets
-- Store dataset data in S3-compatible storage
-- REST API for dataset operations including data range queries
-- Integration with MinIO for development and testing
-- Client library for programmatic access
-- Command-line interface (CLI) for easy interaction
-- Automatic database restoration from S3 metadata if database is empty
-- Atomic aggregation of multiple dataranges into a single consolidated range
-- Detection of missing data ranges to identify gaps in datasets
-- Long-polling endpoint to wait for datasets to reach specific datapoints
-- Clean deletion of datasets with cascading removal of related data and objects
-- Efficient multipart uploads with progress tracking for large datasets
-- Display of dataset sizes in gigabytes for easier comprehension
+datas3t is designed for efficiently managing datasets containing millions of individual files (called "datapoints"). It stores files as indexed TAR archives in S3-compatible storage, enabling fast random access without the overhead of extracting entire archives.
 
-## Components
+## Key Features
 
-### Server
+### 🗜️ **Efficient Storage**
+- Packs individual files into TAR archives
+- Eliminates S3 object overhead for small files
+- Supports datasets with millions of datapoints
 
-The server provides a REST API with the following endpoints:
-- `GET /api/v1/datas3t` - List all datasets
-- `PUT /api/v1/datas3t/{id}` - Create a dataset
-- `GET /api/v1/datas3t/{id}` - Get dataset information
-- `DELETE /api/v1/datas3t/{id}` - Delete a dataset and all associated data
-- `POST /api/v1/datas3t/{id}` - Upload data to a dataset
-- `GET /api/v1/datas3t/{id}/dataranges` - Get all data ranges for a dataset
-- `GET /api/v1/datas3t/{id}/datarange/{start}/{end}` - Get specific data range with start/end keys
-- `POST /api/v1/datas3t/{id}/aggregate/{start}/{end}` - Aggregate multiple dataranges into a single consolidated range
-- `GET /api/v1/datas3t/{id}/missing-ranges` - Identify gaps in dataset by calculating missing datapoint ranges
-- `POST /api/v1/datas3t/wait` - Wait for datasets to reach specific datapoints (long-polling)
-- `POST /api/v1/datas3t/{id}/multipart` - Initiate a multipart upload
-- `PUT /api/v1/datas3t/{id}/multipart/{upload_id}/{part_number}` - Upload a part of a multipart upload
-- `POST /api/v1/datas3t/{id}/multipart/{upload_id}/complete` - Complete a multipart upload
-- `DELETE /api/v1/datas3t/{id}/multipart/{upload_id}` - Cancel a multipart upload
-- `GET /api/v1/datas3t/{id}/multipart/{upload_id}` - Get status of a multipart upload
-- `GET /api/v1/datas3t/{id}/multipart` - List all multipart uploads for a dataset
+### ⚡ **Fast Random Access**
+- Creates lightweight indices for TAR archives
+- Enables direct access to specific files without extraction
+- Disk-based caching for frequently accessed indices
 
-### Client Library
+### 📦 **Range-based Operations**
+- Upload and download data in configurable chunks (dataranges)
+- Supports partial dataset retrieval
+- Parallel processing of multiple ranges
 
-The client library (`pkg/client`) provides a Go interface for interacting with the Datas3t server:
-- List all available datasets
-- Create datasets
-- Retrieve dataset information
-- Delete datasets with all associated data
-- Upload data ranges
-- Get data ranges (all or specific range)
-- Retrieve individual data points
-- Aggregate multiple dataranges into a single consolidated range
-- Identify missing data ranges and gaps in datasets
-- Perform efficient multipart uploads with progress tracking
+### 🔗 **Direct Client-to-Storage Transfer**
+- Uses S3 presigned URLs for efficient data transfer
+- Bypasses server for large file operations
+- Supports multipart uploads for large datasets
 
-### Command-Line Interface (CLI)
+### 🛡️ **Data Integrity**
+- Validates TAR structure and file naming conventions
+- Ensures datapoint consistency across operations
+- Transactional database operations
 
-The CLI (`cmd/datas3t-cli`) provides commands for:
-- Creating datasets
-- Getting dataset information
-- Deleting datasets and their associated data
-- Uploading data ranges
-- Listing datasets
-- Querying specific data ranges
-- Aggregating multiple dataranges into a single consolidated range
-- Detecting missing data ranges to identify completeness of datasets
-- Uploading large files with multipart upload and real-time progress tracking
+## Architecture
 
-### Restore Package
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────────┐
+│   Client/CLI    │───▶│   HTTP API       │───▶│   PostgreSQL        │
+│                 │    │   Server         │    │   (Metadata)        │
+└─────────────────┘    └──────────────────┘    └─────────────────────┘
+                                │
+                                ▼
+                       ┌──────────────────┐
+                       │  S3-Compatible   │
+                       │  Object Storage  │
+                       │  (TAR Archives)  │
+                       └──────────────────┘
+```
 
-The restore package (`pkg/restore`) provides functionality to:
-- Automatically detect if the database is empty
-- Discover datasets and dataranges from S3 storage
-- Restore database records from S3 metadata
-- Rebuild the complete database state in a single transaction
+### Components
 
-## Recent Changes
+- **HTTP API Server**: REST API for dataset management
+- **Client Library**: Go SDK for programmatic access  
+- **PostgreSQL Database**: Stores metadata and indices
+- **S3-Compatible Storage**: Stores TAR archives and indices
+- **TAR Indexing Engine**: Creates fast-access indices
+- **Disk Cache**: Local caching for performance
 
-- **Long-Polling Support**: Added endpoint to wait for datasets to reach specific datapoints
-- **Multipart Upload Support**: Added efficient chunked upload capability for handling large datasets with parallel processing
-- **Progress Tracking**: Real-time progress tracking during uploads showing completion percentage, transfer speed, and ETA
-- **Improved Dataset Listing**: Dataset sizes now displayed in gigabytes for better readability
-- **Performance Optimizations**: Switched to latest tar-mmap for improved performance
-- **Dependency Updates**: Updated AWS SDK to version 1.72.3 for improved S3 compatibility
-- **Reliability Enhancements**: Reduced parallelism with increased retry attempts for better stability
+## Core Concepts
 
-## Data Dictionary
+### Datasets (datas3ts)
+Named collections of related datapoints. Each dataset is associated with an S3 bucket configuration.
 
-For detailed information about the key terms and concepts used in this project, see [DATA_DICTIONARY.md](DATA_DICTIONARY.md).
+### Datapoints
+Individual files within a dataset, numbered sequentially:
+- `00000000000000000001.txt`
+- `00000000000000000002.jpg`
+- `00000000000000000003.json`
 
-## S3 Storage Layout
+### Dataranges
+Contiguous chunks of datapoints stored as TAR archives:
+- `datas3t/my-dataset/dataranges/00000000000000000001-00000000000000001000.tar`
+- `datas3t/my-dataset/dataranges/00000000000000001001-00000000000000002000.tar`
 
-For information about how datasets, dataranges, and metadata are stored in S3, see [S3_LAYOUT.md](S3_LAYOUT.md).
+### TAR Indices
+Lightweight index files enabling fast random access:
+- `datas3t/my-dataset/dataranges/00000000000000000001-00000000000000001000.index.zst`
 
-## Development
+## Quick Start
 
 ### Prerequisites
 
-- Go 1.23.6 or higher
-- Access to an S3-compatible storage service (e.g., MinIO, AWS S3)
-- SQLite database for metadata storage
+- [Nix with flakes enabled](https://nixos.wiki/wiki/Flakes) (recommended)
+- Go 1.24.3+
+- PostgreSQL 12+
+- S3-compatible storage (AWS S3, MinIO, etc.)
 
-### Setup
-
-1. Clone the repository
-2. Install dependencies: `go mod download`
-3. Configure environment variables for S3 access
-4. Ensure SQLite database path is writable
-
-### Running the server
+### Development Setup
 
 ```bash
-# Run the server
-go run cmd/server/server_main.go run --db-url <sqlite-db-url> --addr <listen-address> --s3-endpoint <s3-endpoint> --s3-region <region> --s3-access-key-id <access-key> --s3-secret-key <secret-key> --s3-bucket-name <bucket> --s3-use-ssl <true/false> --uploads-path <path>
+# Clone the repository
+git clone https://github.com/draganm/datas3t.git
+cd datas3t
 
-# Restore database from S3 storage (separate command)
-go run cmd/server/server_main.go restore --db-url <sqlite-db-url> --s3-endpoint <s3-endpoint> --s3-region <region> --s3-access-key-id <access-key> --s3-secret-key <secret-key> --s3-bucket-name <bucket> --s3-use-ssl <true/false>
+# Enter development environment
+nix develop
+
+# Run tests
+nix develop -c go test ./...
+
+# Generate code
+nix develop -c go generate ./...
 ```
 
-All server parameters can also be configured using environment variables:
-- `DATAS3T_DB_URL`: SQLite database URL
-- `DATAS3T_ADDR`: Server listen address (for run command)
-- `DATAS3T_S3_ENDPOINT`: S3 endpoint URL
-- `DATAS3T_S3_REGION`: S3 region
-- `DATAS3T_S3_ACCESS_KEY_ID`: S3 access key ID
-- `DATAS3T_S3_SECRET_KEY`: S3 secret access key
-- `DATAS3T_S3_BUCKET_NAME`: S3 bucket name
-- `DATAS3T_S3_USE_SSL`: Use SSL for S3 connection (true/false)
-- `DATAS3T_UPLOADS_PATH`: Path for temporary file uploads (for run command)
-
-## Testing
+### Running the Server
 
 ```bash
-go test ./...
+# Set environment variables
+export DB_URL="postgres://user:password@localhost:5432/datas3t"
+export ADDR=":8080"
+
+# Run database migrations
+nix develop -c go run cmd/server/server.go
+
+# Server will start on http://localhost:8080
 ```
+
+## API Usage
+
+### 1. Configure S3 Bucket
+
+```bash
+curl -X POST http://localhost:8080/api/bucket \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "my-bucket-config",
+    "endpoint": "s3.amazonaws.com",
+    "bucket": "my-data-bucket",
+    "access_key": "ACCESS_KEY",
+    "secret_key": "SECRET_KEY",
+    "use_tls": true
+  }'
+```
+
+### 2. Create Dataset
+
+```bash
+curl -X POST http://localhost:8080/api/datas3t \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "my-dataset",
+    "bucket": "my-bucket-config"
+  }'
+```
+
+### 3. Upload Datarange
+
+```bash
+# Start upload
+curl -X POST http://localhost:8080/api/datarange/upload/start \
+  -H "Content-Type: application/json" \
+  -d '{
+    "datas3t_name": "my-dataset",
+    "first_datapoint_index": 1,
+    "number_of_datapoints": 1000,
+    "data_size": 1048576
+  }'
+
+# Use returned presigned URLs to upload TAR archive and index
+# Then complete the upload
+curl -X POST http://localhost:8080/api/datarange/upload/complete \
+  -H "Content-Type: application/json" \
+  -d '{
+    "datarange_upload_id": 123
+  }'
+```
+
+### 4. Download Datapoints
+
+```bash
+curl -X POST http://localhost:8080/api/download/presign \
+  -H "Content-Type: application/json" \
+  -d '{
+    "datas3t_name": "my-dataset",
+    "first_datapoint": 100,
+    "last_datapoint": 200
+  }'
+```
+
+## Client Library Usage
+
+```go
+package main
+
+import (
+    "context"
+    "github.com/draganm/datas3t/v2/client"
+)
+
+func main() {
+    // Create client
+    c := client.New("http://localhost:8080")
+    
+    // List datasets
+    datasets, err := c.ListDatas3ts(context.Background())
+    if err != nil {
+        panic(err)
+    }
+    
+    // Download specific datapoints
+    response, err := c.PreSignDownloadForDatapoints(context.Background(), &client.PreSignDownloadForDatapointsRequest{
+        Datas3tName:    "my-dataset",
+        FirstDatapoint: 1,
+        LastDatapoint:  100,
+    })
+    if err != nil {
+        panic(err)
+    }
+    
+    // Use presigned URLs to download data directly from S3
+    for _, segment := range response.DownloadSegments {
+        // Download using segment.PresignedURL and segment.Range
+    }
+}
+```
+
+## File Naming Convention
+
+Datapoints must follow the naming pattern `%020d.<extension>`:
+- ✅ `00000000000000000001.txt`
+- ✅ `00000000000000000042.jpg`  
+- ✅ `00000000000000001337.json`
+- ❌ `file1.txt`
+- ❌ `1.txt`
+- ❌ `001.txt`
+
+## Performance Characteristics
+
+### Storage Efficiency
+- **Small Files**: 99%+ storage efficiency vs individual S3 objects
+- **Large Datasets**: Linear scaling with dataset size
+
+### Access Performance
+- **Index Lookup**: O(1) file location within TAR
+- **Range Queries**: Optimized byte-range requests
+- **Caching**: Local disk cache for frequently accessed indices
+
+### Scalability
+- **Concurrent Operations**: Supports parallel uploads/downloads
+- **Large Datasets**: Tested with millions of datapoints
+- **Distributed**: Stateless server design for horizontal scaling
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make changes following the existing patterns
+4. Run tests: `nix develop -c go test ./...`
+5. Submit a pull request
+
+### Development Guidelines
+
+- Use the Nix development environment for consistency
+- Follow Go error handling best practices
+- Use the `postgresstore` package for all database queries
+- Add tests for new functionality
+- Update API documentation for new endpoints
+
+## Architecture Details
+
+### Database Schema
+- **s3_buckets**: S3 configuration storage
+- **datasets**: Dataset metadata
+- **dataranges**: TAR archive metadata and byte ranges
+- **datarange_uploads**: Temporary upload state management
+
+### TAR Index Format
+Binary format with 16-byte entries per file:
+- Bytes 0-7: File position in TAR (big-endian uint64)
+- Bytes 8-9: Header blocks count (big-endian uint16)  
+- Bytes 10-15: File size (big-endian, 48-bit)
+
+### Caching Strategy
+- **Memory**: In-memory index objects during operations
+- **Disk**: Persistent cache for TAR indices
+- **LRU Eviction**: Automatic cleanup based on access patterns
+- **Cache Keys**: SHA-256 hash of datarange metadata
+
+## License
+
+This project is licensed under the AGPLV3 License - see the [LICENSE](LICENSE) file for details.
+
+## Support
+
+For questions, issues, or contributions:
+- Open an issue on GitHub
+- Check existing documentation
+- Review test files for usage examples
+
+## Installation
+
+```bash
+git clone https://github.com/draganm/datas3t/v2.git
+cd datas3t
+nix develop -c make build
+```
+
+## Configuration
+
+### Database Setup
+
+Create a PostgreSQL database and set the connection string:
+
+```bash
+export DB_URL="postgres://user:password@localhost:5432/datas3t"
+export CACHE_DIR="/path/to/cache"
+```
+
+### S3 Credential Encryption
+
+**Important: S3 credentials are encrypted at rest using AES-256-GCM with unique random nonces.**
+
+The encryption system provides the following security features:
+- **AES-256-GCM encryption**: Industry-standard authenticated encryption
+- **Unique nonces**: Each encryption uses a random nonce, so identical credentials produce different encrypted values
+- **Key derivation**: Input keys are SHA-256 hashed to ensure proper 32-byte key size
+- **Authenticated encryption**: Protects against tampering and ensures data integrity
+- **Transparent operation**: All S3 operations automatically encrypt/decrypt credentials
+
+#### Key Generation
+
+Generate a cryptographically secure 256-bit encryption key:
+
+```bash
+nix develop -c go run ./cmd/keygen
+```
+
+This generates a 32-byte (256-bit) random key encoded as base64. Store this key securely and set it as an environment variable:
+
+```bash
+export ENCRYPTION_KEY="your-generated-key-here"
+```
+
+#### Alternative Key Generation
+
+You can also use `datas3t-keygen` if you have built the binary:
+
+```bash
+./datas3t-keygen
+```
+
+**Critical Security Notes:**
+- Keep this key secure and backed up! If you lose it, you won't be able to decrypt your stored S3 credentials
+- The same key must be used consistently across server restarts
+- Changing the key will make existing encrypted credentials unreadable
+- Store the key separately from your database backups for additional security
+
+### Starting the Server
+
+```bash
+./datas3t-server --db-url "$DB_URL" --cache-dir "$CACHE_DIR" --encryption-key "$ENCRYPTION_KEY"
+```
+
+Or using environment variables:
+
+```bash
+export DB_URL="postgres://user:password@localhost:5432/datas3t"
+export CACHE_DIR="/path/to/cache"  
+export ENCRYPTION_KEY="your-encryption-key"
+./datas3t-server
+```
+
+## Usage 
