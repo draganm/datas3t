@@ -49,6 +49,13 @@ WHERE datas3t_id = $1
   AND min_datapoint_key < $2
   AND max_datapoint_key >= $3;
 
+-- name: CheckDatarangeUploadOverlap :one
+SELECT count(*) > 0
+FROM datarange_uploads
+WHERE datas3t_id = $1
+  AND first_datapoint_index < $2
+  AND (first_datapoint_index + number_of_datapoints - 1) >= $3;
+
 -- name: CreateDatarange :one
 INSERT INTO dataranges (datas3t_id, data_object_key, index_object_key, min_datapoint_key, max_datapoint_key, size_bytes)
 VALUES (@datas3t_id, @data_object_key, @index_object_key, @min_datapoint_key, @max_datapoint_key, @size_bytes)
@@ -56,7 +63,7 @@ RETURNING id;
 
 -- name: CreateDatarangeUpload :one
 INSERT INTO datarange_uploads (
-    datarange_id, 
+    datas3t_id, 
     upload_id,
     data_object_key,
     index_object_key,
@@ -64,20 +71,19 @@ INSERT INTO datarange_uploads (
     number_of_datapoints, 
     data_size
 )
-VALUES (@datarange_id, @upload_id, @data_object_key, @index_object_key, @first_datapoint_index, @number_of_datapoints, @data_size)
+VALUES (@datas3t_id, @upload_id, @data_object_key, @index_object_key, @first_datapoint_index, @number_of_datapoints, @data_size)
 RETURNING id;
 
 -- name: GetDatarangeUploadWithDetails :one
 SELECT 
     du.id, 
-    du.datarange_id, 
+    du.datas3t_id, 
     du.upload_id, 
     du.first_datapoint_index, 
     du.number_of_datapoints, 
     du.data_size,
-    dr.data_object_key, 
-    dr.index_object_key,
-    dr.datas3t_id,
+    du.data_object_key, 
+    du.index_object_key,
     d.name as datas3t_name, 
     d.s3_bucket_id,
     s.endpoint, 
@@ -85,8 +91,7 @@ SELECT
     s.access_key, 
     s.secret_key
 FROM datarange_uploads du
-JOIN dataranges dr ON du.datarange_id = dr.id  
-JOIN datas3ts d ON dr.datas3t_id = d.id
+JOIN datas3ts d ON du.datas3t_id = d.id
 JOIN s3_buckets s ON d.s3_bucket_id = s.id
 WHERE du.id = $1;
 
@@ -117,12 +122,10 @@ FROM s3_buckets
 WHERE s3_buckets.name = @bucket_name;
 
 -- name: AddDatarangeUpload :one
-INSERT INTO datarange_uploads (datarange_id, first_datapoint_index, number_of_datapoints, data_size)
-SELECT dr.id, @first_datapoint_index, @number_of_datapoints, @data_size
-FROM dataranges dr
-JOIN datas3ts d ON dr.datas3t_id = d.id
+INSERT INTO datarange_uploads (datas3t_id, first_datapoint_index, number_of_datapoints, data_size)
+SELECT d.id, @first_datapoint_index, @number_of_datapoints, @data_size
+FROM datas3ts d
 WHERE d.name = @datas3t_name
-  AND dr.data_object_key = @data_object_key
 RETURNING id;
 
 -- name: GetAllDataranges :many
@@ -130,7 +133,7 @@ SELECT id, datas3t_id, min_datapoint_key, max_datapoint_key, size_bytes
 FROM dataranges;
 
 -- name: GetAllDatarangeUploads :many
-SELECT id, datarange_id, upload_id, first_datapoint_index, number_of_datapoints, data_size
+SELECT id, datas3t_id, upload_id, first_datapoint_index, number_of_datapoints, data_size
 FROM datarange_uploads;
 
 -- name: GetDatarangeFields :many

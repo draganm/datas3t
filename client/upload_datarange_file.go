@@ -192,8 +192,8 @@ func analyzeTarFile(file io.ReaderAt, size int64) (*TarInfo, error) {
 
 // isValidFileName checks if the filename matches the pattern %020d.<extension>
 func isValidFileName(fileName string) bool {
-	// Find the last dot
-	dotIndex := strings.LastIndex(fileName, ".")
+	// Find the first dot
+	dotIndex := strings.Index(fileName, ".")
 	if dotIndex == -1 || dotIndex == 0 {
 		return false // No extension or starts with dot
 	}
@@ -220,7 +220,7 @@ func extractDatapointKeyFromFileName(fileName string) (int64, error) {
 		return 0, fmt.Errorf("filename doesn't match pattern %%020d.<extension>")
 	}
 
-	dotIndex := strings.LastIndex(fileName, ".")
+	dotIndex := strings.Index(fileName, ".")
 	namepart := fileName[:dotIndex]
 
 	key, err := strconv.ParseInt(namepart, 10, 64)
@@ -370,6 +370,8 @@ func uploadChunkWithRetry(ctx context.Context, url string, file io.ReaderAt, off
 
 // uploadIndexWithRetry uploads the tar index with retry logic
 func uploadIndexWithRetry(ctx context.Context, url string, indexData []byte, maxRetries int) error {
+	fmt.Printf("Uploading index to %s\n", url)
+
 	operation := func() error {
 		// Create HTTP request
 		req, err := http.NewRequestWithContext(ctx, "PUT", url, bytes.NewReader(indexData))
@@ -399,10 +401,14 @@ func uploadIndexWithRetry(ctx context.Context, url string, indexData []byte, max
 	}
 
 	b := createBackoffConfig(maxRetries)
-	err := backoff.Retry(operation, backoff.WithContext(b, ctx))
+	err := backoff.RetryNotify(operation, backoff.WithContext(b, ctx), func(err error, d time.Duration) {
+		fmt.Printf("Uploading index with retry: %v\n", err)
+	})
 	if err != nil {
 		return fmt.Errorf("index upload failed: %w", err)
 	}
+
+	fmt.Printf("Uploaded index with retry: %s\n", url)
 
 	return nil
 }

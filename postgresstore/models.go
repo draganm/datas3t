@@ -22,7 +22,7 @@ type Datarange struct {
 
 type DatarangeUpload struct {
 	ID                  int64
-	DatarangeID         int64
+	Datas3tID           int64
 	UploadID            string
 	DataObjectKey       string
 	IndexObjectKey      string

@@ -84,11 +84,7 @@ func (s *UploadDatarangeServer) CancelDatarangeUpload(
 		return fmt.Errorf("failed to delete datarange upload record: %w", err)
 	}
 
-	// Delete the datarange record from the database since the upload was cancelled
-	err = queries.DeleteDatarange(s3Ctx, uploadDetails.DatarangeID)
-	if err != nil {
-		return fmt.Errorf("failed to delete datarange record: %w", err)
-	}
+	// Note: No datarange record to delete since dataranges are only created on successful completion
 
 	// Commit transaction
 	err = tx.Commit(ctx)

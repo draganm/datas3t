@@ -42,12 +42,10 @@ func (q *Queries) AddBucket(ctx context.Context, arg AddBucketParams) error {
 }
 
 const addDatarangeUpload = `-- name: AddDatarangeUpload :one
-INSERT INTO datarange_uploads (datarange_id, first_datapoint_index, number_of_datapoints, data_size)
-SELECT dr.id, $1, $2, $3
-FROM dataranges dr
-JOIN datas3ts d ON dr.datas3t_id = d.id
+INSERT INTO datarange_uploads (datas3t_id, first_datapoint_index, number_of_datapoints, data_size)
+SELECT d.id, $1, $2, $3
+FROM datas3ts d
 WHERE d.name = $4
-  AND dr.data_object_key = $5
 RETURNING id
 `
 
@@ -56,7 +54,6 @@ type AddDatarangeUploadParams struct {
 	NumberOfDatapoints  int64
 	DataSize            int64
 	Datas3tName         string
-	DataObjectKey       string
 }
 
 func (q *Queries) AddDatarangeUpload(ctx context.Context, arg AddDatarangeUploadParams) (int64, error) {
@@ -65,7 +62,6 @@ func (q *Queries) AddDatarangeUpload(ctx context.Context, arg AddDatarangeUpload
 		arg.NumberOfDatapoints,
 		arg.DataSize,
 		arg.Datas3tName,
-		arg.DataObjectKey,
 	)
 	var id int64
 	err := row.Scan(&id)
@@ -173,6 +169,27 @@ func (q *Queries) CheckDatarangeOverlap(ctx context.Context, arg CheckDatarangeO
 	return column_1, err
 }
 
+const checkDatarangeUploadOverlap = `-- name: CheckDatarangeUploadOverlap :one
+SELECT count(*) > 0
+FROM datarange_uploads
+WHERE datas3t_id = $1
+  AND first_datapoint_index < $2
+  AND (first_datapoint_index + number_of_datapoints - 1) >= $3
+`
+
+type CheckDatarangeUploadOverlapParams struct {
+	Datas3tID             int64
+	FirstDatapointIndex   int64
+	FirstDatapointIndex_2 int64
+}
+
+func (q *Queries) CheckDatarangeUploadOverlap(ctx context.Context, arg CheckDatarangeUploadOverlapParams) (bool, error) {
+	row := q.db.QueryRow(ctx, checkDatarangeUploadOverlap, arg.Datas3tID, arg.FirstDatapointIndex, arg.FirstDatapointIndex_2)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const countDatarangeUploads = `-- name: CountDatarangeUploads :one
 SELECT count(*)
 FROM datarange_uploads
@@ -240,7 +257,7 @@ func (q *Queries) CreateDatarange(ctx context.Context, arg CreateDatarangeParams
 
 const createDatarangeUpload = `-- name: CreateDatarangeUpload :one
 INSERT INTO datarange_uploads (
-    datarange_id, 
+    datas3t_id, 
     upload_id,
     data_object_key,
     index_object_key,
@@ -253,7 +270,7 @@ RETURNING id
 `
 
 type CreateDatarangeUploadParams struct {
-	DatarangeID         int64
+	Datas3tID           int64
 	UploadID            string
 	DataObjectKey       string
 	IndexObjectKey      string
@@ -264,7 +281,7 @@ type CreateDatarangeUploadParams struct {
 
 func (q *Queries) CreateDatarangeUpload(ctx context.Context, arg CreateDatarangeUploadParams) (int64, error) {
 	row := q.db.QueryRow(ctx, createDatarangeUpload,
-		arg.DatarangeID,
+		arg.Datas3tID,
 		arg.UploadID,
 		arg.DataObjectKey,
 		arg.IndexObjectKey,
@@ -308,13 +325,13 @@ func (q *Queries) DeleteDatarangeUpload(ctx context.Context, id int64) error {
 }
 
 const getAllDatarangeUploads = `-- name: GetAllDatarangeUploads :many
-SELECT id, datarange_id, upload_id, first_datapoint_index, number_of_datapoints, data_size
+SELECT id, datas3t_id, upload_id, first_datapoint_index, number_of_datapoints, data_size
 FROM datarange_uploads
 `
 
 type GetAllDatarangeUploadsRow struct {
 	ID                  int64
-	DatarangeID         int64
+	Datas3tID           int64
 	UploadID            string
 	FirstDatapointIndex int64
 	NumberOfDatapoints  int64
@@ -332,7 +349,7 @@ func (q *Queries) GetAllDatarangeUploads(ctx context.Context) ([]GetAllDatarange
 		var i GetAllDatarangeUploadsRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.DatarangeID,
+			&i.Datas3tID,
 			&i.UploadID,
 			&i.FirstDatapointIndex,
 			&i.NumberOfDatapoints,
@@ -446,14 +463,13 @@ func (q *Queries) GetDatarangeUploadIDs(ctx context.Context) ([]string, error) {
 const getDatarangeUploadWithDetails = `-- name: GetDatarangeUploadWithDetails :one
 SELECT 
     du.id, 
-    du.datarange_id, 
+    du.datas3t_id, 
     du.upload_id, 
     du.first_datapoint_index, 
     du.number_of_datapoints, 
     du.data_size,
-    dr.data_object_key, 
-    dr.index_object_key,
-    dr.datas3t_id,
+    du.data_object_key, 
+    du.index_object_key,
     d.name as datas3t_name, 
     d.s3_bucket_id,
     s.endpoint, 
@@ -461,22 +477,20 @@ SELECT
     s.access_key, 
     s.secret_key
 FROM datarange_uploads du
-JOIN dataranges dr ON du.datarange_id = dr.id  
-JOIN datas3ts d ON dr.datas3t_id = d.id
+JOIN datas3ts d ON du.datas3t_id = d.id
 JOIN s3_buckets s ON d.s3_bucket_id = s.id
 WHERE du.id = $1
 `
 
 type GetDatarangeUploadWithDetailsRow struct {
 	ID                  int64
-	DatarangeID         int64
+	Datas3tID           int64
 	UploadID            string
 	FirstDatapointIndex int64
 	NumberOfDatapoints  int64
 	DataSize            int64
 	DataObjectKey       string
 	IndexObjectKey      string
-	Datas3tID           int64
 	Datas3tName         string
 	S3BucketID          int64
 	Endpoint            string
@@ -490,14 +504,13 @@ func (q *Queries) GetDatarangeUploadWithDetails(ctx context.Context, id int64) (
 	var i GetDatarangeUploadWithDetailsRow
 	err := row.Scan(
 		&i.ID,
-		&i.DatarangeID,
+		&i.Datas3tID,
 		&i.UploadID,
 		&i.FirstDatapointIndex,
 		&i.NumberOfDatapoints,
 		&i.DataSize,
 		&i.DataObjectKey,
 		&i.IndexObjectKey,
-		&i.Datas3tID,
 		&i.Datas3tName,
 		&i.S3BucketID,
 		&i.Endpoint,

@@ -22,7 +22,7 @@ type UploadDatarangeRequest struct {
 }
 
 type UploadDatarangeResponse struct {
-	DatarangeID         int64  `json:"datarange_id"`
+	DatarangeID         int64  `json:"datarange_id"` // Upload record ID (for completion) - actual datarange created on success
 	ObjectKey           string `json:"object_key"`
 	FirstDatapointIndex uint64 `json:"first_datapoint_index"`
 
@@ -106,8 +106,8 @@ func (s *UploadDatarangeServer) StartDatarangeUpload(ctx context.Context, log *s
 		firstDatapointIndex := int64(req.FirstDatapointIndex)
 		lastDatapointIndex := firstDatapointIndex + int64(req.NumberOfDatapoints) - 1
 
-		// Check for overlapping dataranges
-		hasOverlap, err := noTxQueries.CheckDatarangeOverlap(ctx, postgresstore.CheckDatarangeOverlapParams{
+		// Check for overlapping dataranges (completed uploads)
+		hasDatarangeOverlap, err := noTxQueries.CheckDatarangeOverlap(ctx, postgresstore.CheckDatarangeOverlapParams{
 			Datas3tID:       datas3t.ID,
 			MinDatapointKey: lastDatapointIndex + 1, // Check if existing max >= our min
 			MaxDatapointKey: firstDatapointIndex,    // Check if existing min < our max
@@ -116,8 +116,22 @@ func (s *UploadDatarangeServer) StartDatarangeUpload(ctx context.Context, log *s
 			return nil, fmt.Errorf("failed to check datarange overlap: %w", err)
 		}
 
-		if hasOverlap {
+		if hasDatarangeOverlap {
 			return nil, fmt.Errorf("%w: datarange overlaps with existing dataranges", ErrDatarangeOverlap)
+		}
+
+		// Check for overlapping upload records (pending uploads)
+		hasUploadOverlap, err := noTxQueries.CheckDatarangeUploadOverlap(ctx, postgresstore.CheckDatarangeUploadOverlapParams{
+			Datas3tID:             datas3t.ID,
+			FirstDatapointIndex:   lastDatapointIndex + 1, // Check if existing max >= our min
+			FirstDatapointIndex_2: firstDatapointIndex,    // Check if existing min < our max
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to check upload overlap: %w", err)
+		}
+
+		if hasUploadOverlap {
+			return nil, fmt.Errorf("%w: datarange overlaps with pending uploads", ErrDatarangeOverlap)
 		}
 
 		// Create S3 client
@@ -207,8 +221,8 @@ func (s *UploadDatarangeServer) StartDatarangeUpload(ctx context.Context, log *s
 	firstDatapointIndex := int64(req.FirstDatapointIndex)
 	lastDatapointIndex := firstDatapointIndex + int64(req.NumberOfDatapoints) - 1
 
-	// Check for overlapping dataranges
-	hasOverlap, err := queries.CheckDatarangeOverlap(ctx, postgresstore.CheckDatarangeOverlapParams{
+	// Check for overlapping dataranges (completed uploads)
+	hasDatarangeOverlap, err := queries.CheckDatarangeOverlap(ctx, postgresstore.CheckDatarangeOverlapParams{
 		Datas3tID:       datas3t.ID,
 		MinDatapointKey: lastDatapointIndex + 1, // Check if existing max >= our min
 		MaxDatapointKey: firstDatapointIndex,    // Check if existing min < our max
@@ -217,26 +231,27 @@ func (s *UploadDatarangeServer) StartDatarangeUpload(ctx context.Context, log *s
 		return nil, fmt.Errorf("failed to check datarange overlap: %w", err)
 	}
 
-	if hasOverlap {
+	if hasDatarangeOverlap {
 		return nil, fmt.Errorf("%w: datarange overlaps with existing dataranges", ErrDatarangeOverlap)
 	}
 
-	// Create datarange record
-	datarangeID, err := queries.CreateDatarange(ctx, postgresstore.CreateDatarangeParams{
-		Datas3tID:       datas3t.ID,
-		DataObjectKey:   objectKey,
-		IndexObjectKey:  indexObjectKey,
-		MinDatapointKey: firstDatapointIndex,
-		MaxDatapointKey: lastDatapointIndex,
-		SizeBytes:       int64(req.DataSize),
+	// Check for overlapping upload records (pending uploads)
+	hasUploadOverlap, err := queries.CheckDatarangeUploadOverlap(ctx, postgresstore.CheckDatarangeUploadOverlapParams{
+		Datas3tID:             datas3t.ID,
+		FirstDatapointIndex:   lastDatapointIndex + 1, // Check if existing max >= our min
+		FirstDatapointIndex_2: firstDatapointIndex,    // Check if existing min < our max
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create datarange: %w", err)
+		return nil, fmt.Errorf("failed to check upload overlap: %w", err)
+	}
+
+	if hasUploadOverlap {
+		return nil, fmt.Errorf("%w: datarange overlaps with pending uploads", ErrDatarangeOverlap)
 	}
 
 	// Create datarange upload record
-	_, err = queries.CreateDatarangeUpload(ctx, postgresstore.CreateDatarangeUploadParams{
-		DatarangeID:         datarangeID,
+	uploadRecordID, err := queries.CreateDatarangeUpload(ctx, postgresstore.CreateDatarangeUploadParams{
+		Datas3tID:           datas3t.ID,
 		UploadID:            uploadID,
 		DataObjectKey:       objectKey,
 		IndexObjectKey:      indexObjectKey,
@@ -255,7 +270,7 @@ func (s *UploadDatarangeServer) StartDatarangeUpload(ctx context.Context, log *s
 	}
 
 	return &UploadDatarangeResponse{
-		DatarangeID:                     datarangeID,
+		DatarangeID:                     uploadRecordID, // Return upload record ID for completion
 		ObjectKey:                       objectKey,
 		FirstDatapointIndex:             req.FirstDatapointIndex,
 		UseDirectPut:                    useDirectPut,

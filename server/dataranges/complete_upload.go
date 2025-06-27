@@ -146,6 +146,26 @@ func (s *UploadDatarangeServer) handleSuccessInTransaction(ctx context.Context, 
 	// Create queries with transaction
 	txQueries := queries.WithTx(tx)
 
+	// Get upload details first
+	uploadDetails, err := txQueries.GetDatarangeUploadWithDetails(ctx, datarangeUploadID)
+	if err != nil {
+		return fmt.Errorf("failed to get upload details: %w", err)
+	}
+
+	// Create the datarange record now that upload is successful
+	lastDatapointIndex := uploadDetails.FirstDatapointIndex + uploadDetails.NumberOfDatapoints - 1
+	_, err = txQueries.CreateDatarange(ctx, postgresstore.CreateDatarangeParams{
+		Datas3tID:       uploadDetails.Datas3tID,
+		DataObjectKey:   uploadDetails.DataObjectKey,
+		IndexObjectKey:  uploadDetails.IndexObjectKey,
+		MinDatapointKey: uploadDetails.FirstDatapointIndex,
+		MaxDatapointKey: lastDatapointIndex,
+		SizeBytes:       uploadDetails.DataSize,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create datarange: %w", err)
+	}
+
 	// Delete the upload record
 	err = txQueries.DeleteDatarangeUpload(ctx, datarangeUploadID)
 	if err != nil {
@@ -220,15 +240,10 @@ func (s *UploadDatarangeServer) handleFailureInTransaction(ctx context.Context, 
 		return fmt.Errorf("failed to schedule index object deletion: %w", err)
 	}
 
-	// Delete the datarange record and upload record
+	// Delete the upload record (no datarange record exists yet since upload failed)
 	err = txQueries.DeleteDatarangeUpload(ctx, uploadDetails.ID)
 	if err != nil {
 		return fmt.Errorf("failed to delete datarange upload record: %w", err)
-	}
-
-	err = txQueries.DeleteDatarange(ctx, uploadDetails.DatarangeID)
-	if err != nil {
-		return fmt.Errorf("failed to delete datarange record: %w", err)
 	}
 
 	// Commit transaction
