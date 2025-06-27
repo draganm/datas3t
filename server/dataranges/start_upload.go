@@ -120,19 +120,8 @@ func (s *UploadDatarangeServer) StartDatarangeUpload(ctx context.Context, log *s
 			return nil, fmt.Errorf("%w: datarange overlaps with existing dataranges", ErrDatarangeOverlap)
 		}
 
-		// Check for overlapping upload records (pending uploads)
-		hasUploadOverlap, err := noTxQueries.CheckDatarangeUploadOverlap(ctx, postgresstore.CheckDatarangeUploadOverlapParams{
-			Datas3tID:             datas3t.ID,
-			FirstDatapointIndex:   lastDatapointIndex + 1, // Check if existing max >= our min
-			FirstDatapointIndex_2: firstDatapointIndex,    // Check if existing min < our max
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to check upload overlap: %w", err)
-		}
-
-		if hasUploadOverlap {
-			return nil, fmt.Errorf("%w: datarange overlaps with pending uploads", ErrDatarangeOverlap)
-		}
+		// Allow overlapping uploads - they will be disambiguated at completion time
+		// Only the first one to complete will succeed
 
 		// Create S3 client
 		s3Client, err = s.createS3Client(ctx, datas3t)
@@ -235,19 +224,8 @@ func (s *UploadDatarangeServer) StartDatarangeUpload(ctx context.Context, log *s
 		return nil, fmt.Errorf("%w: datarange overlaps with existing dataranges", ErrDatarangeOverlap)
 	}
 
-	// Check for overlapping upload records (pending uploads)
-	hasUploadOverlap, err := queries.CheckDatarangeUploadOverlap(ctx, postgresstore.CheckDatarangeUploadOverlapParams{
-		Datas3tID:             datas3t.ID,
-		FirstDatapointIndex:   lastDatapointIndex + 1, // Check if existing max >= our min
-		FirstDatapointIndex_2: firstDatapointIndex,    // Check if existing min < our max
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to check upload overlap: %w", err)
-	}
-
-	if hasUploadOverlap {
-		return nil, fmt.Errorf("%w: datarange overlaps with pending uploads", ErrDatarangeOverlap)
-	}
+	// Allow overlapping uploads - they will be disambiguated at completion time
+	// Only the first one to complete will succeed
 
 	// Create datarange upload record
 	uploadRecordID, err := queries.CreateDatarangeUpload(ctx, postgresstore.CreateDatarangeUploadParams{

@@ -474,8 +474,10 @@ var _ = Describe("UploadDatarange", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("should reject overlapping ranges", func(ctx SpecContext) {
-				// Try to create overlapping range 50-149
+			It("should allow overlapping upload ranges", func(ctx SpecContext) {
+				// Try to create overlapping range 50-149 (should now be allowed)
+				// Note: Ranges 0-99 (from BeforeEach) and 50-149 overlap from 50-99
+				// This is allowed during upload start - disambiguation happens at completion
 				req := &dataranges.UploadDatarangeRequest{
 					Datas3tName:         testDatas3tName,
 					DataSize:            1024,
@@ -484,13 +486,13 @@ var _ = Describe("UploadDatarange", func() {
 				}
 
 				_, err := uploadSrv.StartDatarangeUpload(ctx, logger, req)
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("datarange overlaps with"))
+				Expect(err).NotTo(HaveOccurred()) // Should succeed now
 
-				// Verify only one upload record exists
+				// Verify both upload records exist (overlapping uploads are allowed)
+				// Only the first one to complete will succeed; others will fail at completion
 				uploadCount, err := queries.CountDatarangeUploads(ctx)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(uploadCount).To(Equal(int64(1)))
+				Expect(uploadCount).To(Equal(int64(2)))
 			})
 
 			It("should allow adjacent ranges", func(ctx SpecContext) {
