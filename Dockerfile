@@ -10,7 +10,7 @@ RUN mkdir /out
 # Build all binaries with CGO enabled and static linking
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod/ \
-    CGO_ENABLED=1 go build -ldflags="-w -s -linkmode external -extldflags '-static'" -o /out/server ./cmd/server
+    CGO_ENABLED=1 go build -ldflags="-w -s -linkmode external -extldflags '-static'" -o /out/datas3t ./cmd/datas3t
 
 # Create final image
 FROM alpine:latest

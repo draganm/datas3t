@@ -111,8 +111,8 @@ nix develop -c go generate ./...
 export DB_URL="postgres://user:password@localhost:5432/datas3t"
 export ADDR=":8080"
 
-# Run database migrations
-nix develop -c go run cmd/server/server.go
+# Run the server
+nix develop -c go run ./cmd/datas3t server
 
 # Server will start on http://localhost:8080
 ```
@@ -324,7 +324,7 @@ The encryption system provides the following security features:
 Generate a cryptographically secure 256-bit encryption key:
 
 ```bash
-nix develop -c go run ./cmd/keygen
+nix develop -c go run ./cmd/datas3t/main.go keygen
 ```
 
 This generates a 32-byte (256-bit) random key encoded as base64. Store this key securely and set it as an environment variable:
@@ -335,10 +335,10 @@ export ENCRYPTION_KEY="your-generated-key-here"
 
 #### Alternative Key Generation
 
-You can also use `datas3t-keygen` if you have built the binary:
+You can also use `datas3t keygen` if you have built the binary:
 
 ```bash
-./datas3t-keygen
+./datas3t keygen
 ```
 
 **Critical Security Notes:**
@@ -350,7 +350,7 @@ You can also use `datas3t-keygen` if you have built the binary:
 ### Starting the Server
 
 ```bash
-./datas3t-server --db-url "$DB_URL" --cache-dir "$CACHE_DIR" --encryption-key "$ENCRYPTION_KEY"
+./datas3t server --db-url "$DB_URL" --cache-dir "$CACHE_DIR" --encryption-key "$ENCRYPTION_KEY"
 ```
 
 Or using environment variables:
@@ -359,7 +359,5 @@ Or using environment variables:
 export DB_URL="postgres://user:password@localhost:5432/datas3t"
 export CACHE_DIR="/path/to/cache"  
 export ENCRYPTION_KEY="your-encryption-key"
-./datas3t-server
+./datas3t server
 ```
-
-## Usage 

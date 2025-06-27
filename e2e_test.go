@@ -256,8 +256,8 @@ var _ = Describe("End-to-End Server Test", func() {
 		}
 
 		// Compile the server
-		serverBinaryPath := filepath.Join(tempDir, "datas3t-server")
-		buildCmd := exec.Command("go", "build", "-o", serverBinaryPath, "./cmd/server")
+		serverBinaryPath := filepath.Join(tempDir, "datas3t")
+		buildCmd := exec.Command("go", "build", "-o", serverBinaryPath, "./cmd/datas3t")
 		buildCmd.Dir = "."
 		buildOutput, err := buildCmd.CombinedOutput()
 		if err != nil {
@@ -276,7 +276,7 @@ var _ = Describe("End-to-End Server Test", func() {
 		cacheDir := filepath.Join(tempDir, "cache")
 
 		// Start the server
-		serverCmd = exec.Command(serverBinaryPath,
+		serverCmd = exec.Command(serverBinaryPath, "server",
 			"--addr", serverAddr,
 			"--db-url", connStr,
 			"--cache-dir", cacheDir,
