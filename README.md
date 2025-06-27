@@ -216,6 +216,185 @@ datas3ts, err := c.ListDatas3ts(context.Background())
 }
 ```
 
+## CLI Usage
+
+The datas3t CLI provides a comprehensive command-line interface for managing buckets, datas3ts, and datarange operations.
+
+### Building the CLI
+
+```bash
+# Build the CLI binary
+nix develop -c go build -o datas3t ./cmd/datas3t
+
+# Or run directly
+nix develop -c go run ./cmd/datas3t [command]
+```
+
+### Global Options
+
+All commands support:
+- `--server-url` - Server URL (default: `http://localhost:8080`, env: `DATAS3T_SERVER_URL`)
+
+### Server Management
+
+#### Start the Server
+```bash
+# Start the datas3t server
+./datas3t server \
+  --db-url "postgres://user:password@localhost:5432/datas3t" \
+  --cache-dir "/path/to/cache" \
+  --encryption-key "your-base64-encoded-key"
+
+# Using environment variables
+export DB_URL="postgres://user:password@localhost:5432/datas3t"
+export CACHE_DIR="/path/to/cache"
+export ENCRYPTION_KEY="your-encryption-key"
+./datas3t server
+```
+
+#### Generate Encryption Key
+```bash
+# Generate a new AES-256 encryption key
+./datas3t keygen
+```
+
+### Bucket Management
+
+#### Add S3 Bucket Configuration
+```bash
+./datas3t bucket add \
+  --name my-bucket-config \
+  --endpoint s3.amazonaws.com \
+  --bucket my-data-bucket \
+  --access-key ACCESS_KEY \
+  --secret-key SECRET_KEY \
+  --use-tls=true
+```
+
+**Options:**
+- `--name` - Bucket configuration name (required)
+- `--endpoint` - S3 endpoint (required)
+- `--bucket` - S3 bucket name (required)
+- `--access-key` - S3 access key (required)
+- `--secret-key` - S3 secret key (required)
+- `--use-tls` - Use TLS for S3 connection (default: true)
+
+#### List Bucket Configurations
+```bash
+# List all bucket configurations
+./datas3t bucket list
+
+# Output as JSON
+./datas3t bucket list --json
+```
+
+### Datas3t Management
+
+#### Add New Datas3t
+```bash
+./datas3t datas3t add \
+  --name my-dataset \
+  --bucket my-bucket-config
+```
+
+**Options:**
+- `--name` - Datas3t name (required)
+- `--bucket` - Bucket configuration name (required)
+
+#### List Datas3ts
+```bash
+# List all datas3ts with statistics
+./datas3t datas3t list
+
+# Output as JSON
+./datas3t datas3t list --json
+```
+
+### Datarange Operations
+
+#### Upload TAR File
+```bash
+./datas3t datarange upload-tar \
+  --datas3t my-dataset \
+  --file /path/to/data.tar \
+  --max-parallelism 8 \
+  --max-retries 5
+```
+
+**Options:**
+- `--datas3t` - Datas3t name (required)
+- `--file` - Path to TAR file to upload (required)
+- `--max-parallelism` - Maximum concurrent uploads (default: 4)
+- `--max-retries` - Maximum retry attempts per chunk (default: 3)
+
+#### Download Datapoints as TAR
+```bash
+./datas3t datarange download-tar \
+  --datas3t my-dataset \
+  --first-datapoint 1 \
+  --last-datapoint 1000 \
+  --output /path/to/downloaded.tar \
+  --max-parallelism 8 \
+  --max-retries 5 \
+  --chunk-size 10485760
+```
+
+**Options:**
+- `--datas3t` - Datas3t name (required)
+- `--first-datapoint` - First datapoint to download (required)
+- `--last-datapoint` - Last datapoint to download (required)
+- `--output` - Output TAR file path (required)
+- `--max-parallelism` - Maximum concurrent downloads (default: 4)
+- `--max-retries` - Maximum retry attempts per chunk (default: 3)
+- `--chunk-size` - Download chunk size in bytes (default: 5MB)
+
+### Complete Workflow Example
+
+```bash
+# 1. Generate encryption key
+./datas3t keygen
+export ENCRYPTION_KEY="generated-key-here"
+
+# 2. Start server
+./datas3t server &
+
+# 3. Add bucket configuration
+./datas3t bucket add \
+  --name production-bucket \
+  --endpoint s3.amazonaws.com \
+  --bucket my-production-data \
+  --access-key "$AWS_ACCESS_KEY" \
+  --secret-key "$AWS_SECRET_KEY"
+
+# 4. Create datas3t
+./datas3t datas3t add \
+  --name image-dataset \
+  --bucket production-bucket
+
+# 5. Upload data
+./datas3t datarange upload-tar \
+  --datas3t image-dataset \
+  --file ./images-batch-1.tar
+
+# 6. List datasets
+./datas3t datas3t list
+
+# 7. Download specific range
+./datas3t datarange download-tar \
+  --datas3t image-dataset \
+  --first-datapoint 100 \
+  --last-datapoint 200 \
+  --output ./images-100-200.tar
+```
+
+### Environment Variables
+
+All CLI commands support these environment variables:
+- `DATAS3T_SERVER_URL` - Default server URL for all commands
+- `DB_URL` - Database connection string (server command)
+- `CACHE_DIR` - Cache directory path (server command)
+- `ENCRYPTION_KEY` - Base64-encoded encryption key (server command)
+
 ## File Naming Convention
 
 Datapoints must follow the naming pattern `%020d.<extension>`:
