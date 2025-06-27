@@ -18,6 +18,11 @@ datas3t is designed for efficiently managing datas3ts containing millions of ind
 - Enables direct access to specific files without extraction
 - Disk-based caching for frequently accessed indices
 
+### 🔒 **Flexible TLS Configuration**
+- TLS usage determined by endpoint protocol (https:// vs http://)
+- No separate TLS flags needed - follows standard URL conventions
+- Seamless integration with various S3-compatible services
+
 ### 📦 **Range-based Operations**
 - Upload and download data in configurable chunks (dataranges)
 - Supports partial datas3t retrieval
@@ -126,11 +131,10 @@ curl -X POST http://localhost:8080/api/bucket \
   -H "Content-Type: application/json" \
   -d '{
     "name": "my-bucket-config",
-    "endpoint": "s3.amazonaws.com",
+    "endpoint": "https://s3.amazonaws.com",
     "bucket": "my-data-bucket",
     "access_key": "ACCESS_KEY",
-    "secret_key": "SECRET_KEY",
-    "use_tls": true
+    "secret_key": "SECRET_KEY"
   }'
 ```
 
@@ -264,20 +268,18 @@ export ENCRYPTION_KEY="your-encryption-key"
 ```bash
 ./datas3t bucket add \
   --name my-bucket-config \
-  --endpoint s3.amazonaws.com \
+  --endpoint https://s3.amazonaws.com \
   --bucket my-data-bucket \
   --access-key ACCESS_KEY \
-  --secret-key SECRET_KEY \
-  --use-tls=true
+  --secret-key SECRET_KEY
 ```
 
 **Options:**
 - `--name` - Bucket configuration name (required)
-- `--endpoint` - S3 endpoint (required)
+- `--endpoint` - S3 endpoint (include https:// for TLS) (required)
 - `--bucket` - S3 bucket name (required)
 - `--access-key` - S3 access key (required)
 - `--secret-key` - S3 secret key (required)
-- `--use-tls` - Use TLS for S3 connection (default: true)
 
 #### List Bucket Configurations
 ```bash
@@ -361,7 +363,7 @@ export ENCRYPTION_KEY="generated-key-here"
 # 3. Add bucket configuration
 ./datas3t bucket add \
   --name production-bucket \
-  --endpoint s3.amazonaws.com \
+  --endpoint https://s3.amazonaws.com \
   --bucket my-production-data \
   --access-key "$AWS_ACCESS_KEY" \
   --secret-key "$AWS_SECRET_KEY"
