@@ -24,7 +24,7 @@ WORKDIR /app
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 # Copy all binaries
-COPY --from=builder /out/server /app/
+COPY --from=builder /out/datas3t /app/
 
 # Set default entrypoint to server
-ENTRYPOINT ["/app/server"]
+ENTRYPOINT ["/app/datas3t","server"]
