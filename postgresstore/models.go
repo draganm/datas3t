@@ -33,7 +33,7 @@ type DatarangeUpload struct {
 	UpdatedAt           pgtype.Timestamp
 }
 
-type Dataset struct {
+type Datas3t struct {
 	ID         int64
 	Name       string
 	S3BucketID int64

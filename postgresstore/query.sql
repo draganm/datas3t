@@ -1,10 +1,10 @@
 -- name: DatasetExists :one
 SELECT count(*) > 0
-FROM datasets;
+FROM datas3ts;
 
 -- name: AllDatasets :many
 SELECT name
-FROM datasets;
+FROM datas3ts;
 
 -- name: ListDatas3ts :many
 SELECT 
@@ -15,7 +15,7 @@ SELECT
     COALESCE(MIN(dr.min_datapoint_key), 0) as lowest_datapoint,
     COALESCE(MAX(dr.max_datapoint_key), 0) as highest_datapoint,
     COALESCE(SUM(dr.size_bytes), 0) as total_bytes
-FROM datasets d
+FROM datas3ts d
 JOIN s3_buckets s ON d.s3_bucket_id = s.id
 LEFT JOIN dataranges dr ON d.id = dr.dataset_id
 GROUP BY d.id, d.name, s.name
@@ -38,7 +38,7 @@ ORDER BY name;
 -- name: GetDatasetWithBucket :one
 SELECT d.id, d.name, d.s3_bucket_id, 
        s.endpoint, s.bucket, s.access_key, s.secret_key, s.use_tls
-FROM datasets d
+FROM datas3ts d
 JOIN s3_buckets s ON d.s3_bucket_id = s.id
 WHERE d.name = $1;
 
@@ -87,7 +87,7 @@ SELECT
     s.use_tls
 FROM datarange_uploads du
 JOIN dataranges dr ON du.datarange_id = dr.id  
-JOIN datasets d ON dr.dataset_id = d.id
+JOIN datas3ts d ON dr.dataset_id = d.id
 JOIN s3_buckets s ON d.s3_bucket_id = s.id
 WHERE du.id = $1;
 
@@ -113,7 +113,7 @@ INSERT INTO s3_buckets (
 VALUES ($1, $2, $3, $4, $5, $6);
 
 -- name: AddDatas3t :exec
-INSERT INTO datasets (name, s3_bucket_id) 
+INSERT INTO datas3ts (name, s3_bucket_id) 
 SELECT @dataset_name, id 
 FROM s3_buckets 
 WHERE s3_buckets.name = @bucket_name;
@@ -122,7 +122,7 @@ WHERE s3_buckets.name = @bucket_name;
 INSERT INTO datarange_uploads (datarange_id, first_datapoint_index, number_of_datapoints, data_size)
 SELECT dr.id, @first_datapoint_index, @number_of_datapoints, @data_size
 FROM dataranges dr
-JOIN datasets d ON dr.dataset_id = d.id
+JOIN datas3ts d ON dr.dataset_id = d.id
 WHERE d.name = @datas3t_name
   AND dr.data_object_key = @data_object_key
 RETURNING id;
@@ -170,7 +170,7 @@ SELECT
     s.secret_key,
     s.use_tls
 FROM dataranges dr
-JOIN datasets d ON dr.dataset_id = d.id
+JOIN datas3ts d ON dr.dataset_id = d.id
 JOIN s3_buckets s ON d.s3_bucket_id = s.id
 WHERE d.name = $1
   AND dr.min_datapoint_key <= $2  -- datarange starts before or at our last datapoint

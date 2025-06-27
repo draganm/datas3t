@@ -48,7 +48,7 @@ const addDatarangeUpload = `-- name: AddDatarangeUpload :one
 INSERT INTO datarange_uploads (datarange_id, first_datapoint_index, number_of_datapoints, data_size)
 SELECT dr.id, $1, $2, $3
 FROM dataranges dr
-JOIN datasets d ON dr.dataset_id = d.id
+JOIN datas3ts d ON dr.dataset_id = d.id
 WHERE d.name = $4
   AND dr.data_object_key = $5
 RETURNING id
@@ -76,7 +76,7 @@ func (q *Queries) AddDatarangeUpload(ctx context.Context, arg AddDatarangeUpload
 }
 
 const addDatas3t = `-- name: AddDatas3t :exec
-INSERT INTO datasets (name, s3_bucket_id) 
+INSERT INTO datas3ts (name, s3_bucket_id) 
 SELECT $1, id 
 FROM s3_buckets 
 WHERE s3_buckets.name = $2
@@ -119,7 +119,7 @@ func (q *Queries) AllAccessConfigs(ctx context.Context) ([]string, error) {
 
 const allDatasets = `-- name: AllDatasets :many
 SELECT name
-FROM datasets
+FROM datas3ts
 `
 
 func (q *Queries) AllDatasets(ctx context.Context) ([]string, error) {
@@ -282,7 +282,7 @@ func (q *Queries) CreateDatarangeUpload(ctx context.Context, arg CreateDatarange
 
 const datasetExists = `-- name: DatasetExists :one
 SELECT count(*) > 0
-FROM datasets
+FROM datas3ts
 `
 
 func (q *Queries) DatasetExists(ctx context.Context) (bool, error) {
@@ -466,7 +466,7 @@ SELECT
     s.use_tls
 FROM datarange_uploads du
 JOIN dataranges dr ON du.datarange_id = dr.id  
-JOIN datasets d ON dr.dataset_id = d.id
+JOIN datas3ts d ON dr.dataset_id = d.id
 JOIN s3_buckets s ON d.s3_bucket_id = s.id
 WHERE du.id = $1
 `
@@ -529,7 +529,7 @@ SELECT
     s.secret_key,
     s.use_tls
 FROM dataranges dr
-JOIN datasets d ON dr.dataset_id = d.id
+JOIN datas3ts d ON dr.dataset_id = d.id
 JOIN s3_buckets s ON d.s3_bucket_id = s.id
 WHERE d.name = $1
   AND dr.min_datapoint_key <= $2  -- datarange starts before or at our last datapoint
@@ -594,7 +594,7 @@ func (q *Queries) GetDatarangesForDatapoints(ctx context.Context, arg GetDataran
 const getDatasetWithBucket = `-- name: GetDatasetWithBucket :one
 SELECT d.id, d.name, d.s3_bucket_id, 
        s.endpoint, s.bucket, s.access_key, s.secret_key, s.use_tls
-FROM datasets d
+FROM datas3ts d
 JOIN s3_buckets s ON d.s3_bucket_id = s.id
 WHERE d.name = $1
 `
@@ -673,7 +673,7 @@ SELECT
     COALESCE(MIN(dr.min_datapoint_key), 0) as lowest_datapoint,
     COALESCE(MAX(dr.max_datapoint_key), 0) as highest_datapoint,
     COALESCE(SUM(dr.size_bytes), 0) as total_bytes
-FROM datasets d
+FROM datas3ts d
 JOIN s3_buckets s ON d.s3_bucket_id = s.id
 LEFT JOIN dataranges dr ON d.id = dr.dataset_id
 GROUP BY d.id, d.name, s.name
