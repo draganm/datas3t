@@ -42,7 +42,7 @@ var _ = Describe("IndexDiskCache", func() {
 	Describe("DatarangeKey", func() {
 		It("should generate consistent string representation", func(ctx SpecContext) {
 			key := diskcache.DatarangeKey{
-				Datas3tName:        "test-dataset",
+				Datas3tName:        "test-datas3t",
 				FirstIndex:         100,
 				NumberOfDatapoints: 50,
 				TotalSizeBytes:     2048,
@@ -51,12 +51,12 @@ var _ = Describe("IndexDiskCache", func() {
 			str1 := key.String()
 			str2 := key.String()
 			Expect(str1).To(Equal(str2))
-			Expect(str1).To(Equal("test-dataset:100:50:2048"))
+			Expect(str1).To(Equal("test-datas3t:100:50:2048"))
 		})
 
 		It("should generate consistent hash", func(ctx SpecContext) {
 			key := diskcache.DatarangeKey{
-				Datas3tName:        "test-dataset",
+				Datas3tName:        "test-datas3t",
 				FirstIndex:         100,
 				NumberOfDatapoints: 50,
 				TotalSizeBytes:     2048,
@@ -70,14 +70,14 @@ var _ = Describe("IndexDiskCache", func() {
 
 		It("should generate different hashes for different keys", func(ctx SpecContext) {
 			key1 := diskcache.DatarangeKey{
-				Datas3tName:        "test-dataset",
+				Datas3tName:        "test-datas3t",
 				FirstIndex:         100,
 				NumberOfDatapoints: 50,
 				TotalSizeBytes:     2048,
 			}
 
 			key2 := diskcache.DatarangeKey{
-				Datas3tName:        "test-dataset",
+				Datas3tName:        "test-datas3t",
 				FirstIndex:         200,
 				NumberOfDatapoints: 50,
 				TotalSizeBytes:     2048,
@@ -124,7 +124,7 @@ var _ = Describe("IndexDiskCache", func() {
 	Describe("OnIndex", func() {
 		It("should call generator when index is not cached", func(ctx SpecContext) {
 			key := diskcache.DatarangeKey{
-				Datas3tName:        "test-dataset",
+				Datas3tName:        "test-datas3t",
 				FirstIndex:         0,
 				NumberOfDatapoints: 10,
 				TotalSizeBytes:     1024,
@@ -160,7 +160,7 @@ var _ = Describe("IndexDiskCache", func() {
 
 		It("should use cached index when available", func(ctx SpecContext) {
 			key := diskcache.DatarangeKey{
-				Datas3tName:        "test-dataset",
+				Datas3tName:        "test-datas3t",
 				FirstIndex:         0,
 				NumberOfDatapoints: 10,
 				TotalSizeBytes:     1024,
@@ -199,7 +199,7 @@ var _ = Describe("IndexDiskCache", func() {
 
 		It("should handle generator errors", func(ctx SpecContext) {
 			key := diskcache.DatarangeKey{
-				Datas3tName:        "test-dataset",
+				Datas3tName:        "test-datas3t",
 				FirstIndex:         0,
 				NumberOfDatapoints: 10,
 				TotalSizeBytes:     1024,
@@ -222,7 +222,7 @@ var _ = Describe("IndexDiskCache", func() {
 
 		It("should handle callback errors", func(ctx SpecContext) {
 			key := diskcache.DatarangeKey{
-				Datas3tName:        "test-dataset",
+				Datas3tName:        "test-datas3t",
 				FirstIndex:         0,
 				NumberOfDatapoints: 10,
 				TotalSizeBytes:     1024,
@@ -306,7 +306,7 @@ var _ = Describe("IndexDiskCache", func() {
 
 					for j := 0; j < numOperations; j++ {
 						key := diskcache.DatarangeKey{
-							Datas3tName:        fmt.Sprintf("test-%d", goroutineID%3), // Use 3 different datasets
+							Datas3tName:        fmt.Sprintf("test-%d", goroutineID%3), // Use 3 different datas3ts
 							FirstIndex:         int64(j),
 							NumberOfDatapoints: 10,
 							TotalSizeBytes:     1024,
@@ -346,7 +346,7 @@ var _ = Describe("IndexDiskCache", func() {
 	Describe("Persistence", func() {
 		It("should persist cache across restarts", func(ctx SpecContext) {
 			key := diskcache.DatarangeKey{
-				Datas3tName:        "test-dataset",
+				Datas3tName:        "test-datas3t",
 				FirstIndex:         0,
 				NumberOfDatapoints: 10,
 				TotalSizeBytes:     1024,
@@ -402,7 +402,7 @@ var _ = Describe("IndexDiskCache", func() {
 
 			// Add an entry
 			key := diskcache.DatarangeKey{
-				Datas3tName:        "test-dataset",
+				Datas3tName:        "test-datas3t",
 				FirstIndex:         0,
 				NumberOfDatapoints: 10,
 				TotalSizeBytes:     1024,
@@ -424,7 +424,7 @@ var _ = Describe("IndexDiskCache", func() {
 			// Add multiple entries
 			for i := 0; i < 3; i++ {
 				key := diskcache.DatarangeKey{
-					Datas3tName:        "test-dataset",
+					Datas3tName:        "test-datas3t",
 					FirstIndex:         int64(i),
 					NumberOfDatapoints: 10,
 					TotalSizeBytes:     1024,

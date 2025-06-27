@@ -1,14 +1,14 @@
--- name: DatasetExists :one
+-- name: Datas3tExists :one
 SELECT count(*) > 0
 FROM datas3ts;
 
--- name: AllDatasets :many
+-- name: AllDatas3ts :many
 SELECT name
 FROM datas3ts;
 
 -- name: ListDatas3ts :many
 SELECT 
-    d.name as dataset_name,
+    d.name as datas3t_name,
     s.name as bucket_name,
     COALESCE(COUNT(dr.id), 0) as datarange_count,
     COALESCE(SUM(dr.max_datapoint_key - dr.min_datapoint_key + 1), 0) as total_datapoints,
@@ -35,7 +35,7 @@ SELECT name, endpoint, bucket, use_tls
 FROM s3_buckets
 ORDER BY name;
 
--- name: GetDatasetWithBucket :one
+-- name: GetDatas3tWithBucket :one
 SELECT d.id, d.name, d.s3_bucket_id, 
        s.endpoint, s.bucket, s.access_key, s.secret_key, s.use_tls
 FROM datas3ts d
@@ -78,7 +78,7 @@ SELECT
     dr.data_object_key, 
     dr.index_object_key,
     dr.datas3t_id,
-    d.name as dataset_name, 
+    d.name as datas3t_name, 
     d.s3_bucket_id,
     s.endpoint, 
     s.bucket, 
@@ -114,7 +114,7 @@ VALUES ($1, $2, $3, $4, $5, $6);
 
 -- name: AddDatas3t :exec
 INSERT INTO datas3ts (name, s3_bucket_id) 
-SELECT @dataset_name, id 
+SELECT @datas3t_name, id 
 FROM s3_buckets 
 WHERE s3_buckets.name = @bucket_name;
 
@@ -163,7 +163,7 @@ SELECT
     dr.min_datapoint_key,
     dr.max_datapoint_key,
     dr.size_bytes,
-    d.name as dataset_name,
+    d.name as datas3t_name,
     s.endpoint,
     s.bucket,
     s.access_key,

@@ -145,14 +145,14 @@ var _ = Describe("UploadDatarange", func() {
 		queries              *postgresstore.Queries
 		uploadSrv            *dataranges.UploadDatarangeServer
 		bucketSrv            *bucket.BucketServer
-		datasetSrv           *datas3t.Datas3tServer
+		datas3tSrv           *datas3t.Datas3tServer
 		minioEndpoint        string
 		minioHost            string
 		minioAccessKey       string
 		minioSecretKey       string
 		testBucketName       string
 		testBucketConfigName string
-		testDatasetName      string
+		testDatas3tName      string
 		s3Client             *s3.Client
 		logger               *slog.Logger
 	)
@@ -231,7 +231,7 @@ var _ = Describe("UploadDatarange", func() {
 		minioSecretKey = "minioadmin"
 		testBucketName = "test-bucket"
 		testBucketConfigName = "test-bucket-config"
-		testDatasetName = "test-dataset"
+		testDatas3tName = "test-datas3t"
 
 		// Create test bucket in MinIO
 		minioClient, err := miniogo.New(minioHost, &miniogo.Options{
@@ -270,7 +270,7 @@ var _ = Describe("UploadDatarange", func() {
 		Expect(err).NotTo(HaveOccurred())
 		bucketSrv, err = bucket.NewServer(db, "dGVzdC1rZXktMzItYnl0ZXMtZm9yLXRlc3RpbmchIQ==")
 		Expect(err).NotTo(HaveOccurred())
-		datasetSrv, err = datas3t.NewServer(db, "dGVzdC1rZXktMzItYnl0ZXMtZm9yLXRlc3RpbmchIQ==")
+		datas3tSrv, err = datas3t.NewServer(db, "dGVzdC1rZXktMzItYnl0ZXMtZm9yLXRlc3RpbmchIQ==")
 		Expect(err).NotTo(HaveOccurred())
 
 		// Add test bucket configuration
@@ -286,13 +286,13 @@ var _ = Describe("UploadDatarange", func() {
 		err = bucketSrv.AddBucket(ctx, logger, bucketInfo)
 		Expect(err).NotTo(HaveOccurred())
 
-		// Add test dataset
-		datasetReq := &datas3t.AddDatas3tRequest{
+		// Add test datas3t
+		datas3tReq := &datas3t.AddDatas3tRequest{
 			Bucket: testBucketConfigName,
-			Name:   testDatasetName,
+			Name:   testDatas3tName,
 		}
 
-		err = datasetSrv.AddDatas3t(ctx, logger, datasetReq)
+		err = datas3tSrv.AddDatas3t(ctx, logger, datas3tReq)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -314,7 +314,7 @@ var _ = Describe("UploadDatarange", func() {
 		Context("when starting a valid small upload (direct PUT)", func() {
 			It("should successfully create upload with direct PUT URLs", func(ctx SpecContext) {
 				req := &dataranges.UploadDatarangeRequest{
-					Datas3tName:         testDatasetName,
+					Datas3tName:         testDatas3tName,
 					DataSize:            1024, // Small size < 5MB
 					NumberOfDatapoints:  10,
 					FirstDatapointIndex: 0,
@@ -362,7 +362,7 @@ var _ = Describe("UploadDatarange", func() {
 		Context("when starting a valid large upload (multipart)", func() {
 			It("should successfully create upload with multipart URLs", func(ctx SpecContext) {
 				req := &dataranges.UploadDatarangeRequest{
-					Datas3tName:         testDatasetName,
+					Datas3tName:         testDatas3tName,
 					DataSize:            10 * 1024 * 1024, // 10MB > 5MB threshold
 					NumberOfDatapoints:  1000,
 					FirstDatapointIndex: 100,
@@ -401,7 +401,7 @@ var _ = Describe("UploadDatarange", func() {
 		})
 
 		Context("when validation fails", func() {
-			It("should reject empty dataset name", func(ctx SpecContext) {
+			It("should reject empty datas3t name", func(ctx SpecContext) {
 				req := &dataranges.UploadDatarangeRequest{
 					Datas3tName:         "",
 					DataSize:            1024,
@@ -421,7 +421,7 @@ var _ = Describe("UploadDatarange", func() {
 
 			It("should reject zero data size", func(ctx SpecContext) {
 				req := &dataranges.UploadDatarangeRequest{
-					Datas3tName:         testDatasetName,
+					Datas3tName:         testDatas3tName,
 					DataSize:            0,
 					NumberOfDatapoints:  10,
 					FirstDatapointIndex: 0,
@@ -439,7 +439,7 @@ var _ = Describe("UploadDatarange", func() {
 
 			It("should reject zero number of datapoints", func(ctx SpecContext) {
 				req := &dataranges.UploadDatarangeRequest{
-					Datas3tName:         testDatasetName,
+					Datas3tName:         testDatas3tName,
 					DataSize:            1024,
 					NumberOfDatapoints:  0,
 					FirstDatapointIndex: 0,
@@ -455,9 +455,9 @@ var _ = Describe("UploadDatarange", func() {
 				Expect(datarangeCount).To(Equal(int64(0)))
 			})
 
-			It("should reject non-existent dataset", func(ctx SpecContext) {
+			It("should reject non-existent datas3t", func(ctx SpecContext) {
 				req := &dataranges.UploadDatarangeRequest{
-					Datas3tName:         "non-existent-dataset",
+					Datas3tName:         "non-existent-datas3t",
 					DataSize:            1024,
 					NumberOfDatapoints:  10,
 					FirstDatapointIndex: 0,
@@ -465,7 +465,7 @@ var _ = Describe("UploadDatarange", func() {
 
 				_, err := uploadSrv.StartDatarangeUpload(ctx, logger, req)
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("failed to find dataset 'non-existent-dataset'"))
+				Expect(err.Error()).To(ContainSubstring("failed to find datas3t 'non-existent-datas3t'"))
 
 				// Verify no database changes
 				datarangeCount, err := queries.CountDataranges(ctx)
@@ -478,7 +478,7 @@ var _ = Describe("UploadDatarange", func() {
 			BeforeEach(func(ctx SpecContext) {
 				// Create an existing datarange from 0-99
 				req := &dataranges.UploadDatarangeRequest{
-					Datas3tName:         testDatasetName,
+					Datas3tName:         testDatas3tName,
 					DataSize:            1024,
 					NumberOfDatapoints:  100,
 					FirstDatapointIndex: 0,
@@ -491,7 +491,7 @@ var _ = Describe("UploadDatarange", func() {
 			It("should reject overlapping ranges", func(ctx SpecContext) {
 				// Try to create overlapping range 50-149
 				req := &dataranges.UploadDatarangeRequest{
-					Datas3tName:         testDatasetName,
+					Datas3tName:         testDatas3tName,
 					DataSize:            1024,
 					NumberOfDatapoints:  100,
 					FirstDatapointIndex: 50,
@@ -510,7 +510,7 @@ var _ = Describe("UploadDatarange", func() {
 			It("should allow adjacent ranges", func(ctx SpecContext) {
 				// Create adjacent range 100-199 (no overlap)
 				req := &dataranges.UploadDatarangeRequest{
-					Datas3tName:         testDatasetName,
+					Datas3tName:         testDatas3tName,
 					DataSize:            1024,
 					NumberOfDatapoints:  100,
 					FirstDatapointIndex: 100,
@@ -535,7 +535,7 @@ var _ = Describe("UploadDatarange", func() {
 		BeforeEach(func(ctx SpecContext) {
 			// Start an upload
 			req := &dataranges.UploadDatarangeRequest{
-				Datas3tName:         testDatasetName,
+				Datas3tName:         testDatas3tName,
 				DataSize:            1024,
 				NumberOfDatapoints:  10,
 				FirstDatapointIndex: 0,
@@ -700,7 +700,7 @@ var _ = Describe("UploadDatarange", func() {
 		BeforeEach(func(ctx SpecContext) {
 			// Start a large upload that requires multipart
 			req := &dataranges.UploadDatarangeRequest{
-				Datas3tName:         testDatasetName,
+				Datas3tName:         testDatas3tName,
 				DataSize:            10 * 1024 * 1024, // 10MB
 				NumberOfDatapoints:  1000,
 				FirstDatapointIndex: 0,
@@ -835,7 +835,7 @@ var _ = Describe("UploadDatarange", func() {
 			BeforeEach(func(ctx SpecContext) {
 				// Start a small upload that uses direct PUT
 				req := &dataranges.UploadDatarangeRequest{
-					Datas3tName:         testDatasetName,
+					Datas3tName:         testDatas3tName,
 					DataSize:            1024, // Small size < 5MB
 					NumberOfDatapoints:  10,
 					FirstDatapointIndex: 0,
@@ -888,7 +888,7 @@ var _ = Describe("UploadDatarange", func() {
 			BeforeEach(func(ctx SpecContext) {
 				// Start a large upload that requires multipart
 				req := &dataranges.UploadDatarangeRequest{
-					Datas3tName:         testDatasetName,
+					Datas3tName:         testDatas3tName,
 					DataSize:            10 * 1024 * 1024, // 10MB
 					NumberOfDatapoints:  1000,
 					FirstDatapointIndex: 100,
@@ -988,7 +988,7 @@ var _ = Describe("UploadDatarange", func() {
 			BeforeEach(func(ctx SpecContext) {
 				// Start an upload
 				req := &dataranges.UploadDatarangeRequest{
-					Datas3tName:         testDatasetName,
+					Datas3tName:         testDatas3tName,
 					DataSize:            1024,
 					NumberOfDatapoints:  10,
 					FirstDatapointIndex: 0,
@@ -1030,7 +1030,7 @@ var _ = Describe("UploadDatarange", func() {
 
 			// Start an upload with the correct size
 			req := &dataranges.UploadDatarangeRequest{
-				Datas3tName:         testDatasetName,
+				Datas3tName:         testDatas3tName,
 				DataSize:            uint64(len(properTarData)),
 				NumberOfDatapoints:  5,
 				FirstDatapointIndex: 0,
@@ -1111,7 +1111,7 @@ var _ = Describe("UploadDatarange", func() {
 
 				// Start a new upload with correct size
 				req := &dataranges.UploadDatarangeRequest{
-					Datas3tName:         testDatasetName,
+					Datas3tName:         testDatas3tName,
 					DataSize:            uint64(len(invalidTarData)),
 					NumberOfDatapoints:  3,
 					FirstDatapointIndex: 0,

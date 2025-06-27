@@ -19,7 +19,7 @@ func (c *Client) AddDatas3t(ctx context.Context, datas3t *datas3t.AddDatas3tRequ
 
 	body, err := json.Marshal(datas3t)
 	if err != nil {
-		return fmt.Errorf("failed to marshal dataset info: %w", err)
+		return fmt.Errorf("failed to marshal datas3t info: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", ur, bytes.NewReader(body))

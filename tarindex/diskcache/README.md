@@ -9,7 +9,7 @@ The cache stores tarindex files for dataranges from different datas3ts, enabling
 ## Cache Keys
 
 Each tarindex file is identified by a unique key using the `DatarangeKey` struct containing:
-- **Datas3tName**: The name of the datas3t dataset  
+- **Datas3tName**: The name of the datas3t  
 - **FirstIndex**: Starting position in the datarange
 - **NumberOfDatapoints**: Number of datapoints in the datarange
 - **TotalSizeBytes**: Total size in bytes of the datarange
@@ -57,7 +57,7 @@ if err != nil {
 defer cache.Close()
 
 key := diskcache.DatarangeKey{
-    Datas3tName:        "my-dataset",
+    Datas3tName:        "my-datas3t",
     FirstIndex:         0,
     NumberOfDatapoints: 1000,
     TotalSizeBytes:     50*1024*1024,

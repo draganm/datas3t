@@ -10,7 +10,7 @@ import (
 )
 
 type Datas3tInfo struct {
-	DatasetName      string `json:"dataset_name"`
+	Datas3tName      string `json:"datas3t_name"`
 	BucketName       string `json:"bucket_name"`
 	DatarangeCount   int64  `json:"datarange_count"`
 	TotalDatapoints  int64  `json:"total_datapoints"`
@@ -67,7 +67,7 @@ func (s *Datas3tServer) ListDatas3ts(ctx context.Context, log *slog.Logger) ([]D
 
 	for _, row := range rows {
 		datas3tInfo := Datas3tInfo{
-			DatasetName:      row.DatasetName,
+			Datas3tName:      row.Datas3tName,
 			BucketName:       row.BucketName,
 			DatarangeCount:   toInt64(row.DatarangeCount),
 			TotalDatapoints:  toInt64(row.TotalDatapoints),

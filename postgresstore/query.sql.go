@@ -83,12 +83,12 @@ WHERE s3_buckets.name = $2
 `
 
 type AddDatas3tParams struct {
-	DatasetName string
+	Datas3tName string
 	BucketName  string
 }
 
 func (q *Queries) AddDatas3t(ctx context.Context, arg AddDatas3tParams) error {
-	_, err := q.db.Exec(ctx, addDatas3t, arg.DatasetName, arg.BucketName)
+	_, err := q.db.Exec(ctx, addDatas3t, arg.Datas3tName, arg.BucketName)
 	return err
 }
 
@@ -117,13 +117,13 @@ func (q *Queries) AllAccessConfigs(ctx context.Context) ([]string, error) {
 	return items, nil
 }
 
-const allDatasets = `-- name: AllDatasets :many
+const allDatas3ts = `-- name: AllDatas3ts :many
 SELECT name
 FROM datas3ts
 `
 
-func (q *Queries) AllDatasets(ctx context.Context) ([]string, error) {
-	rows, err := q.db.Query(ctx, allDatasets)
+func (q *Queries) AllDatas3ts(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, allDatas3ts)
 	if err != nil {
 		return nil, err
 	}
@@ -280,13 +280,13 @@ func (q *Queries) CreateDatarangeUpload(ctx context.Context, arg CreateDatarange
 	return id, err
 }
 
-const datasetExists = `-- name: DatasetExists :one
+const datas3tExists = `-- name: Datas3tExists :one
 SELECT count(*) > 0
 FROM datas3ts
 `
 
-func (q *Queries) DatasetExists(ctx context.Context) (bool, error) {
-	row := q.db.QueryRow(ctx, datasetExists)
+func (q *Queries) Datas3tExists(ctx context.Context) (bool, error) {
+	row := q.db.QueryRow(ctx, datas3tExists)
 	var column_1 bool
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -457,7 +457,7 @@ SELECT
     dr.data_object_key, 
     dr.index_object_key,
     dr.datas3t_id,
-    d.name as dataset_name, 
+    d.name as datas3t_name, 
     d.s3_bucket_id,
     s.endpoint, 
     s.bucket, 
@@ -481,7 +481,7 @@ type GetDatarangeUploadWithDetailsRow struct {
 	DataObjectKey       string
 	IndexObjectKey      string
 	Datas3tID           int64
-	DatasetName         string
+	Datas3tName         string
 	S3BucketID          int64
 	Endpoint            string
 	Bucket              string
@@ -503,7 +503,7 @@ func (q *Queries) GetDatarangeUploadWithDetails(ctx context.Context, id int64) (
 		&i.DataObjectKey,
 		&i.IndexObjectKey,
 		&i.Datas3tID,
-		&i.DatasetName,
+		&i.Datas3tName,
 		&i.S3BucketID,
 		&i.Endpoint,
 		&i.Bucket,
@@ -522,7 +522,7 @@ SELECT
     dr.min_datapoint_key,
     dr.max_datapoint_key,
     dr.size_bytes,
-    d.name as dataset_name,
+    d.name as datas3t_name,
     s.endpoint,
     s.bucket,
     s.access_key,
@@ -550,7 +550,7 @@ type GetDatarangesForDatapointsRow struct {
 	MinDatapointKey int64
 	MaxDatapointKey int64
 	SizeBytes       int64
-	DatasetName     string
+	Datas3tName     string
 	Endpoint        string
 	Bucket          string
 	AccessKey       string
@@ -574,7 +574,7 @@ func (q *Queries) GetDatarangesForDatapoints(ctx context.Context, arg GetDataran
 			&i.MinDatapointKey,
 			&i.MaxDatapointKey,
 			&i.SizeBytes,
-			&i.DatasetName,
+			&i.Datas3tName,
 			&i.Endpoint,
 			&i.Bucket,
 			&i.AccessKey,
@@ -591,7 +591,7 @@ func (q *Queries) GetDatarangesForDatapoints(ctx context.Context, arg GetDataran
 	return items, nil
 }
 
-const getDatasetWithBucket = `-- name: GetDatasetWithBucket :one
+const getDatas3tWithBucket = `-- name: GetDatas3tWithBucket :one
 SELECT d.id, d.name, d.s3_bucket_id, 
        s.endpoint, s.bucket, s.access_key, s.secret_key, s.use_tls
 FROM datas3ts d
@@ -599,7 +599,7 @@ JOIN s3_buckets s ON d.s3_bucket_id = s.id
 WHERE d.name = $1
 `
 
-type GetDatasetWithBucketRow struct {
+type GetDatas3tWithBucketRow struct {
 	ID         int64
 	Name       string
 	S3BucketID int64
@@ -610,9 +610,9 @@ type GetDatasetWithBucketRow struct {
 	UseTls     bool
 }
 
-func (q *Queries) GetDatasetWithBucket(ctx context.Context, name string) (GetDatasetWithBucketRow, error) {
-	row := q.db.QueryRow(ctx, getDatasetWithBucket, name)
-	var i GetDatasetWithBucketRow
+func (q *Queries) GetDatas3tWithBucket(ctx context.Context, name string) (GetDatas3tWithBucketRow, error) {
+	row := q.db.QueryRow(ctx, getDatas3tWithBucket, name)
+	var i GetDatas3tWithBucketRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
@@ -666,7 +666,7 @@ func (q *Queries) ListAllBuckets(ctx context.Context) ([]ListAllBucketsRow, erro
 
 const listDatas3ts = `-- name: ListDatas3ts :many
 SELECT 
-    d.name as dataset_name,
+    d.name as datas3t_name,
     s.name as bucket_name,
     COALESCE(COUNT(dr.id), 0) as datarange_count,
     COALESCE(SUM(dr.max_datapoint_key - dr.min_datapoint_key + 1), 0) as total_datapoints,
@@ -681,7 +681,7 @@ ORDER BY d.name
 `
 
 type ListDatas3tsRow struct {
-	DatasetName      string
+	Datas3tName      string
 	BucketName       string
 	DatarangeCount   interface{}
 	TotalDatapoints  interface{}
@@ -700,7 +700,7 @@ func (q *Queries) ListDatas3ts(ctx context.Context) ([]ListDatas3tsRow, error) {
 	for rows.Next() {
 		var i ListDatas3tsRow
 		if err := rows.Scan(
-			&i.DatasetName,
+			&i.Datas3tName,
 			&i.BucketName,
 			&i.DatarangeCount,
 			&i.TotalDatapoints,

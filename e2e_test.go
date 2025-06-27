@@ -168,7 +168,7 @@ var _ = Describe("End-to-End Server Test", func() {
 		minioSecretKey       string
 		testBucketName       string
 		testBucketConfigName string
-		testDatasetName      string
+		testDatas3tName      string
 		logger               *slog.Logger
 		tempDir              string
 		datas3tClient        *client.Client
@@ -223,7 +223,7 @@ var _ = Describe("End-to-End Server Test", func() {
 		minioSecretKey = "minioadmin"
 		testBucketName = "test-bucket"
 		testBucketConfigName = "test-bucket-config"
-		testDatasetName = "test-dataset"
+		testDatas3tName = "test-datas3t"
 
 		// Create test bucket in MinIO
 		minioClient, err := miniogo.New(minioHost, &miniogo.Options{
@@ -331,14 +331,14 @@ var _ = Describe("End-to-End Server Test", func() {
 		err := datas3tClient.AddBucket(ctx, bucketInfo)
 		Expect(err).NotTo(HaveOccurred())
 
-		// Step 2: Add dataset
-		logger.Info("Step 2: Adding dataset")
-		datasetReq := &datas3t.AddDatas3tRequest{
-			Name:   testDatasetName,
+		// Step 2: Add datas3t
+		logger.Info("Step 2: Adding datas3t")
+		datas3tReq := &datas3t.AddDatas3tRequest{
+			Name:   testDatas3tName,
 			Bucket: testBucketConfigName,
 		}
 
-		err = datas3tClient.AddDatas3t(ctx, datasetReq)
+		err = datas3tClient.AddDatas3t(ctx, datas3tReq)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Step 3: Upload first datarange (files 0-4)
@@ -355,7 +355,7 @@ var _ = Describe("End-to-End Server Test", func() {
 		Expect(err).NotTo(HaveOccurred())
 		defer file1.Close()
 
-		err = datas3tClient.UploadDataRangeFile(ctx, testDatasetName, file1, int64(len(testData1)), nil)
+		err = datas3tClient.UploadDataRangeFile(ctx, testDatas3tName, file1, int64(len(testData1)), nil)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Step 4: Upload second datarange (files 10-14) - gap between 5-9
@@ -372,13 +372,13 @@ var _ = Describe("End-to-End Server Test", func() {
 		Expect(err).NotTo(HaveOccurred())
 		defer file2.Close()
 
-		err = datas3tClient.UploadDataRangeFile(ctx, testDatasetName, file2, int64(len(testData2)), nil)
+		err = datas3tClient.UploadDataRangeFile(ctx, testDatas3tName, file2, int64(len(testData2)), nil)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Step 5: Download tar file containing both dataranges
 		logger.Info("Step 5: Downloading combined dataranges")
 		downloadReq := &download.PreSignDownloadForDatapointsRequest{
-			Datas3tName:    testDatasetName,
+			Datas3tName:    testDatas3tName,
 			FirstDatapoint: 2,  // Start from file 2 in first datarange
 			LastDatapoint:  12, // End at file 12 in second datarange
 		}

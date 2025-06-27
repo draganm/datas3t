@@ -95,10 +95,10 @@ func (s *UploadDatarangeServer) StartDatarangeUpload(ctx context.Context, log *s
 	// Check for overlapping dataranges without starting a transaction first
 
 	noTxQueries := postgresstore.New(s.db)
-	// Get dataset with bucket information
-	dataset, err := noTxQueries.GetDatasetWithBucket(ctx, req.Datas3tName)
+	// Get datas3t with bucket information
+	datas3t, err := noTxQueries.GetDatas3tWithBucket(ctx, req.Datas3tName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find dataset '%s': %w", req.Datas3tName, err)
+		return nil, fmt.Errorf("failed to find datas3t '%s': %w", req.Datas3tName, err)
 	}
 
 	{
@@ -108,7 +108,7 @@ func (s *UploadDatarangeServer) StartDatarangeUpload(ctx context.Context, log *s
 
 		// Check for overlapping dataranges
 		hasOverlap, err := noTxQueries.CheckDatarangeOverlap(ctx, postgresstore.CheckDatarangeOverlapParams{
-			Datas3tID:       dataset.ID,
+			Datas3tID:       datas3t.ID,
 			MinDatapointKey: lastDatapointIndex + 1, // Check if existing max >= our min
 			MaxDatapointKey: firstDatapointIndex,    // Check if existing min < our max
 		})
@@ -121,7 +121,7 @@ func (s *UploadDatarangeServer) StartDatarangeUpload(ctx context.Context, log *s
 		}
 
 		// Create S3 client
-		s3Client, err = s.createS3Client(ctx, dataset)
+		s3Client, err = s.createS3Client(ctx, datas3t)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create S3 client: %w", err)
 		}
@@ -153,14 +153,14 @@ func (s *UploadDatarangeServer) StartDatarangeUpload(ctx context.Context, log *s
 	if useDirectPut {
 		// For small objects, use direct PUT
 		uploadID = "DIRECT_PUT"
-		presignedDataPutURL, err = s.generatePresignedPutURL(ctx, s3Client, dataset.Bucket, objectKey)
+		presignedDataPutURL, err = s.generatePresignedPutURL(ctx, s3Client, datas3t.Bucket, objectKey)
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate data upload URL: %w", err)
 		}
 	} else {
 		// For large objects, use multipart upload
 		createResp, err := s3Client.CreateMultipartUpload(ctx, &s3.CreateMultipartUploadInput{
-			Bucket: aws.String(dataset.Bucket),
+			Bucket: aws.String(datas3t.Bucket),
 			Key:    aws.String(objectKey),
 		})
 		if err != nil {
@@ -172,7 +172,7 @@ func (s *UploadDatarangeServer) StartDatarangeUpload(ctx context.Context, log *s
 		defer func() {
 			if err != nil {
 				s3Client.AbortMultipartUpload(ctx, &s3.AbortMultipartUploadInput{
-					Bucket:   aws.String(dataset.Bucket),
+					Bucket:   aws.String(datas3t.Bucket),
 					Key:      aws.String(objectKey),
 					UploadId: aws.String(uploadID),
 				})
@@ -184,12 +184,12 @@ func (s *UploadDatarangeServer) StartDatarangeUpload(ctx context.Context, log *s
 		numParts := s.calculateNumberOfParts(req.DataSize, partSize)
 
 		// Generate presigned URLs for multipart upload parts
-		presignedPutURLs, err = s.generateMultipartUploadURLs(ctx, s3Client, dataset.Bucket, objectKey, uploadID, numParts)
+		presignedPutURLs, err = s.generateMultipartUploadURLs(ctx, s3Client, datas3t.Bucket, objectKey, uploadID, numParts)
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate multipart upload URLs: %w", err)
 		}
 	}
-	presignedIndexURL, err := s.generatePresignedPutURL(ctx, s3Client, dataset.Bucket, indexObjectKey)
+	presignedIndexURL, err := s.generatePresignedPutURL(ctx, s3Client, datas3t.Bucket, indexObjectKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate index upload URL: %w", err)
 	}
@@ -209,7 +209,7 @@ func (s *UploadDatarangeServer) StartDatarangeUpload(ctx context.Context, log *s
 
 	// Check for overlapping dataranges
 	hasOverlap, err := queries.CheckDatarangeOverlap(ctx, postgresstore.CheckDatarangeOverlapParams{
-		Datas3tID:       dataset.ID,
+		Datas3tID:       datas3t.ID,
 		MinDatapointKey: lastDatapointIndex + 1, // Check if existing max >= our min
 		MaxDatapointKey: firstDatapointIndex,    // Check if existing min < our max
 	})
@@ -223,7 +223,7 @@ func (s *UploadDatarangeServer) StartDatarangeUpload(ctx context.Context, log *s
 
 	// Create datarange record
 	datarangeID, err := queries.CreateDatarange(ctx, postgresstore.CreateDatarangeParams{
-		Datas3tID:       dataset.ID,
+		Datas3tID:       datas3t.ID,
 		DataObjectKey:   objectKey,
 		IndexObjectKey:  indexObjectKey,
 		MinDatapointKey: firstDatapointIndex,
@@ -286,16 +286,16 @@ func (s *UploadDatarangeServer) calculateNumberOfParts(dataSize, partSize uint64
 	return numParts
 }
 
-func (s *UploadDatarangeServer) createS3Client(ctx context.Context, dataset postgresstore.GetDatasetWithBucketRow) (*s3.Client, error) {
+func (s *UploadDatarangeServer) createS3Client(ctx context.Context, datas3t postgresstore.GetDatas3tWithBucketRow) (*s3.Client, error) {
 	// Decrypt credentials
-	accessKey, secretKey, err := s.encryptor.DecryptCredentials(dataset.AccessKey, dataset.SecretKey)
+	accessKey, secretKey, err := s.encryptor.DecryptCredentials(datas3t.AccessKey, datas3t.SecretKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt credentials: %w", err)
 	}
 
 	// Build endpoint URL with proper scheme based on UseTls
-	endpoint := dataset.Endpoint
-	if dataset.UseTls {
+	endpoint := datas3t.Endpoint
+	if datas3t.UseTls {
 		if !regexp.MustCompile(`^https?://`).MatchString(endpoint) {
 			endpoint = "https://" + endpoint
 		}

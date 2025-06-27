@@ -50,7 +50,7 @@ func (s *DownloadServer) PreSignDownloadForDatapoints(ctx context.Context, reque
 	}
 
 	if len(dataranges) == 0 {
-		return PreSignDownloadForDatapointsResponse{}, fmt.Errorf("no dataranges found for datapoints %d-%d in dataset %s", request.FirstDatapoint, request.LastDatapoint, request.Datas3tName)
+		return PreSignDownloadForDatapointsResponse{}, fmt.Errorf("no dataranges found for datapoints %d-%d in datas3t %s", request.FirstDatapoint, request.LastDatapoint, request.Datas3tName)
 	}
 
 	var downloadSegments []DownloadSegment
@@ -65,7 +65,7 @@ func (s *DownloadServer) PreSignDownloadForDatapoints(ctx context.Context, reque
 
 		// Create disk cache key for this datarange
 		cacheKey := diskcache.DatarangeKey{
-			Datas3tName:        datarange.DatasetName,
+			Datas3tName:        datarange.Datas3tName,
 			FirstIndex:         datarange.MinDatapointKey,
 			NumberOfDatapoints: datarange.MaxDatapointKey - datarange.MinDatapointKey + 1,
 			TotalSizeBytes:     datarange.SizeBytes,

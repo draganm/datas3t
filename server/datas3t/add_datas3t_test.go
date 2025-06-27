@@ -160,7 +160,7 @@ var _ = Describe("AddDatas3t", func() {
 
 			// Verify dataset was added to database
 			queries := postgresstore.New(db)
-			datasets, err := queries.AllDatasets(ctx)
+			datasets, err := queries.AllDatas3ts(ctx)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(datasets).To(ContainElement("test-dataset"))
 		})
@@ -185,7 +185,7 @@ var _ = Describe("AddDatas3t", func() {
 
 				// Verify dataset was added to database
 				queries := postgresstore.New(db)
-				datasets, err := queries.AllDatasets(ctx)
+				datasets, err := queries.AllDatas3ts(ctx)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(datasets).To(ContainElement(name), "Dataset not found for name: %s", name)
 
@@ -213,7 +213,7 @@ var _ = Describe("AddDatas3t", func() {
 
 			// Verify both datasets were added to database
 			queries := postgresstore.New(db)
-			datasets, err := queries.AllDatasets(ctx)
+			datasets, err := queries.AllDatas3ts(ctx)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(datasets).To(ContainElement("test-dataset-1"))
 			Expect(datasets).To(ContainElement("test-dataset-2"))

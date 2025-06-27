@@ -183,7 +183,7 @@ var _ = Describe("ListDatas3ts", func() {
 			// Check that both datasets are present
 			datasetNames := make([]string, len(datas3ts))
 			for i, d := range datas3ts {
-				datasetNames[i] = d.DatasetName
+				datasetNames[i] = d.Datas3tName
 			}
 			Expect(datasetNames).To(ContainElements("test-dataset-1", "test-dataset-2"))
 
@@ -204,8 +204,8 @@ var _ = Describe("ListDatas3ts", func() {
 			Expect(datas3ts).To(HaveLen(2))
 
 			// Should be ordered by dataset name
-			Expect(datas3ts[0].DatasetName).To(Equal("test-dataset-1"))
-			Expect(datas3ts[1].DatasetName).To(Equal("test-dataset-2"))
+			Expect(datas3ts[0].Datas3tName).To(Equal("test-dataset-1"))
+			Expect(datas3ts[1].Datas3tName).To(Equal("test-dataset-2"))
 		})
 	})
 
@@ -222,7 +222,7 @@ var _ = Describe("ListDatas3ts", func() {
 
 			// Get the dataset to add dataranges to it
 			queries := postgresstore.New(db)
-			dataset, err := queries.GetDatasetWithBucket(ctx, "test-dataset-with-data")
+			dataset, err := queries.GetDatas3tWithBucket(ctx, "test-dataset-with-data")
 			Expect(err).NotTo(HaveOccurred())
 
 			// Add some test dataranges
@@ -263,7 +263,7 @@ var _ = Describe("ListDatas3ts", func() {
 			Expect(datas3ts).To(HaveLen(1))
 
 			d := datas3ts[0]
-			Expect(d.DatasetName).To(Equal("test-dataset-with-data"))
+			Expect(d.Datas3tName).To(Equal("test-dataset-with-data"))
 			Expect(d.BucketName).To(Equal(testBucketConfigName))
 			Expect(d.DatarangeCount).To(Equal(int64(3)))
 
@@ -298,7 +298,7 @@ var _ = Describe("ListDatas3ts", func() {
 			queries := postgresstore.New(db)
 
 			// Add dataranges to dataset-a
-			datasetA, err := queries.GetDatasetWithBucket(ctx, "dataset-a")
+			datasetA, err := queries.GetDatas3tWithBucket(ctx, "dataset-a")
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = queries.CreateDatarange(ctx, postgresstore.CreateDatarangeParams{
@@ -312,7 +312,7 @@ var _ = Describe("ListDatas3ts", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Add dataranges to dataset-c (leave dataset-b empty)
-			datasetC, err := queries.GetDatasetWithBucket(ctx, "dataset-c")
+			datasetC, err := queries.GetDatas3tWithBucket(ctx, "dataset-c")
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = queries.CreateDatarange(ctx, postgresstore.CreateDatarangeParams{
@@ -342,9 +342,9 @@ var _ = Describe("ListDatas3ts", func() {
 			Expect(datas3ts).To(HaveLen(3))
 
 			// Should be ordered by dataset name
-			Expect(datas3ts[0].DatasetName).To(Equal("dataset-a"))
-			Expect(datas3ts[1].DatasetName).To(Equal("dataset-b"))
-			Expect(datas3ts[2].DatasetName).To(Equal("dataset-c"))
+			Expect(datas3ts[0].Datas3tName).To(Equal("dataset-a"))
+			Expect(datas3ts[1].Datas3tName).To(Equal("dataset-b"))
+			Expect(datas3ts[2].Datas3tName).To(Equal("dataset-c"))
 
 			// Check dataset-a
 			datasetA := datas3ts[0]

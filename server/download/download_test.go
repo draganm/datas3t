@@ -106,14 +106,14 @@ var _ = Describe("PresignDownloadForDatapoints", func() {
 		downloadSrv          *download.DownloadServer
 		uploadSrv            *dataranges.UploadDatarangeServer
 		bucketSrv            *bucket.BucketServer
-		datasetSrv           *datas3t.Datas3tServer
+		datas3tSrv           *datas3t.Datas3tServer
 		minioEndpoint        string
 		minioHost            string
 		minioAccessKey       string
 		minioSecretKey       string
 		testBucketName       string
 		testBucketConfigName string
-		testDatasetName      string
+		testDatas3tName      string
 		logger               *slog.Logger
 	)
 
@@ -187,7 +187,7 @@ var _ = Describe("PresignDownloadForDatapoints", func() {
 		minioSecretKey = "minioadmin"
 		testBucketName = "test-bucket"
 		testBucketConfigName = "test-bucket-config"
-		testDatasetName = "test-dataset"
+		testDatas3tName = "test-datas3t"
 
 		// Create test bucket in MinIO
 		minioClient, err := miniogo.New(minioHost, &miniogo.Options{
@@ -204,7 +204,7 @@ var _ = Describe("PresignDownloadForDatapoints", func() {
 		Expect(err).NotTo(HaveOccurred())
 		bucketSrv, err = bucket.NewServer(db, "dGVzdC1rZXktMzItYnl0ZXMtZm9yLXRlc3RpbmchIQ==")
 		Expect(err).NotTo(HaveOccurred())
-		datasetSrv, err = datas3t.NewServer(db, "dGVzdC1rZXktMzItYnl0ZXMtZm9yLXRlc3RpbmchIQ==")
+		datas3tSrv, err = datas3t.NewServer(db, "dGVzdC1rZXktMzItYnl0ZXMtZm9yLXRlc3RpbmchIQ==")
 		Expect(err).NotTo(HaveOccurred())
 
 		// Create download server with cache
@@ -225,13 +225,13 @@ var _ = Describe("PresignDownloadForDatapoints", func() {
 		err = bucketSrv.AddBucket(ctx, logger, bucketInfo)
 		Expect(err).NotTo(HaveOccurred())
 
-		// Add test dataset
-		datasetReq := &datas3t.AddDatas3tRequest{
+		// Add test datas3t
+		datas3tReq := &datas3t.AddDatas3tRequest{
 			Bucket: testBucketConfigName,
-			Name:   testDatasetName,
+			Name:   testDatas3tName,
 		}
 
-		err = datasetSrv.AddDatas3t(ctx, logger, datasetReq)
+		err = datas3tSrv.AddDatas3t(ctx, logger, datas3tReq)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -259,7 +259,7 @@ var _ = Describe("PresignDownloadForDatapoints", func() {
 
 		// Start upload
 		uploadReq := &dataranges.UploadDatarangeRequest{
-			Datas3tName:         testDatasetName,
+			Datas3tName:         testDatas3tName,
 			DataSize:            uint64(len(testData)),
 			NumberOfDatapoints:  numDatapoints,
 			FirstDatapointIndex: firstDatapoint,
@@ -302,7 +302,7 @@ var _ = Describe("PresignDownloadForDatapoints", func() {
 
 		It("should return download segments for a single datarange", func(ctx SpecContext) {
 			req := download.PreSignDownloadForDatapointsRequest{
-				Datas3tName:    testDatasetName,
+				Datas3tName:    testDatas3tName,
 				FirstDatapoint: 2,
 				LastDatapoint:  7,
 			}
@@ -324,7 +324,7 @@ var _ = Describe("PresignDownloadForDatapoints", func() {
 
 		It("should return download segments spanning multiple dataranges", func(ctx SpecContext) {
 			req := download.PreSignDownloadForDatapointsRequest{
-				Datas3tName:    testDatasetName,
+				Datas3tName:    testDatas3tName,
 				FirstDatapoint: 5,
 				LastDatapoint:  35,
 			}
@@ -349,7 +349,7 @@ var _ = Describe("PresignDownloadForDatapoints", func() {
 
 		It("should return download segments for exact datarange boundaries", func(ctx SpecContext) {
 			req := download.PreSignDownloadForDatapointsRequest{
-				Datas3tName:    testDatasetName,
+				Datas3tName:    testDatas3tName,
 				FirstDatapoint: 0,
 				LastDatapoint:  9,
 			}
@@ -365,7 +365,7 @@ var _ = Describe("PresignDownloadForDatapoints", func() {
 
 		It("should return download segments for single datapoint", func(ctx SpecContext) {
 			req := download.PreSignDownloadForDatapointsRequest{
-				Datas3tName:    testDatasetName,
+				Datas3tName:    testDatas3tName,
 				FirstDatapoint: 25,
 				LastDatapoint:  25,
 			}
@@ -381,7 +381,7 @@ var _ = Describe("PresignDownloadForDatapoints", func() {
 
 		It("should handle partial overlap with dataranges", func(ctx SpecContext) {
 			req := download.PreSignDownloadForDatapointsRequest{
-				Datas3tName:    testDatasetName,
+				Datas3tName:    testDatas3tName,
 				FirstDatapoint: 45,
 				LastDatapoint:  55, // Extends beyond last datarange (30-49)
 			}
@@ -416,7 +416,7 @@ var _ = Describe("PresignDownloadForDatapoints", func() {
 
 		It("should reject first datapoint greater than last datapoint", func(ctx SpecContext) {
 			req := download.PreSignDownloadForDatapointsRequest{
-				Datas3tName:    testDatasetName,
+				Datas3tName:    testDatas3tName,
 				FirstDatapoint: 20,
 				LastDatapoint:  10,
 			}
@@ -426,9 +426,9 @@ var _ = Describe("PresignDownloadForDatapoints", func() {
 			Expect(err.Error()).To(ContainSubstring("first_datapoint (20) cannot be greater than last_datapoint (10)"))
 		})
 
-		It("should reject non-existent dataset", func(ctx SpecContext) {
+		It("should reject non-existent datas3t", func(ctx SpecContext) {
 			req := download.PreSignDownloadForDatapointsRequest{
-				Datas3tName:    "non-existent-dataset",
+				Datas3tName:    "non-existent-datas3t",
 				FirstDatapoint: 10,
 				LastDatapoint:  15,
 			}
@@ -440,7 +440,7 @@ var _ = Describe("PresignDownloadForDatapoints", func() {
 
 		It("should reject datapoints with no overlapping dataranges", func(ctx SpecContext) {
 			req := download.PreSignDownloadForDatapointsRequest{
-				Datas3tName:    testDatasetName,
+				Datas3tName:    testDatas3tName,
 				FirstDatapoint: 100,
 				LastDatapoint:  200,
 			}
@@ -451,10 +451,10 @@ var _ = Describe("PresignDownloadForDatapoints", func() {
 		})
 	})
 
-	Context("when dataset has no dataranges", func() {
-		It("should return error for empty dataset", func(ctx SpecContext) {
+	Context("when datas3t has no dataranges", func() {
+		It("should return error for empty datas3t", func(ctx SpecContext) {
 			req := download.PreSignDownloadForDatapointsRequest{
-				Datas3tName:    testDatasetName,
+				Datas3tName:    testDatas3tName,
 				FirstDatapoint: 0,
 				LastDatapoint:  10,
 			}
@@ -473,7 +473,7 @@ var _ = Describe("PresignDownloadForDatapoints", func() {
 
 		It("should cache index files and reuse them", func(ctx SpecContext) {
 			req := download.PreSignDownloadForDatapointsRequest{
-				Datas3tName:    testDatasetName,
+				Datas3tName:    testDatas3tName,
 				FirstDatapoint: 1,
 				LastDatapoint:  3,
 			}
@@ -502,7 +502,7 @@ var _ = Describe("PresignDownloadForDatapoints", func() {
 
 		It("should efficiently handle large ranges", func(ctx SpecContext) {
 			req := download.PreSignDownloadForDatapointsRequest{
-				Datas3tName:    testDatasetName,
+				Datas3tName:    testDatas3tName,
 				FirstDatapoint: 50,
 				LastDatapoint:  150,
 			}

@@ -1,17 +1,17 @@
 # datas3t
 
-A high-performance data management system for storing, indexing, and retrieving large-scale datasets in S3-compatible object storage.
+A high-performance data management system for storing, indexing, and retrieving large-scale datas3ts in S3-compatible object storage.
 
 ## Overview
 
-datas3t is designed for efficiently managing datasets containing millions of individual files (called "datapoints"). It stores files as indexed TAR archives in S3-compatible storage, enabling fast random access without the overhead of extracting entire archives.
+datas3t is designed for efficiently managing datas3ts containing millions of individual files (called "datapoints"). It stores files as indexed TAR archives in S3-compatible storage, enabling fast random access without the overhead of extracting entire archives.
 
 ## Key Features
 
 ### 🗜️ **Efficient Storage**
 - Packs individual files into TAR archives
 - Eliminates S3 object overhead for small files
-- Supports datasets with millions of datapoints
+- Supports datas3ts with millions of datapoints
 
 ### ⚡ **Fast Random Access**
 - Creates lightweight indices for TAR archives
@@ -20,13 +20,13 @@ datas3t is designed for efficiently managing datasets containing millions of ind
 
 ### 📦 **Range-based Operations**
 - Upload and download data in configurable chunks (dataranges)
-- Supports partial dataset retrieval
+- Supports partial datas3t retrieval
 - Parallel processing of multiple ranges
 
 ### 🔗 **Direct Client-to-Storage Transfer**
 - Uses S3 presigned URLs for efficient data transfer
 - Bypasses server for large file operations
-- Supports multipart uploads for large datasets
+- Supports multipart uploads for large datas3ts
 
 ### 🛡️ **Data Integrity**
 - Validates TAR structure and file naming conventions
@@ -51,7 +51,7 @@ datas3t is designed for efficiently managing datasets containing millions of ind
 
 ### Components
 
-- **HTTP API Server**: REST API for dataset management
+- **HTTP API Server**: REST API for datas3t management
 - **Client Library**: Go SDK for programmatic access  
 - **PostgreSQL Database**: Stores metadata and indices
 - **S3-Compatible Storage**: Stores TAR archives and indices
@@ -60,23 +60,23 @@ datas3t is designed for efficiently managing datasets containing millions of ind
 
 ## Core Concepts
 
-### Datasets (datas3ts)
-Named collections of related datapoints. Each dataset is associated with an S3 bucket configuration.
+### Datas3ts
+Named collections of related datapoints. Each datas3t is associated with an S3 bucket configuration.
 
 ### Datapoints
-Individual files within a dataset, numbered sequentially:
+Individual files within a datas3t, numbered sequentially:
 - `00000000000000000001.txt`
 - `00000000000000000002.jpg`
 - `00000000000000000003.json`
 
 ### Dataranges
 Contiguous chunks of datapoints stored as TAR archives:
-- `datas3t/my-dataset/dataranges/00000000000000000001-00000000000000001000.tar`
-- `datas3t/my-dataset/dataranges/00000000000000001001-00000000000000002000.tar`
+- `datas3t/my-datas3t/dataranges/00000000000000000001-00000000000000001000.tar`
+- `datas3t/my-datas3t/dataranges/00000000000000001001-00000000000000002000.tar`
 
 ### TAR Indices
 Lightweight index files enabling fast random access:
-- `datas3t/my-dataset/dataranges/00000000000000000001-00000000000000001000.index.zst`
+- `datas3t/my-datas3t/dataranges/00000000000000000001-00000000000000001000.index.zst`
 
 ## Quick Start
 
@@ -134,13 +134,13 @@ curl -X POST http://localhost:8080/api/bucket \
   }'
 ```
 
-### 2. Create Dataset
+### 2. Create Datas3t
 
 ```bash
 curl -X POST http://localhost:8080/api/datas3t \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "my-dataset",
+    "name": "my-datas3t",
     "bucket": "my-bucket-config"
   }'
 ```
@@ -152,7 +152,7 @@ curl -X POST http://localhost:8080/api/datas3t \
 curl -X POST http://localhost:8080/api/datarange/upload/start \
   -H "Content-Type: application/json" \
   -d '{
-    "datas3t_name": "my-dataset",
+    "datas3t_name": "my-datas3t",
     "first_datapoint_index": 1,
     "number_of_datapoints": 1000,
     "data_size": 1048576
@@ -173,7 +173,7 @@ curl -X POST http://localhost:8080/api/datarange/upload/complete \
 curl -X POST http://localhost:8080/api/download/presign \
   -H "Content-Type: application/json" \
   -d '{
-    "datas3t_name": "my-dataset",
+    "datas3t_name": "my-datas3t",
     "first_datapoint": 100,
     "last_datapoint": 200
   }'
@@ -193,15 +193,15 @@ func main() {
     // Create client
     c := client.New("http://localhost:8080")
     
-    // List datasets
-    datasets, err := c.ListDatas3ts(context.Background())
+    // List datas3ts
+datas3ts, err := c.ListDatas3ts(context.Background())
     if err != nil {
         panic(err)
     }
     
     // Download specific datapoints
     response, err := c.PreSignDownloadForDatapoints(context.Background(), &client.PreSignDownloadForDatapointsRequest{
-        Datas3tName:    "my-dataset",
+        Datas3tName:    "my-datas3t",
         FirstDatapoint: 1,
         LastDatapoint:  100,
     })
@@ -230,7 +230,7 @@ Datapoints must follow the naming pattern `%020d.<extension>`:
 
 ### Storage Efficiency
 - **Small Files**: 99%+ storage efficiency vs individual S3 objects
-- **Large Datasets**: Linear scaling with dataset size
+- **Large Datas3ts**: Linear scaling with datas3t size
 
 ### Access Performance
 - **Index Lookup**: O(1) file location within TAR
@@ -239,7 +239,7 @@ Datapoints must follow the naming pattern `%020d.<extension>`:
 
 ### Scalability
 - **Concurrent Operations**: Supports parallel uploads/downloads
-- **Large Datasets**: Tested with millions of datapoints
+- **Large Datas3ts**: Tested with millions of datapoints
 - **Distributed**: Stateless server design for horizontal scaling
 
 ## Contributing
@@ -262,7 +262,7 @@ Datapoints must follow the naming pattern `%020d.<extension>`:
 
 ### Database Schema
 - **s3_buckets**: S3 configuration storage
-- **datasets**: Dataset metadata
+- **datas3ts**: Datas3t metadata
 - **dataranges**: TAR archive metadata and byte ranges
 - **datarange_uploads**: Temporary upload state management
 
@@ -292,7 +292,7 @@ For questions, issues, or contributions:
 ## Installation
 
 ```bash
-git clone https://github.com/draganm/datas3t/v2.git
+git clone https://github.com/draganm/datas3t.git
 cd datas3t
 nix develop -c make build
 ```

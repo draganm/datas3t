@@ -71,7 +71,7 @@ func (c *Client) DownloadDatapointsTarWithOptions(ctx context.Context, datas3tNa
 	}
 
 	if len(resp.DownloadSegments) == 0 {
-		return fmt.Errorf("no download segments available for datapoints %d-%d in dataset %s", firstDatapoint, lastDatapoint, datas3tName)
+		return fmt.Errorf("no download segments available for datapoints %d-%d in datas3t %s", firstDatapoint, lastDatapoint, datas3tName)
 	}
 
 	// 2. Create output file

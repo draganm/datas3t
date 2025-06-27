@@ -64,7 +64,7 @@ func (s *Datas3tServer) AddDatas3t(ctx context.Context, log *slog.Logger, req *A
 	}
 
 	err = queries.AddDatas3t(ctx, postgresstore.AddDatas3tParams{
-		DatasetName: req.Name,
+		Datas3tName: req.Name,
 		BucketName:  req.Bucket,
 	})
 
