@@ -286,9 +286,13 @@ func uploadDataMultipart(ctx context.Context, urls []string, file io.ReaderAt, s
 		return nil, fmt.Errorf("no upload URLs provided")
 	}
 
-	// Calculate chunk sizes
-	chunkSize := size / int64(numParts)
-	lastChunkSize := size - (chunkSize * int64(numParts-1)) // Handle remainder
+	// Calculate part sizes respecting S3 minimum part size requirements
+	// All parts except the last must be at least 5MB
+	const minPartSize = 5 * 1024 * 1024 // 5MB
+
+	// Use the minimum part size for all parts except the last
+	// The last part can be smaller and will contain any remainder
+	standardPartSize := int64(minPartSize)
 
 	// Use errgroup with parallelism limit
 	g, ctx := errgroup.WithContext(ctx)
@@ -299,10 +303,17 @@ func uploadDataMultipart(ctx context.Context, urls []string, file io.ReaderAt, s
 		i, url := i, url // capture loop variables
 		g.Go(func() error {
 			// Calculate this part's boundaries
-			offset := int64(i) * chunkSize
-			partSize := chunkSize
-			if i == numParts-1 { // last part
-				partSize = lastChunkSize
+			offset := int64(i) * standardPartSize
+			partSize := standardPartSize
+
+			// Handle the last part - it gets all remaining data
+			if i == numParts-1 {
+				partSize = size - offset
+			}
+
+			// Safety check: ensure we don't exceed file boundaries
+			if offset+partSize > size {
+				partSize = size - offset
 			}
 
 			// Upload chunk with retry
