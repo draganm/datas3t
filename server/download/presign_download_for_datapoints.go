@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"regexp"
 	"time"
 
@@ -121,7 +122,7 @@ func (s *DownloadServer) createS3Client(ctx context.Context, datarange postgress
 		endpoint = "http://" + endpoint
 	}
 
-	// Create AWS config with custom credentials
+	// Create AWS config with custom credentials and timeouts
 	cfg, err := config.LoadDefaultConfig(ctx,
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
 			accessKey,
@@ -129,6 +130,9 @@ func (s *DownloadServer) createS3Client(ctx context.Context, datarange postgress
 			"", // token
 		)),
 		config.WithRegion("us-east-1"), // default region
+		config.WithHTTPClient(&http.Client{
+			Timeout: 30 * time.Second, // 30 second timeout for all HTTP operations
+		}),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load AWS config: %w", err)
@@ -199,14 +203,21 @@ func (s *DownloadServer) createDownloadSegments(ctx context.Context, s3Client *s
 
 	// Calculate the byte range we need
 	startByte := firstFileMetadata.Start
-	endByte := lastFileMetadata.Start + int64(lastFileMetadata.HeaderBlocks)*512 + lastFileMetadata.Size - 1
+
+	// Calculate end byte including proper TAR padding for the last file
+	// 1. Start of last file
+	// 2. + Header size (HeaderBlocks * 512)
+	// 3. + File content padded to 512-byte boundary
+	lastFileHeaderSize := int64(lastFileMetadata.HeaderBlocks) * 512
+	lastFileContentPaddedSize := ((lastFileMetadata.Size + 511) / 512) * 512 // Round up to 512-byte boundary
+
+	endByte := lastFileMetadata.Start + lastFileHeaderSize + lastFileContentPaddedSize - 1
 
 	// Create presigned URL for the data object with byte range
 	presigner := s3.NewPresignClient(s3Client)
 	req, err := presigner.PresignGetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(datarange.Bucket),
 		Key:    aws.String(datarange.DataObjectKey),
-		Range:  aws.String(fmt.Sprintf("bytes=%d-%d", startByte, endByte)),
 	}, func(opts *s3.PresignOptions) {
 		opts.Expires = 24 * time.Hour // URL expires in 24 hours
 	})

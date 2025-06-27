@@ -6,13 +6,10 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/draganm/datas3t/server/download"
-	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -81,129 +78,42 @@ func (c *Client) DownloadDatapointsTarWithOptions(ctx context.Context, datas3tNa
 	}
 	defer outputFile.Close()
 
-	// 3. Download all segments in parallel with chunking
-	err = c.downloadSegmentsParallel(ctx, resp.DownloadSegments, outputFile, opts)
+	// 3. Download and stitch segments together in order
+	for i, segment := range resp.DownloadSegments {
+		segmentData, err := c.downloadSegment(ctx, segment, opts.MaxRetries)
+		if err != nil {
+			return fmt.Errorf("failed to download segment %d: %w", i, err)
+		}
+
+		// Write segment data directly to output file
+		_, err = outputFile.Write(segmentData)
+		if err != nil {
+			return fmt.Errorf("failed to write segment %d to output file: %w", i, err)
+		}
+	}
+
+	// 4. Add TAR termination blocks (two 512-byte zero blocks) to make it a valid TAR file
+	terminationBlocks := make([]byte, 1024) // Two 512-byte zero blocks
+	_, err = outputFile.Write(terminationBlocks)
 	if err != nil {
-		return fmt.Errorf("failed to download segments: %w", err)
+		return fmt.Errorf("failed to write TAR termination blocks: %w", err)
 	}
 
 	return nil
 }
 
-// downloadSegmentsParallel downloads all segments in parallel with chunking
-func (c *Client) downloadSegmentsParallel(ctx context.Context, segments []download.DownloadSegment, file *os.File, opts *DownloadOptions) error {
-	// Calculate total size and create chunks
-	var chunks []downloadChunk
-	var currentOffset int64
+// downloadSegment downloads a single segment and returns its data
+func (c *Client) downloadSegment(ctx context.Context, segment download.DownloadSegment, maxRetries int) ([]byte, error) {
+	var segmentData []byte
 
-	for segmentIndex, segment := range segments {
-		segmentSize, err := c.parseSegmentSize(segment.Range)
-		if err != nil {
-			return fmt.Errorf("failed to parse segment %d range: %w", segmentIndex, err)
-		}
-
-		// Split segment into chunks
-		segmentChunks := c.createChunksForSegment(segment, segmentSize, currentOffset, opts.ChunkSize)
-		chunks = append(chunks, segmentChunks...)
-		currentOffset += segmentSize
-	}
-
-	// Use errgroup with parallelism limit
-	g, ctx := errgroup.WithContext(ctx)
-	g.SetLimit(opts.MaxParallelism)
-
-	// Download all chunks in parallel
-	for _, chunk := range chunks {
-		chunk := chunk // capture loop variable
-		g.Go(func() error {
-			return c.downloadChunkWithRetry(ctx, chunk, file, opts.MaxRetries)
-		})
-	}
-
-	return g.Wait()
-}
-
-// downloadChunk represents a chunk to be downloaded
-type downloadChunk struct {
-	URL        string
-	StartByte  int64
-	EndByte    int64
-	FileOffset int64
-	Size       int64
-}
-
-// parseSegmentSize parses the byte range to determine segment size
-func (c *Client) parseSegmentSize(rangeHeader string) (int64, error) {
-	// Range format: "bytes=start-end"
-	if !strings.HasPrefix(rangeHeader, "bytes=") {
-		return 0, fmt.Errorf("invalid range format: %s", rangeHeader)
-	}
-
-	rangeStr := strings.TrimPrefix(rangeHeader, "bytes=")
-	parts := strings.Split(rangeStr, "-")
-	if len(parts) != 2 {
-		return 0, fmt.Errorf("invalid range format: %s", rangeHeader)
-	}
-
-	start, err := strconv.ParseInt(parts[0], 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("invalid start byte: %w", err)
-	}
-
-	end, err := strconv.ParseInt(parts[1], 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("invalid end byte: %w", err)
-	}
-
-	return end - start + 1, nil
-}
-
-// createChunksForSegment splits a segment into smaller chunks
-func (c *Client) createChunksForSegment(segment download.DownloadSegment, segmentSize, fileOffset, chunkSize int64) []downloadChunk {
-	// Parse the original range to get start and end bytes
-	rangeStr := strings.TrimPrefix(segment.Range, "bytes=")
-	parts := strings.Split(rangeStr, "-")
-	segmentStartByte, _ := strconv.ParseInt(parts[0], 10, 64)
-	segmentEndByte, _ := strconv.ParseInt(parts[1], 10, 64)
-
-	var chunks []downloadChunk
-	currentByte := segmentStartByte
-	currentFileOffset := fileOffset
-
-	for currentByte <= segmentEndByte {
-		chunkEndByte := currentByte + chunkSize - 1
-		if chunkEndByte > segmentEndByte {
-			chunkEndByte = segmentEndByte
-		}
-
-		actualChunkSize := chunkEndByte - currentByte + 1
-
-		chunks = append(chunks, downloadChunk{
-			URL:        segment.PresignedURL,
-			StartByte:  currentByte,
-			EndByte:    chunkEndByte,
-			FileOffset: currentFileOffset,
-			Size:       actualChunkSize,
-		})
-
-		currentByte = chunkEndByte + 1
-		currentFileOffset += actualChunkSize
-	}
-
-	return chunks
-}
-
-// downloadChunkWithRetry downloads a single chunk with exponential backoff retry
-func (c *Client) downloadChunkWithRetry(ctx context.Context, chunk downloadChunk, file *os.File, maxRetries int) error {
 	operation := func() error {
-		req, err := http.NewRequestWithContext(ctx, "GET", chunk.URL, nil)
+		req, err := http.NewRequestWithContext(ctx, "GET", segment.PresignedURL, nil)
 		if err != nil {
 			return err
 		}
 
-		// Set the Range header for this chunk
-		rangeHeader := fmt.Sprintf("bytes=%d-%d", chunk.StartByte, chunk.EndByte)
-		req.Header.Set("Range", rangeHeader)
+		// Set the Range header
+		req.Header.Set("Range", segment.Range)
 
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
@@ -222,30 +132,22 @@ func (c *Client) downloadChunkWithRetry(ctx context.Context, chunk downloadChunk
 			return backoff.Permanent(fmt.Errorf("unexpected HTTP status: %s, body: %s", resp.Status, string(body)))
 		}
 
-		// Read the chunk data
+		// Read the segment data
 		data, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return err
 		}
 
-		if int64(len(data)) != chunk.Size {
-			return fmt.Errorf("expected %d bytes, got %d bytes", chunk.Size, len(data))
-		}
-
-		// Write to the correct position in the file
-		_, err = file.WriteAt(data, chunk.FileOffset)
-		if err != nil {
-			return backoff.Permanent(fmt.Errorf("failed to write chunk data: %w", err))
-		}
-
+		// Store the data in the closure variable
+		segmentData = data
 		return nil
 	}
 
 	b := createDownloadBackoffConfig(maxRetries)
 	err := backoff.Retry(operation, backoff.WithContext(b, ctx))
 	if err != nil {
-		return fmt.Errorf("chunk download failed (offset %d, size %d): %w", chunk.FileOffset, chunk.Size, err)
+		return nil, fmt.Errorf("segment download failed: %w", err)
 	}
 
-	return nil
+	return segmentData, nil
 }

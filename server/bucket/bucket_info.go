@@ -3,8 +3,10 @@ package bucket
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -71,7 +73,7 @@ func (r *BucketInfo) testConnection(ctx context.Context) error {
 	// Normalize the endpoint to ensure it has a protocol scheme
 	endpoint := normalizeEndpoint(r.Endpoint)
 
-	// Create AWS config with custom credentials
+	// Create AWS config with custom credentials and timeouts
 	cfg, err := config.LoadDefaultConfig(ctx,
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
 			r.AccessKey,
@@ -79,6 +81,9 @@ func (r *BucketInfo) testConnection(ctx context.Context) error {
 			"", // token
 		)),
 		config.WithRegion("us-east-1"), // default region, can be overridden by endpoint
+		config.WithHTTPClient(&http.Client{
+			Timeout: 30 * time.Second, // 30 second timeout for all HTTP operations
+		}),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to load AWS config: %w", err)
