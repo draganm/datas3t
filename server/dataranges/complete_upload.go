@@ -492,15 +492,15 @@ func (s *UploadDatarangeServer) validateTarEntry(ctx context.Context, s3Client *
 	return nil
 }
 
-// isValidFileName checks if the filename matches the pattern %020d.<extension>
+// isValidFileName checks if the filename matches the pattern %020d.<extension(s)>
 func (s *UploadDatarangeServer) isValidFileName(fileName string) bool {
-	// Find the last dot
-	dotIndex := strings.LastIndex(fileName, ".")
+	// Find the first dot to handle compound extensions like .json.zst
+	dotIndex := strings.Index(fileName, ".")
 	if dotIndex == -1 || dotIndex == 0 {
 		return false // No extension or starts with dot
 	}
 
-	// Check if the part before the extension is exactly 20 digits
+	// Check if the part before the first extension is exactly 20 digits
 	namepart := fileName[:dotIndex]
 	if len(namepart) != 20 {
 		return false
@@ -518,7 +518,7 @@ func (s *UploadDatarangeServer) isValidFileName(fileName string) bool {
 
 // extractDatapointKeyFromFileName extracts the numeric datapoint key from a filename
 func (s *UploadDatarangeServer) extractDatapointKeyFromFileName(fileName string) (int64, error) {
-	dotIndex := strings.LastIndex(fileName, ".")
+	dotIndex := strings.Index(fileName, ".")
 	if dotIndex == -1 {
 		return 0, fmt.Errorf("no extension found")
 	}
