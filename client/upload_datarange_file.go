@@ -18,10 +18,40 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// ProgressPhase represents the current phase of the upload process
+type ProgressPhase string
+
+const (
+	PhaseAnalyzing      ProgressPhase = "analyzing"
+	PhaseIndexing       ProgressPhase = "indexing"
+	PhaseStarting       ProgressPhase = "starting"
+	PhaseUploading      ProgressPhase = "uploading"
+	PhaseUploadingIndex ProgressPhase = "uploading_index"
+	PhaseCompleting     ProgressPhase = "completing"
+)
+
+// ProgressInfo contains information about the upload progress
+type ProgressInfo struct {
+	Phase           ProgressPhase
+	TotalBytes      int64
+	CompletedBytes  int64
+	PercentComplete float64
+	CurrentStep     string
+	TotalSteps      int
+	CompletedSteps  int
+	EstimatedETA    time.Duration
+	Speed           float64 // bytes per second
+	StartTime       time.Time
+}
+
+// ProgressCallback is called to report upload progress
+type ProgressCallback func(info ProgressInfo)
+
 // UploadOptions configures the upload behavior
 type UploadOptions struct {
-	MaxParallelism int // Maximum number of concurrent uploads (default: 4)
-	MaxRetries     int // Maximum number of retry attempts per chunk (default: 3)
+	MaxParallelism   int              // Maximum number of concurrent uploads (default: 4)
+	MaxRetries       int              // Maximum number of retry attempts per chunk (default: 3)
+	ProgressCallback ProgressCallback // Optional progress callback
 }
 
 // DefaultUploadOptions returns sensible default options
@@ -43,24 +73,98 @@ func createBackoffConfig(maxRetries int) backoff.BackOff {
 	return backoff.WithMaxRetries(expBackoff, uint64(maxRetries))
 }
 
+// progressTracker helps track upload progress across phases
+type progressTracker struct {
+	callback       ProgressCallback
+	totalBytes     int64
+	completedBytes int64
+	startTime      time.Time
+	totalSteps     int
+	completedSteps int
+}
+
+// newProgressTracker creates a new progress tracker
+func newProgressTracker(callback ProgressCallback, totalBytes int64) *progressTracker {
+	return &progressTracker{
+		callback:   callback,
+		totalBytes: totalBytes,
+		startTime:  time.Now(),
+		totalSteps: 6, // Total phases: analyze, index, start, upload, upload_index, complete
+	}
+}
+
+// reportProgress reports current progress
+func (pt *progressTracker) reportProgress(phase ProgressPhase, currentStep string, additionalBytes int64) {
+	if pt.callback == nil {
+		return
+	}
+
+	pt.completedBytes += additionalBytes
+
+	var percentComplete float64
+	if pt.totalBytes > 0 {
+		percentComplete = float64(pt.completedBytes) / float64(pt.totalBytes) * 100
+	}
+
+	elapsed := time.Since(pt.startTime)
+	var speed float64
+	var eta time.Duration
+
+	if elapsed > 0 && pt.completedBytes > 0 {
+		speed = float64(pt.completedBytes) / elapsed.Seconds()
+		if speed > 0 {
+			remainingBytes := pt.totalBytes - pt.completedBytes
+			eta = time.Duration(float64(remainingBytes) / speed * float64(time.Second))
+		}
+	}
+
+	info := ProgressInfo{
+		Phase:           phase,
+		TotalBytes:      pt.totalBytes,
+		CompletedBytes:  pt.completedBytes,
+		PercentComplete: percentComplete,
+		CurrentStep:     currentStep,
+		TotalSteps:      pt.totalSteps,
+		CompletedSteps:  pt.completedSteps,
+		EstimatedETA:    eta,
+		Speed:           speed,
+		StartTime:       pt.startTime,
+	}
+
+	pt.callback(info)
+}
+
+// nextStep advances to the next step
+func (pt *progressTracker) nextStep() {
+	pt.completedSteps++
+}
+
 func (c *Client) UploadDataRangeFile(ctx context.Context, datas3tName string, file io.ReaderAt, size int64, opts *UploadOptions) error {
 	if opts == nil {
 		opts = DefaultUploadOptions()
 	}
 
+	// Create progress tracker
+	tracker := newProgressTracker(opts.ProgressCallback, size)
+
 	// Phase 1: Analyze TAR file to extract datapoint information
+	tracker.reportProgress(PhaseAnalyzing, "Analyzing TAR file structure", 0)
 	tarInfo, err := analyzeTarFile(file, size)
 	if err != nil {
 		return fmt.Errorf("failed to analyze tar file: %w", err)
 	}
+	tracker.nextStep()
 
 	// Phase 2: Generate TAR index
+	tracker.reportProgress(PhaseIndexing, "Generating TAR index", 0)
 	indexData, err := generateTarIndex(file, size)
 	if err != nil {
 		return fmt.Errorf("failed to generate tar index: %w", err)
 	}
+	tracker.nextStep()
 
 	// Phase 3: Start upload
+	tracker.reportProgress(PhaseStarting, "Starting upload session", 0)
 	uploadReq := &dataranges.UploadDatarangeRequest{
 		Datas3tName:         datas3tName,
 		DataSize:            uint64(size),
@@ -72,12 +176,14 @@ func (c *Client) UploadDataRangeFile(ctx context.Context, datas3tName string, fi
 	if err != nil {
 		return fmt.Errorf("failed to start upload: %w", err)
 	}
+	tracker.nextStep()
 
 	// Phase 4: Upload data
+	tracker.reportProgress(PhaseUploading, "Uploading data", 0)
 	var uploadIDs []string
 	if uploadResp.UseDirectPut {
 		// Direct PUT for small files
-		err = uploadDataDirectPut(ctx, uploadResp.PresignedDataPutURL, file, size, opts.MaxRetries)
+		err = uploadDataDirectPut(ctx, uploadResp.PresignedDataPutURL, file, size, opts.MaxRetries, tracker)
 		if err != nil {
 			// Cancel upload on failure
 			cancelReq := &dataranges.CancelUploadRequest{
@@ -88,7 +194,7 @@ func (c *Client) UploadDataRangeFile(ctx context.Context, datas3tName string, fi
 		}
 	} else {
 		// Multipart upload for large files
-		uploadIDs, err = uploadDataMultipart(ctx, uploadResp.PresignedMultipartUploadPutURLs, file, size, opts)
+		uploadIDs, err = uploadDataMultipart(ctx, uploadResp.PresignedMultipartUploadPutURLs, file, size, opts, tracker)
 		if err != nil {
 			// Cancel upload on failure
 			cancelReq := &dataranges.CancelUploadRequest{
@@ -98,9 +204,11 @@ func (c *Client) UploadDataRangeFile(ctx context.Context, datas3tName string, fi
 			return fmt.Errorf("failed to upload data: %w", err)
 		}
 	}
+	tracker.nextStep()
 
 	// Phase 5: Upload index
-	err = uploadIndexWithRetry(ctx, uploadResp.PresignedIndexPutURL, indexData, opts.MaxRetries)
+	tracker.reportProgress(PhaseUploadingIndex, "Uploading index", 0)
+	err = uploadIndexWithRetry(ctx, uploadResp.PresignedIndexPutURL, indexData, opts.MaxRetries, tracker)
 	if err != nil {
 		// Cancel upload on failure
 		cancelReq := &dataranges.CancelUploadRequest{
@@ -109,8 +217,10 @@ func (c *Client) UploadDataRangeFile(ctx context.Context, datas3tName string, fi
 		c.CancelDatarangeUpload(ctx, cancelReq) // Best effort, ignore error
 		return fmt.Errorf("failed to upload index: %w", err)
 	}
+	tracker.nextStep()
 
 	// Phase 6: Complete upload
+	tracker.reportProgress(PhaseCompleting, "Completing upload", 0)
 	completeReq := &dataranges.CompleteUploadRequest{
 		DatarangeUploadID: uploadResp.DatarangeID,
 		UploadIDs:         uploadIDs, // ETags for multipart, empty for direct PUT
@@ -120,7 +230,10 @@ func (c *Client) UploadDataRangeFile(ctx context.Context, datas3tName string, fi
 	if err != nil {
 		return fmt.Errorf("failed to complete upload: %w", err)
 	}
+	tracker.nextStep()
 
+	// Final progress report
+	tracker.reportProgress(PhaseCompleting, "Upload completed successfully", 0)
 	return nil
 }
 
@@ -238,7 +351,7 @@ func generateTarIndex(file io.ReaderAt, size int64) ([]byte, error) {
 }
 
 // uploadDataDirectPut handles direct PUT upload for small files
-func uploadDataDirectPut(ctx context.Context, url string, file io.ReaderAt, size int64, maxRetries int) error {
+func uploadDataDirectPut(ctx context.Context, url string, file io.ReaderAt, size int64, maxRetries int, tracker *progressTracker) error {
 	operation := func() error {
 		// Create reader for entire file
 		reader := io.NewSectionReader(file, 0, size)
@@ -258,6 +371,8 @@ func uploadDataDirectPut(ctx context.Context, url string, file io.ReaderAt, size
 		defer resp.Body.Close()
 
 		if resp.StatusCode == http.StatusOK {
+			// Report progress for the entire file
+			tracker.reportProgress(PhaseUploading, "Direct upload completed", size)
 			return nil
 		}
 
@@ -280,7 +395,7 @@ func uploadDataDirectPut(ctx context.Context, url string, file io.ReaderAt, size
 }
 
 // uploadDataMultipart handles multipart upload for large files
-func uploadDataMultipart(ctx context.Context, urls []string, file io.ReaderAt, size int64, opts *UploadOptions) ([]string, error) {
+func uploadDataMultipart(ctx context.Context, urls []string, file io.ReaderAt, size int64, opts *UploadOptions, tracker *progressTracker) ([]string, error) {
 	numParts := len(urls)
 	if numParts == 0 {
 		return nil, fmt.Errorf("no upload URLs provided")
@@ -317,7 +432,7 @@ func uploadDataMultipart(ctx context.Context, urls []string, file io.ReaderAt, s
 			}
 
 			// Upload chunk with retry
-			etag, err := uploadChunkWithRetry(ctx, url, file, offset, partSize, opts.MaxRetries)
+			etag, err := uploadChunkWithRetry(ctx, url, file, offset, partSize, opts.MaxRetries, tracker, i+1, numParts)
 			if err != nil {
 				return fmt.Errorf("failed to upload part %d: %w", i+1, err)
 			}
@@ -335,7 +450,7 @@ func uploadDataMultipart(ctx context.Context, urls []string, file io.ReaderAt, s
 }
 
 // uploadChunkWithRetry uploads a single chunk with exponential backoff retry
-func uploadChunkWithRetry(ctx context.Context, url string, file io.ReaderAt, offset, size int64, maxRetries int) (string, error) {
+func uploadChunkWithRetry(ctx context.Context, url string, file io.ReaderAt, offset, size int64, maxRetries int, tracker *progressTracker, partNum, totalParts int) (string, error) {
 	var etag string
 
 	operation := func() error {
@@ -358,6 +473,9 @@ func uploadChunkWithRetry(ctx context.Context, url string, file io.ReaderAt, off
 
 		if resp.StatusCode == http.StatusOK {
 			etag = resp.Header.Get("ETag")
+			// Report progress for this chunk
+			stepInfo := fmt.Sprintf("Uploading part %d of %d", partNum, totalParts)
+			tracker.reportProgress(PhaseUploading, stepInfo, size)
 			return nil
 		}
 
@@ -380,9 +498,7 @@ func uploadChunkWithRetry(ctx context.Context, url string, file io.ReaderAt, off
 }
 
 // uploadIndexWithRetry uploads the tar index with retry logic
-func uploadIndexWithRetry(ctx context.Context, url string, indexData []byte, maxRetries int) error {
-	fmt.Printf("Uploading index to %s\n", url)
-
+func uploadIndexWithRetry(ctx context.Context, url string, indexData []byte, maxRetries int, tracker *progressTracker) error {
 	operation := func() error {
 		// Create HTTP request
 		req, err := http.NewRequestWithContext(ctx, "PUT", url, bytes.NewReader(indexData))
@@ -399,6 +515,8 @@ func uploadIndexWithRetry(ctx context.Context, url string, indexData []byte, max
 		defer resp.Body.Close()
 
 		if resp.StatusCode == http.StatusOK {
+			// Report progress for index upload
+			tracker.reportProgress(PhaseUploadingIndex, "Index upload completed", 0)
 			return nil
 		}
 
@@ -412,14 +530,10 @@ func uploadIndexWithRetry(ctx context.Context, url string, indexData []byte, max
 	}
 
 	b := createBackoffConfig(maxRetries)
-	err := backoff.RetryNotify(operation, backoff.WithContext(b, ctx), func(err error, d time.Duration) {
-		fmt.Printf("Uploading index with retry: %v\n", err)
-	})
+	err := backoff.Retry(operation, backoff.WithContext(b, ctx))
 	if err != nil {
 		return fmt.Errorf("index upload failed: %w", err)
 	}
-
-	fmt.Printf("Uploaded index with retry: %s\n", url)
 
 	return nil
 }
