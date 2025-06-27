@@ -5,7 +5,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/draganm/datas3t/v2/server/bucket"
+	"github.com/draganm/datas3t/server/bucket"
 )
 
 func (a *api) addBucket(w http.ResponseWriter, r *http.Request) {

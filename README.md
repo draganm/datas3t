@@ -186,7 +186,7 @@ package main
 
 import (
     "context"
-    "github.com/draganm/datas3t/v2/client"
+    "github.com/draganm/datas3t/client"
 )
 
 func main() {

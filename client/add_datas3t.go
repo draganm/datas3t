@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/draganm/datas3t/v2/server/datas3t"
+	"github.com/draganm/datas3t/server/datas3t"
 )
 
 func (c *Client) AddDatas3t(ctx context.Context, datas3t *datas3t.AddDatas3tRequest) error {

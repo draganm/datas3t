@@ -12,9 +12,9 @@ import (
 	"os/signal"
 	"strings"
 
-	"github.com/draganm/datas3t/v2/httpapi"
-	"github.com/draganm/datas3t/v2/postgresstore"
-	"github.com/draganm/datas3t/v2/server"
+	"github.com/draganm/datas3t/httpapi"
+	"github.com/draganm/datas3t/postgresstore"
+	"github.com/draganm/datas3t/server"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	"github.com/golang-migrate/migrate/v4/source/iofs"

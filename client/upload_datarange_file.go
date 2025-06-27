@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/draganm/datas3t/v2/server/dataranges"
-	"github.com/draganm/datas3t/v2/tarindex"
+	"github.com/draganm/datas3t/server/dataranges"
+	"github.com/draganm/datas3t/tarindex"
 	"golang.org/x/sync/errgroup"
 )
 

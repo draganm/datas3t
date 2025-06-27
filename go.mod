@@ -1,4 +1,4 @@
-module github.com/draganm/datas3t/v2
+module github.com/draganm/datas3t
 
 go 1.24.3
 

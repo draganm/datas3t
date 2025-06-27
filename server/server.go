@@ -1,10 +1,10 @@
 package server
 
 import (
-	"github.com/draganm/datas3t/v2/server/bucket"
-	"github.com/draganm/datas3t/v2/server/dataranges"
-	"github.com/draganm/datas3t/v2/server/datas3t"
-	"github.com/draganm/datas3t/v2/server/download"
+	"github.com/draganm/datas3t/server/bucket"
+	"github.com/draganm/datas3t/server/dataranges"
+	"github.com/draganm/datas3t/server/datas3t"
+	"github.com/draganm/datas3t/server/download"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

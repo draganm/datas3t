@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/draganm/datas3t/v2/server/dataranges"
+	"github.com/draganm/datas3t/server/dataranges"
 )
 
 func (a *api) completeDatarangeUpload(w http.ResponseWriter, r *http.Request) {

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/draganm/datas3t/v2/server/dataranges"
+	"github.com/draganm/datas3t/server/dataranges"
 )
 
 func (a *api) startDatarangeUpload(w http.ResponseWriter, r *http.Request) {

@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/draganm/datas3t/v2/tarindex"
+	"github.com/draganm/datas3t/tarindex"
 )
 
 // DatarangeKey represents the unique identifier for a datarange

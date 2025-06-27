@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/draganm/datas3t/v2/server/download"
+	"github.com/draganm/datas3t/server/download"
 	"golang.org/x/sync/errgroup"
 )
 

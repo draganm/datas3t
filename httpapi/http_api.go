@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/draganm/datas3t/v2/server"
+	"github.com/draganm/datas3t/server"
 )
 
 type api struct {

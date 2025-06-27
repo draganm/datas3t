@@ -8,7 +8,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/draganm/datas3t/v2/postgresstore"
+	"github.com/draganm/datas3t/postgresstore"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 

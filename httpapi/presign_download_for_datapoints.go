@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/draganm/datas3t/v2/server/download"
+	"github.com/draganm/datas3t/server/download"
 )
 
 func (a *api) presignDownloadForDatapoints(w http.ResponseWriter, r *http.Request) {

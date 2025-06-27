@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/draganm/datas3t/v2/server/bucket"
+	"github.com/draganm/datas3t/server/bucket"
 )
 
 func (c *Client) ListBuckets(ctx context.Context) ([]*bucket.BucketListInfo, error) {

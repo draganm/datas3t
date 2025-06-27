@@ -10,8 +10,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/draganm/datas3t/v2/tarindex"
-	"github.com/draganm/datas3t/v2/tarindex/diskcache"
+	"github.com/draganm/datas3t/tarindex"
+	"github.com/draganm/datas3t/tarindex/diskcache"
 )
 
 var _ = Describe("IndexDiskCache", func() {

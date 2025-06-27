@@ -5,7 +5,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/draganm/datas3t/v2/server/datas3t"
+	"github.com/draganm/datas3t/server/datas3t"
 )
 
 func (a *api) addDatas3t(w http.ResponseWriter, r *http.Request) {

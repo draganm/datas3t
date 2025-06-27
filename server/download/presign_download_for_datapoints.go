@@ -11,9 +11,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/draganm/datas3t/v2/postgresstore"
-	"github.com/draganm/datas3t/v2/tarindex"
-	"github.com/draganm/datas3t/v2/tarindex/diskcache"
+	"github.com/draganm/datas3t/postgresstore"
+	"github.com/draganm/datas3t/tarindex"
+	"github.com/draganm/datas3t/tarindex/diskcache"
 )
 
 type PreSignDownloadForDatapointsRequest struct {

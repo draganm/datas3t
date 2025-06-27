@@ -11,7 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/draganm/datas3t/v2/postgresstore"
+	"github.com/draganm/datas3t/postgresstore"
 )
 
 type UploadDatarangeRequest struct {

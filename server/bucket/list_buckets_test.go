@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/draganm/datas3t/v2/server/bucket"
+	"github.com/draganm/datas3t/server/bucket"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"

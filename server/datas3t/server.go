@@ -1,7 +1,7 @@
 package datas3t
 
 import (
-	"github.com/draganm/datas3t/v2/crypto"
+	"github.com/draganm/datas3t/crypto"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

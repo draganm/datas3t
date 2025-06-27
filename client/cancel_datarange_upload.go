@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/draganm/datas3t/v2/server/dataranges"
+	"github.com/draganm/datas3t/server/dataranges"
 )
 
 func (c *Client) CancelDatarangeUpload(ctx context.Context, r *dataranges.CancelUploadRequest) error {

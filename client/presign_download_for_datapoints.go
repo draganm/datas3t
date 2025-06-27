@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/draganm/datas3t/v2/server/download"
+	"github.com/draganm/datas3t/server/download"
 )
 
 func (c *Client) PreSignDownloadForDatapoints(ctx context.Context, r *download.PreSignDownloadForDatapointsRequest) (*download.PreSignDownloadForDatapointsResponse, error) {

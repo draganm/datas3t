@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/draganm/datas3t/v2/server/datas3t"
+	"github.com/draganm/datas3t/server/datas3t"
 )
 
 func (c *Client) ListDatas3ts(ctx context.Context) ([]datas3t.Datas3tInfo, error) {

@@ -1,8 +1,8 @@
 package download
 
 import (
-	"github.com/draganm/datas3t/v2/crypto"
-	"github.com/draganm/datas3t/v2/tarindex/diskcache"
+	"github.com/draganm/datas3t/crypto"
+	"github.com/draganm/datas3t/tarindex/diskcache"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/draganm/datas3t/v2/postgresstore"
+	"github.com/draganm/datas3t/postgresstore"
 )
 
 func (s *BucketServer) ListBuckets(ctx context.Context, log *slog.Logger) ([]*BucketListInfo, error) {

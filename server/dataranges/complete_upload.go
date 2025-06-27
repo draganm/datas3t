@@ -18,8 +18,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
-	"github.com/draganm/datas3t/v2/postgresstore"
-	"github.com/draganm/datas3t/v2/tarindex"
+	"github.com/draganm/datas3t/postgresstore"
+	"github.com/draganm/datas3t/tarindex"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
