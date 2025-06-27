@@ -22,7 +22,7 @@ func Command() *cli.Command {
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:    "server-url",
-						Value:   "http://localhost:8080",
+						Value:   "http://localhost:8765",
 						Usage:   "Server URL",
 						EnvVars: []string{"DATAS3T_SERVER_URL"},
 					},
@@ -60,7 +60,7 @@ func Command() *cli.Command {
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:    "server-url",
-						Value:   "http://localhost:8080",
+						Value:   "http://localhost:8765",
 						Usage:   "Server URL",
 						EnvVars: []string{"DATAS3T_SERVER_URL"},
 					},

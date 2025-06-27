@@ -114,12 +114,12 @@ nix develop -c go generate ./...
 ```bash
 # Set environment variables
 export DB_URL="postgres://user:password@localhost:5432/datas3t"
-export ADDR=":8080"
+export ADDR=":8765"
 
 # Run the server
 nix develop -c go run ./cmd/datas3t server
 
-# Server will start on http://localhost:8080
+# Server will start on http://localhost:8765
 ```
 
 ## API Usage
@@ -127,7 +127,7 @@ nix develop -c go run ./cmd/datas3t server
 ### 1. Configure S3 Bucket
 
 ```bash
-curl -X POST http://localhost:8080/api/bucket \
+curl -X POST http://localhost:8765/api/bucket \
   -H "Content-Type: application/json" \
   -d '{
     "name": "my-bucket-config",
@@ -141,7 +141,7 @@ curl -X POST http://localhost:8080/api/bucket \
 ### 2. Create Datas3t
 
 ```bash
-curl -X POST http://localhost:8080/api/datas3t \
+curl -X POST http://localhost:8765/api/datas3t \
   -H "Content-Type: application/json" \
   -d '{
     "name": "my-datas3t",
@@ -153,7 +153,7 @@ curl -X POST http://localhost:8080/api/datas3t \
 
 ```bash
 # Start upload
-curl -X POST http://localhost:8080/api/datarange/upload/start \
+curl -X POST http://localhost:8765/api/datarange/upload/start \
   -H "Content-Type: application/json" \
   -d '{
     "datas3t_name": "my-datas3t",
@@ -164,7 +164,7 @@ curl -X POST http://localhost:8080/api/datarange/upload/start \
 
 # Use returned presigned URLs to upload TAR archive and index
 # Then complete the upload
-curl -X POST http://localhost:8080/api/datarange/upload/complete \
+curl -X POST http://localhost:8765/api/datarange/upload/complete \
   -H "Content-Type: application/json" \
   -d '{
     "datarange_upload_id": 123
@@ -174,7 +174,7 @@ curl -X POST http://localhost:8080/api/datarange/upload/complete \
 ### 4. Download Datapoints
 
 ```bash
-curl -X POST http://localhost:8080/api/download/presign \
+curl -X POST http://localhost:8765/api/download/presign \
   -H "Content-Type: application/json" \
   -d '{
     "datas3t_name": "my-datas3t",
@@ -195,7 +195,7 @@ import (
 
 func main() {
     // Create client
-    c := client.New("http://localhost:8080")
+    c := client.New("http://localhost:8765")
     
     // List datas3ts
 datas3ts, err := c.ListDatas3ts(context.Background())
@@ -237,7 +237,7 @@ nix develop -c go run ./cmd/datas3t [command]
 ### Global Options
 
 All commands support:
-- `--server-url` - Server URL (default: `http://localhost:8080`, env: `DATAS3T_SERVER_URL`)
+- `--server-url` - Server URL (default: `http://localhost:8765`, env: `DATAS3T_SERVER_URL`)
 
 ### Server Management
 

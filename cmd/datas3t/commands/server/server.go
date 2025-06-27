@@ -29,7 +29,7 @@ func Command() *cli.Command {
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:    "addr",
-				Value:   ":8080",
+				Value:   ":8765",
 				Usage:   "Address to bind to",
 				EnvVars: []string{"ADDR"},
 			},
