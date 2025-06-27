@@ -25,7 +25,6 @@ func (s *BucketServer) ListBuckets(ctx context.Context, log *slog.Logger) ([]*Bu
 			Name:     bucket.Name,
 			Endpoint: bucket.Endpoint,
 			Bucket:   bucket.Bucket,
-			UseTLS:   bucket.UseTls,
 		}
 	}
 

@@ -31,13 +31,13 @@ SELECT DISTINCT name
 FROM s3_buckets;
 
 -- name: ListAllBuckets :many
-SELECT name, endpoint, bucket, use_tls
+SELECT name, endpoint, bucket
 FROM s3_buckets
 ORDER BY name;
 
 -- name: GetDatas3tWithBucket :one
 SELECT d.id, d.name, d.s3_bucket_id, 
-       s.endpoint, s.bucket, s.access_key, s.secret_key, s.use_tls
+       s.endpoint, s.bucket, s.access_key, s.secret_key
 FROM datas3ts d
 JOIN s3_buckets s ON d.s3_bucket_id = s.id
 WHERE d.name = $1;
@@ -83,8 +83,7 @@ SELECT
     s.endpoint, 
     s.bucket, 
     s.access_key, 
-    s.secret_key, 
-    s.use_tls
+    s.secret_key
 FROM datarange_uploads du
 JOIN dataranges dr ON du.datarange_id = dr.id  
 JOIN datas3ts d ON dr.datas3t_id = d.id
@@ -107,10 +106,9 @@ INSERT INTO s3_buckets (
         endpoint,
         bucket,
         access_key,
-        secret_key,
-        use_tls
+        secret_key
     )
-VALUES ($1, $2, $3, $4, $5, $6);
+VALUES ($1, $2, $3, $4, $5);
 
 -- name: AddDatas3t :exec
 INSERT INTO datas3ts (name, s3_bucket_id) 
@@ -167,8 +165,7 @@ SELECT
     s.endpoint,
     s.bucket,
     s.access_key,
-    s.secret_key,
-    s.use_tls
+    s.secret_key
 FROM dataranges dr
 JOIN datas3ts d ON dr.datas3t_id = d.id
 JOIN s3_buckets s ON d.s3_bucket_id = s.id

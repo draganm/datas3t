@@ -127,7 +127,6 @@ var _ = Describe("AddDatas3t", func() {
 			Bucket:    testBucketName,
 			AccessKey: minioAccessKey,
 			SecretKey: minioSecretKey,
-			UseTLS:    false,
 		}
 
 		err = bucketSrv.AddBucket(ctx, logger, bucketInfo)
@@ -316,7 +315,6 @@ var _ = Describe("AddDatas3t", func() {
 				Bucket:    anotherBucketName,
 				AccessKey: minioAccessKey,
 				SecretKey: minioSecretKey,
-				UseTLS:    false,
 			}
 
 			err = bucketSrv.AddBucket(ctx, logger, bucketInfo)

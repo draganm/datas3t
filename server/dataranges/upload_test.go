@@ -280,7 +280,6 @@ var _ = Describe("UploadDatarange", func() {
 			Bucket:    testBucketName,
 			AccessKey: minioAccessKey,
 			SecretKey: minioSecretKey,
-			UseTLS:    false,
 		}
 
 		err = bucketSrv.AddBucket(ctx, logger, bucketInfo)

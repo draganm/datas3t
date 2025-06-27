@@ -248,16 +248,11 @@ func (s *UploadDatarangeServer) createS3ClientFromUploadDetails(ctx context.Cont
 		return nil, fmt.Errorf("failed to decrypt credentials: %w", err)
 	}
 
-	// Build endpoint URL with proper scheme
+	// Normalize endpoint to ensure it has proper protocol scheme
 	endpoint := uploadDetails.Endpoint
-	if uploadDetails.UseTls {
-		if !strings.HasPrefix(endpoint, "https://") && !strings.HasPrefix(endpoint, "http://") {
-			endpoint = "https://" + endpoint
-		}
-	} else {
-		if !strings.HasPrefix(endpoint, "https://") && !strings.HasPrefix(endpoint, "http://") {
-			endpoint = "http://" + endpoint
-		}
+	if !strings.HasPrefix(endpoint, "https://") && !strings.HasPrefix(endpoint, "http://") {
+		// If no scheme provided, default to http (non-TLS)
+		endpoint = "http://" + endpoint
 	}
 
 	// Create AWS config with custom credentials and timeouts

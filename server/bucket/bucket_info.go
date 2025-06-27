@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -17,7 +18,6 @@ type BucketInfo struct {
 	Bucket    string `json:"bucket"`
 	AccessKey string `json:"access_key"`
 	SecretKey string `json:"secret_key"`
-	UseTLS    bool   `json:"use_tls"`
 }
 
 // BucketListInfo represents bucket information for listing (without sensitive credentials)
@@ -25,12 +25,26 @@ type BucketListInfo struct {
 	Name     string `json:"name"`
 	Endpoint string `json:"endpoint"`
 	Bucket   string `json:"bucket"`
-	UseTLS   bool   `json:"use_tls"`
 }
 
 var bucketNameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
 type ValidationError error
+
+// IsEndpointTLS determines if an endpoint uses TLS based on its protocol
+func IsEndpointTLS(endpoint string) bool {
+	return strings.HasPrefix(endpoint, "https://")
+}
+
+// normalizeEndpoint ensures the endpoint has the correct protocol scheme
+func normalizeEndpoint(endpoint string) string {
+	if regexp.MustCompile(`^https?://`).MatchString(endpoint) {
+		return endpoint
+	}
+
+	// If no scheme provided, default to http (non-TLS)
+	return "http://" + endpoint
+}
 
 func (r *BucketInfo) Validate(ctx context.Context) error {
 	if !bucketNameRegex.MatchString(r.Name) {
@@ -54,18 +68,8 @@ func (r *BucketInfo) Validate(ctx context.Context) error {
 }
 
 func (r *BucketInfo) testConnection(ctx context.Context) error {
-
-	// Build endpoint URL with proper scheme based on UseTls
-	endpoint := r.Endpoint
-	if r.UseTLS {
-		if !regexp.MustCompile(`^https?://`).MatchString(endpoint) {
-			endpoint = "https://" + endpoint
-		}
-	} else {
-		if !regexp.MustCompile(`^https?://`).MatchString(endpoint) {
-			endpoint = "http://" + endpoint
-		}
-	}
+	// Normalize the endpoint to ensure it has a protocol scheme
+	endpoint := normalizeEndpoint(r.Endpoint)
 
 	// Create AWS config with custom credentials
 	cfg, err := config.LoadDefaultConfig(ctx,

@@ -114,16 +114,11 @@ func (s *DownloadServer) createS3Client(ctx context.Context, datarange postgress
 		return nil, fmt.Errorf("failed to decrypt credentials: %w", err)
 	}
 
-	// Build endpoint URL with proper scheme based on UseTls
+	// Normalize endpoint to ensure it has proper protocol scheme
 	endpoint := datarange.Endpoint
-	if datarange.UseTls {
-		if !regexp.MustCompile(`^https?://`).MatchString(endpoint) {
-			endpoint = "https://" + endpoint
-		}
-	} else {
-		if !regexp.MustCompile(`^https?://`).MatchString(endpoint) {
-			endpoint = "http://" + endpoint
-		}
+	if !regexp.MustCompile(`^https?://`).MatchString(endpoint) {
+		// If no scheme provided, default to http (non-TLS)
+		endpoint = "http://" + endpoint
 	}
 
 	// Create AWS config with custom credentials

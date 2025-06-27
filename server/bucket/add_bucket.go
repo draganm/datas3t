@@ -43,7 +43,6 @@ func (s *BucketServer) AddBucket(ctx context.Context, log *slog.Logger, req *Buc
 		Bucket:    req.Bucket,
 		AccessKey: encryptedAccessKey,
 		SecretKey: encryptedSecretKey,
-		UseTls:    req.UseTLS,
 	})
 
 	if err != nil {

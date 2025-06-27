@@ -293,16 +293,11 @@ func (s *UploadDatarangeServer) createS3Client(ctx context.Context, datas3t post
 		return nil, fmt.Errorf("failed to decrypt credentials: %w", err)
 	}
 
-	// Build endpoint URL with proper scheme based on UseTls
+	// Normalize endpoint to ensure it has proper protocol scheme
 	endpoint := datas3t.Endpoint
-	if datas3t.UseTls {
-		if !regexp.MustCompile(`^https?://`).MatchString(endpoint) {
-			endpoint = "https://" + endpoint
-		}
-	} else {
-		if !regexp.MustCompile(`^https?://`).MatchString(endpoint) {
-			endpoint = "http://" + endpoint
-		}
+	if !regexp.MustCompile(`^https?://`).MatchString(endpoint) {
+		// If no scheme provided, default to http (non-TLS)
+		endpoint = "http://" + endpoint
 	}
 
 	// Create AWS config with custom credentials

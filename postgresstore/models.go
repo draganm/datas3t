@@ -56,7 +56,6 @@ type S3Bucket struct {
 	Bucket    string
 	AccessKey string
 	SecretKey string
-	UseTls    bool
 	CreatedAt pgtype.Timestamp
 	UpdatedAt pgtype.Timestamp
 }

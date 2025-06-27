@@ -138,7 +138,6 @@ var _ = Describe("AddBucket", func() {
 				Bucket:    testBucketName,
 				AccessKey: minioAccessKey,
 				SecretKey: minioSecretKey,
-				UseTLS:    false,
 			}
 
 			err := srv.AddBucket(ctx, logger, bucketInfo)
@@ -160,7 +159,6 @@ var _ = Describe("AddBucket", func() {
 				Bucket:    testBucketName,
 				AccessKey: minioAccessKey,
 				SecretKey: minioSecretKey,
-				UseTLS:    false, // Keep false since our test MinIO doesn't have TLS
 			}
 
 			err := srv.AddBucket(ctx, logger, bucketInfo)
@@ -189,7 +187,6 @@ var _ = Describe("AddBucket", func() {
 					Bucket:    testBucketName,
 					AccessKey: minioAccessKey,
 					SecretKey: minioSecretKey,
-					UseTLS:    false,
 				}
 
 				err := srv.AddBucket(ctx, logger, bucketInfo)
@@ -237,7 +234,6 @@ var _ = Describe("AddBucket", func() {
 					Bucket:    testBucketName,
 					AccessKey: minioAccessKey,
 					SecretKey: minioSecretKey,
-					UseTLS:    false,
 				}
 
 				err := srv.AddBucket(ctx, logger, bucketInfo)
@@ -253,7 +249,6 @@ var _ = Describe("AddBucket", func() {
 				Bucket:    testBucketName,
 				AccessKey: minioAccessKey,
 				SecretKey: minioSecretKey,
-				UseTLS:    false,
 			}
 
 			err := srv.AddBucket(ctx, logger, bucketInfo)
@@ -268,7 +263,6 @@ var _ = Describe("AddBucket", func() {
 				Bucket:    "",
 				AccessKey: minioAccessKey,
 				SecretKey: minioSecretKey,
-				UseTLS:    false,
 			}
 
 			err := srv.AddBucket(ctx, logger, bucketInfo)
@@ -283,7 +277,6 @@ var _ = Describe("AddBucket", func() {
 				Bucket:    testBucketName,
 				AccessKey: "invalid-access-key",
 				SecretKey: "invalid-secret-key",
-				UseTLS:    false,
 			}
 
 			err := srv.AddBucket(ctx, logger, bucketInfo)
@@ -298,7 +291,6 @@ var _ = Describe("AddBucket", func() {
 				Bucket:    "non-existent-bucket",
 				AccessKey: minioAccessKey,
 				SecretKey: minioSecretKey,
-				UseTLS:    false,
 			}
 
 			err := srv.AddBucket(ctx, logger, bucketInfo)
@@ -313,7 +305,6 @@ var _ = Describe("AddBucket", func() {
 				Bucket:    testBucketName,
 				AccessKey: minioAccessKey,
 				SecretKey: minioSecretKey,
-				UseTLS:    false,
 			}
 
 			err := srv.AddBucket(ctx, logger, bucketInfo)
@@ -330,7 +321,6 @@ var _ = Describe("AddBucket", func() {
 				Bucket:    testBucketName,
 				AccessKey: minioAccessKey,
 				SecretKey: minioSecretKey,
-				UseTLS:    false,
 			}
 
 			// Add first bucket
@@ -360,7 +350,6 @@ var _ = Describe("AddBucket", func() {
 				Bucket:    testBucketName,
 				AccessKey: minioAccessKey,
 				SecretKey: minioSecretKey,
-				UseTLS:    false,
 			}
 
 			bucketInfo2 := &bucket.BucketInfo{
@@ -369,7 +358,6 @@ var _ = Describe("AddBucket", func() {
 				Bucket:    testBucketName, // Same endpoint-bucket combination
 				AccessKey: minioAccessKey,
 				SecretKey: minioSecretKey,
-				UseTLS:    false,
 			}
 
 			// Add first bucket

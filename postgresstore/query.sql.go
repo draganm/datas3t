@@ -17,10 +17,9 @@ INSERT INTO s3_buckets (
         endpoint,
         bucket,
         access_key,
-        secret_key,
-        use_tls
+        secret_key
     )
-VALUES ($1, $2, $3, $4, $5, $6)
+VALUES ($1, $2, $3, $4, $5)
 `
 
 type AddBucketParams struct {
@@ -29,7 +28,6 @@ type AddBucketParams struct {
 	Bucket    string
 	AccessKey string
 	SecretKey string
-	UseTls    bool
 }
 
 func (q *Queries) AddBucket(ctx context.Context, arg AddBucketParams) error {
@@ -39,7 +37,6 @@ func (q *Queries) AddBucket(ctx context.Context, arg AddBucketParams) error {
 		arg.Bucket,
 		arg.AccessKey,
 		arg.SecretKey,
-		arg.UseTls,
 	)
 	return err
 }
@@ -462,8 +459,7 @@ SELECT
     s.endpoint, 
     s.bucket, 
     s.access_key, 
-    s.secret_key, 
-    s.use_tls
+    s.secret_key
 FROM datarange_uploads du
 JOIN dataranges dr ON du.datarange_id = dr.id  
 JOIN datas3ts d ON dr.datas3t_id = d.id
@@ -487,7 +483,6 @@ type GetDatarangeUploadWithDetailsRow struct {
 	Bucket              string
 	AccessKey           string
 	SecretKey           string
-	UseTls              bool
 }
 
 func (q *Queries) GetDatarangeUploadWithDetails(ctx context.Context, id int64) (GetDatarangeUploadWithDetailsRow, error) {
@@ -509,7 +504,6 @@ func (q *Queries) GetDatarangeUploadWithDetails(ctx context.Context, id int64) (
 		&i.Bucket,
 		&i.AccessKey,
 		&i.SecretKey,
-		&i.UseTls,
 	)
 	return i, err
 }
@@ -526,8 +520,7 @@ SELECT
     s.endpoint,
     s.bucket,
     s.access_key,
-    s.secret_key,
-    s.use_tls
+    s.secret_key
 FROM dataranges dr
 JOIN datas3ts d ON dr.datas3t_id = d.id
 JOIN s3_buckets s ON d.s3_bucket_id = s.id
@@ -555,7 +548,6 @@ type GetDatarangesForDatapointsRow struct {
 	Bucket          string
 	AccessKey       string
 	SecretKey       string
-	UseTls          bool
 }
 
 func (q *Queries) GetDatarangesForDatapoints(ctx context.Context, arg GetDatarangesForDatapointsParams) ([]GetDatarangesForDatapointsRow, error) {
@@ -579,7 +571,6 @@ func (q *Queries) GetDatarangesForDatapoints(ctx context.Context, arg GetDataran
 			&i.Bucket,
 			&i.AccessKey,
 			&i.SecretKey,
-			&i.UseTls,
 		); err != nil {
 			return nil, err
 		}
@@ -593,7 +584,7 @@ func (q *Queries) GetDatarangesForDatapoints(ctx context.Context, arg GetDataran
 
 const getDatas3tWithBucket = `-- name: GetDatas3tWithBucket :one
 SELECT d.id, d.name, d.s3_bucket_id, 
-       s.endpoint, s.bucket, s.access_key, s.secret_key, s.use_tls
+       s.endpoint, s.bucket, s.access_key, s.secret_key
 FROM datas3ts d
 JOIN s3_buckets s ON d.s3_bucket_id = s.id
 WHERE d.name = $1
@@ -607,7 +598,6 @@ type GetDatas3tWithBucketRow struct {
 	Bucket     string
 	AccessKey  string
 	SecretKey  string
-	UseTls     bool
 }
 
 func (q *Queries) GetDatas3tWithBucket(ctx context.Context, name string) (GetDatas3tWithBucketRow, error) {
@@ -621,13 +611,12 @@ func (q *Queries) GetDatas3tWithBucket(ctx context.Context, name string) (GetDat
 		&i.Bucket,
 		&i.AccessKey,
 		&i.SecretKey,
-		&i.UseTls,
 	)
 	return i, err
 }
 
 const listAllBuckets = `-- name: ListAllBuckets :many
-SELECT name, endpoint, bucket, use_tls
+SELECT name, endpoint, bucket
 FROM s3_buckets
 ORDER BY name
 `
@@ -636,7 +625,6 @@ type ListAllBucketsRow struct {
 	Name     string
 	Endpoint string
 	Bucket   string
-	UseTls   bool
 }
 
 func (q *Queries) ListAllBuckets(ctx context.Context) ([]ListAllBucketsRow, error) {
@@ -648,12 +636,7 @@ func (q *Queries) ListAllBuckets(ctx context.Context) ([]ListAllBucketsRow, erro
 	var items []ListAllBucketsRow
 	for rows.Next() {
 		var i ListAllBucketsRow
-		if err := rows.Scan(
-			&i.Name,
-			&i.Endpoint,
-			&i.Bucket,
-			&i.UseTls,
-		); err != nil {
+		if err := rows.Scan(&i.Name, &i.Endpoint, &i.Bucket); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

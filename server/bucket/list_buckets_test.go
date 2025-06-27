@@ -144,7 +144,6 @@ var _ = Describe("ListBuckets", func() {
 				Bucket:    testBucketName,
 				AccessKey: minioAccessKey,
 				SecretKey: minioSecretKey,
-				UseTLS:    false,
 			}
 
 			err := srv.AddBucket(ctx, logger, bucketInfo1)
@@ -167,7 +166,6 @@ var _ = Describe("ListBuckets", func() {
 				Bucket:    testBucketName2,
 				AccessKey: minioAccessKey,
 				SecretKey: minioSecretKey,
-				UseTLS:    false, // Keep false since test MinIO doesn't have TLS
 			}
 
 			err = srv.AddBucket(ctx, logger, bucketInfo2)
@@ -193,13 +191,13 @@ var _ = Describe("ListBuckets", func() {
 			Expect(bucket1.Name).To(Equal("bucket-config-1"))
 			Expect(bucket1.Endpoint).To(Equal(minioEndpoint))
 			Expect(bucket1.Bucket).To(Equal(testBucketName))
-			Expect(bucket1.UseTLS).To(BeFalse())
+			Expect(bucket.IsEndpointTLS(bucket1.Endpoint)).To(BeFalse())
 
 			Expect(bucket2).NotTo(BeNil())
 			Expect(bucket2.Name).To(Equal("bucket-config-2"))
 			Expect(bucket2.Endpoint).To(Equal(minioEndpoint))
 			Expect(bucket2.Bucket).To(Equal("test-bucket-2"))
-			Expect(bucket2.UseTLS).To(BeFalse())
+			Expect(bucket.IsEndpointTLS(bucket2.Endpoint)).To(BeFalse())
 		})
 
 		It("should return buckets sorted by name", func(ctx SpecContext) {
@@ -229,7 +227,6 @@ var _ = Describe("ListBuckets", func() {
 					Bucket:    config.bucketName,
 					AccessKey: minioAccessKey,
 					SecretKey: minioSecretKey,
-					UseTLS:    false,
 				}
 
 				err = srv.AddBucket(ctx, logger, bucketInfo)

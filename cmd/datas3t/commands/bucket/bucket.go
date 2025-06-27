@@ -33,7 +33,7 @@ func Command() *cli.Command {
 					},
 					&cli.StringFlag{
 						Name:     "endpoint",
-						Usage:    "S3 endpoint",
+						Usage:    "S3 endpoint (include https:// for TLS)",
 						Required: true,
 					},
 					&cli.StringFlag{
@@ -50,11 +50,6 @@ func Command() *cli.Command {
 						Name:     "secret-key",
 						Usage:    "S3 secret key",
 						Required: true,
-					},
-					&cli.BoolFlag{
-						Name:  "use-tls",
-						Usage: "Use TLS for S3 connection",
-						Value: true,
 					},
 				},
 				Action: addBucketAction,
@@ -89,7 +84,6 @@ func addBucketAction(c *cli.Context) error {
 		Bucket:    c.String("bucket"),
 		AccessKey: c.String("access-key"),
 		SecretKey: c.String("secret-key"),
-		UseTLS:    c.Bool("use-tls"),
 	}
 
 	err := client.AddBucket(context.Background(), bucketInfo)
@@ -120,7 +114,7 @@ func listBucketsAction(c *cli.Context) error {
 		fmt.Printf("Name: %s\n", b.Name)
 		fmt.Printf("Endpoint: %s\n", b.Endpoint)
 		fmt.Printf("Bucket: %s\n", b.Bucket)
-		fmt.Printf("Use TLS: %t\n", b.UseTLS)
+		fmt.Printf("Use TLS: %t\n", bucket.IsEndpointTLS(b.Endpoint))
 		fmt.Println()
 	}
 

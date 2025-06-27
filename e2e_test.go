@@ -325,7 +325,6 @@ var _ = Describe("End-to-End Server Test", func() {
 			Bucket:    testBucketName,
 			AccessKey: minioAccessKey,
 			SecretKey: minioSecretKey,
-			UseTLS:    false,
 		}
 
 		err := datas3tClient.AddBucket(ctx, bucketInfo)
