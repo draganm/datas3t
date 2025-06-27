@@ -108,7 +108,7 @@ func (s *UploadDatarangeServer) StartDatarangeUpload(ctx context.Context, log *s
 
 		// Check for overlapping dataranges
 		hasOverlap, err := noTxQueries.CheckDatarangeOverlap(ctx, postgresstore.CheckDatarangeOverlapParams{
-			DatasetID:       dataset.ID,
+			Datas3tID:       dataset.ID,
 			MinDatapointKey: lastDatapointIndex + 1, // Check if existing max >= our min
 			MaxDatapointKey: firstDatapointIndex,    // Check if existing min < our max
 		})
@@ -209,7 +209,7 @@ func (s *UploadDatarangeServer) StartDatarangeUpload(ctx context.Context, log *s
 
 	// Check for overlapping dataranges
 	hasOverlap, err := queries.CheckDatarangeOverlap(ctx, postgresstore.CheckDatarangeOverlapParams{
-		DatasetID:       dataset.ID,
+		Datas3tID:       dataset.ID,
 		MinDatapointKey: lastDatapointIndex + 1, // Check if existing max >= our min
 		MaxDatapointKey: firstDatapointIndex,    // Check if existing min < our max
 	})
@@ -223,7 +223,7 @@ func (s *UploadDatarangeServer) StartDatarangeUpload(ctx context.Context, log *s
 
 	// Create datarange record
 	datarangeID, err := queries.CreateDatarange(ctx, postgresstore.CreateDatarangeParams{
-		DatasetID:       dataset.ID,
+		Datas3tID:       dataset.ID,
 		DataObjectKey:   objectKey,
 		IndexObjectKey:  indexObjectKey,
 		MinDatapointKey: firstDatapointIndex,

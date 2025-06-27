@@ -227,7 +227,7 @@ var _ = Describe("ListDatas3ts", func() {
 
 			// Add some test dataranges
 			_, err = queries.CreateDatarange(ctx, postgresstore.CreateDatarangeParams{
-				DatasetID:       dataset.ID,
+				Datas3tID:       dataset.ID,
 				DataObjectKey:   "data-1",
 				IndexObjectKey:  "index-1",
 				MinDatapointKey: 100,
@@ -237,7 +237,7 @@ var _ = Describe("ListDatas3ts", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = queries.CreateDatarange(ctx, postgresstore.CreateDatarangeParams{
-				DatasetID:       dataset.ID,
+				Datas3tID:       dataset.ID,
 				DataObjectKey:   "data-2",
 				IndexObjectKey:  "index-2",
 				MinDatapointKey: 200,
@@ -247,7 +247,7 @@ var _ = Describe("ListDatas3ts", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = queries.CreateDatarange(ctx, postgresstore.CreateDatarangeParams{
-				DatasetID:       dataset.ID,
+				Datas3tID:       dataset.ID,
 				DataObjectKey:   "data-3",
 				IndexObjectKey:  "index-3",
 				MinDatapointKey: 50,
@@ -302,7 +302,7 @@ var _ = Describe("ListDatas3ts", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = queries.CreateDatarange(ctx, postgresstore.CreateDatarangeParams{
-				DatasetID:       datasetA.ID,
+				Datas3tID:       datasetA.ID,
 				DataObjectKey:   "data-a-1",
 				IndexObjectKey:  "index-a-1",
 				MinDatapointKey: 0,
@@ -316,7 +316,7 @@ var _ = Describe("ListDatas3ts", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = queries.CreateDatarange(ctx, postgresstore.CreateDatarangeParams{
-				DatasetID:       datasetC.ID,
+				Datas3tID:       datasetC.ID,
 				DataObjectKey:   "data-c-1",
 				IndexObjectKey:  "index-c-1",
 				MinDatapointKey: 1000,
@@ -326,7 +326,7 @@ var _ = Describe("ListDatas3ts", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = queries.CreateDatarange(ctx, postgresstore.CreateDatarangeParams{
-				DatasetID:       datasetC.ID,
+				Datas3tID:       datasetC.ID,
 				DataObjectKey:   "data-c-2",
 				IndexObjectKey:  "index-c-2",
 				MinDatapointKey: 2000,

@@ -48,7 +48,7 @@ const addDatarangeUpload = `-- name: AddDatarangeUpload :one
 INSERT INTO datarange_uploads (datarange_id, first_datapoint_index, number_of_datapoints, data_size)
 SELECT dr.id, $1, $2, $3
 FROM dataranges dr
-JOIN datas3ts d ON dr.dataset_id = d.id
+JOIN datas3ts d ON dr.datas3t_id = d.id
 WHERE d.name = $4
   AND dr.data_object_key = $5
 RETURNING id
@@ -158,19 +158,19 @@ func (q *Queries) BucketExists(ctx context.Context, name string) (bool, error) {
 const checkDatarangeOverlap = `-- name: CheckDatarangeOverlap :one
 SELECT count(*) > 0
 FROM dataranges
-WHERE dataset_id = $1
+WHERE datas3t_id = $1
   AND min_datapoint_key < $2
   AND max_datapoint_key >= $3
 `
 
 type CheckDatarangeOverlapParams struct {
-	DatasetID       int64
+	Datas3tID       int64
 	MinDatapointKey int64
 	MaxDatapointKey int64
 }
 
 func (q *Queries) CheckDatarangeOverlap(ctx context.Context, arg CheckDatarangeOverlapParams) (bool, error) {
-	row := q.db.QueryRow(ctx, checkDatarangeOverlap, arg.DatasetID, arg.MinDatapointKey, arg.MaxDatapointKey)
+	row := q.db.QueryRow(ctx, checkDatarangeOverlap, arg.Datas3tID, arg.MinDatapointKey, arg.MaxDatapointKey)
 	var column_1 bool
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -213,13 +213,13 @@ func (q *Queries) CountKeysToDelete(ctx context.Context) (int64, error) {
 }
 
 const createDatarange = `-- name: CreateDatarange :one
-INSERT INTO dataranges (dataset_id, data_object_key, index_object_key, min_datapoint_key, max_datapoint_key, size_bytes)
+INSERT INTO dataranges (datas3t_id, data_object_key, index_object_key, min_datapoint_key, max_datapoint_key, size_bytes)
 VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING id
 `
 
 type CreateDatarangeParams struct {
-	DatasetID       int64
+	Datas3tID       int64
 	DataObjectKey   string
 	IndexObjectKey  string
 	MinDatapointKey int64
@@ -229,7 +229,7 @@ type CreateDatarangeParams struct {
 
 func (q *Queries) CreateDatarange(ctx context.Context, arg CreateDatarangeParams) (int64, error) {
 	row := q.db.QueryRow(ctx, createDatarange,
-		arg.DatasetID,
+		arg.Datas3tID,
 		arg.DataObjectKey,
 		arg.IndexObjectKey,
 		arg.MinDatapointKey,
@@ -352,13 +352,13 @@ func (q *Queries) GetAllDatarangeUploads(ctx context.Context) ([]GetAllDatarange
 }
 
 const getAllDataranges = `-- name: GetAllDataranges :many
-SELECT id, dataset_id, min_datapoint_key, max_datapoint_key, size_bytes
+SELECT id, datas3t_id, min_datapoint_key, max_datapoint_key, size_bytes
 FROM dataranges
 `
 
 type GetAllDatarangesRow struct {
 	ID              int64
-	DatasetID       int64
+	Datas3tID       int64
 	MinDatapointKey int64
 	MaxDatapointKey int64
 	SizeBytes       int64
@@ -375,7 +375,7 @@ func (q *Queries) GetAllDataranges(ctx context.Context) ([]GetAllDatarangesRow, 
 		var i GetAllDatarangesRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.DatasetID,
+			&i.Datas3tID,
 			&i.MinDatapointKey,
 			&i.MaxDatapointKey,
 			&i.SizeBytes,
@@ -456,7 +456,7 @@ SELECT
     du.data_size,
     dr.data_object_key, 
     dr.index_object_key,
-    dr.dataset_id,
+    dr.datas3t_id,
     d.name as dataset_name, 
     d.s3_bucket_id,
     s.endpoint, 
@@ -466,7 +466,7 @@ SELECT
     s.use_tls
 FROM datarange_uploads du
 JOIN dataranges dr ON du.datarange_id = dr.id  
-JOIN datas3ts d ON dr.dataset_id = d.id
+JOIN datas3ts d ON dr.datas3t_id = d.id
 JOIN s3_buckets s ON d.s3_bucket_id = s.id
 WHERE du.id = $1
 `
@@ -480,7 +480,7 @@ type GetDatarangeUploadWithDetailsRow struct {
 	DataSize            int64
 	DataObjectKey       string
 	IndexObjectKey      string
-	DatasetID           int64
+	Datas3tID           int64
 	DatasetName         string
 	S3BucketID          int64
 	Endpoint            string
@@ -502,7 +502,7 @@ func (q *Queries) GetDatarangeUploadWithDetails(ctx context.Context, id int64) (
 		&i.DataSize,
 		&i.DataObjectKey,
 		&i.IndexObjectKey,
-		&i.DatasetID,
+		&i.Datas3tID,
 		&i.DatasetName,
 		&i.S3BucketID,
 		&i.Endpoint,
@@ -529,7 +529,7 @@ SELECT
     s.secret_key,
     s.use_tls
 FROM dataranges dr
-JOIN datas3ts d ON dr.dataset_id = d.id
+JOIN datas3ts d ON dr.datas3t_id = d.id
 JOIN s3_buckets s ON d.s3_bucket_id = s.id
 WHERE d.name = $1
   AND dr.min_datapoint_key <= $2  -- datarange starts before or at our last datapoint
@@ -675,7 +675,7 @@ SELECT
     COALESCE(SUM(dr.size_bytes), 0) as total_bytes
 FROM datas3ts d
 JOIN s3_buckets s ON d.s3_bucket_id = s.id
-LEFT JOIN dataranges dr ON d.id = dr.dataset_id
+LEFT JOIN dataranges dr ON d.id = dr.datas3t_id
 GROUP BY d.id, d.name, s.name
 ORDER BY d.name
 `

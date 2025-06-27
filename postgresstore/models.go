@@ -10,7 +10,7 @@ import (
 
 type Datarange struct {
 	ID              int64
-	DatasetID       int64
+	Datas3tID       int64
 	DataObjectKey   string
 	IndexObjectKey  string
 	MinDatapointKey int64

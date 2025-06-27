@@ -17,7 +17,7 @@ SELECT
     COALESCE(SUM(dr.size_bytes), 0) as total_bytes
 FROM datas3ts d
 JOIN s3_buckets s ON d.s3_bucket_id = s.id
-LEFT JOIN dataranges dr ON d.id = dr.dataset_id
+LEFT JOIN dataranges dr ON d.id = dr.datas3t_id
 GROUP BY d.id, d.name, s.name
 ORDER BY d.name;
 
@@ -45,13 +45,13 @@ WHERE d.name = $1;
 -- name: CheckDatarangeOverlap :one
 SELECT count(*) > 0
 FROM dataranges
-WHERE dataset_id = $1
+WHERE datas3t_id = $1
   AND min_datapoint_key < $2
   AND max_datapoint_key >= $3;
 
 -- name: CreateDatarange :one
-INSERT INTO dataranges (dataset_id, data_object_key, index_object_key, min_datapoint_key, max_datapoint_key, size_bytes)
-VALUES (@dataset_id, @data_object_key, @index_object_key, @min_datapoint_key, @max_datapoint_key, @size_bytes)
+INSERT INTO dataranges (datas3t_id, data_object_key, index_object_key, min_datapoint_key, max_datapoint_key, size_bytes)
+VALUES (@datas3t_id, @data_object_key, @index_object_key, @min_datapoint_key, @max_datapoint_key, @size_bytes)
 RETURNING id;
 
 -- name: CreateDatarangeUpload :one
@@ -77,7 +77,7 @@ SELECT
     du.data_size,
     dr.data_object_key, 
     dr.index_object_key,
-    dr.dataset_id,
+    dr.datas3t_id,
     d.name as dataset_name, 
     d.s3_bucket_id,
     s.endpoint, 
@@ -87,7 +87,7 @@ SELECT
     s.use_tls
 FROM datarange_uploads du
 JOIN dataranges dr ON du.datarange_id = dr.id  
-JOIN datas3ts d ON dr.dataset_id = d.id
+JOIN datas3ts d ON dr.datas3t_id = d.id
 JOIN s3_buckets s ON d.s3_bucket_id = s.id
 WHERE du.id = $1;
 
@@ -122,13 +122,13 @@ WHERE s3_buckets.name = @bucket_name;
 INSERT INTO datarange_uploads (datarange_id, first_datapoint_index, number_of_datapoints, data_size)
 SELECT dr.id, @first_datapoint_index, @number_of_datapoints, @data_size
 FROM dataranges dr
-JOIN datas3ts d ON dr.dataset_id = d.id
+JOIN datas3ts d ON dr.datas3t_id = d.id
 WHERE d.name = @datas3t_name
   AND dr.data_object_key = @data_object_key
 RETURNING id;
 
 -- name: GetAllDataranges :many
-SELECT id, dataset_id, min_datapoint_key, max_datapoint_key, size_bytes
+SELECT id, datas3t_id, min_datapoint_key, max_datapoint_key, size_bytes
 FROM dataranges;
 
 -- name: GetAllDatarangeUploads :many
@@ -170,7 +170,7 @@ SELECT
     s.secret_key,
     s.use_tls
 FROM dataranges dr
-JOIN datas3ts d ON dr.dataset_id = d.id
+JOIN datas3ts d ON dr.datas3t_id = d.id
 JOIN s3_buckets s ON d.s3_bucket_id = s.id
 WHERE d.name = $1
   AND dr.min_datapoint_key <= $2  -- datarange starts before or at our last datapoint
