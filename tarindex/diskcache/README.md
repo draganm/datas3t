@@ -4,17 +4,15 @@ This package provides a thread-safe, persistent disk-based cache for tarindex fi
 
 ## Overview
 
-The cache stores tarindex files for dataranges from different datas3ts, enabling efficient retrieval of pre-computed index data without regenerating it each time.
+The cache stores tarindex files for efficient retrieval of pre-computed index data without regenerating it each time. The cache is completely decoupled from any specific domain concepts and uses simple string keys.
 
 ## Cache Keys
 
-Each tarindex file is identified by a unique key using the `DatarangeKey` struct containing:
-- **Datas3tName**: The name of the datas3t  
-- **FirstIndex**: Starting position in the datarange
-- **NumberOfDatapoints**: Number of datapoints in the datarange
-- **TotalSizeBytes**: Total size in bytes of the datarange
+Each tarindex file is identified by a simple string key provided by the client. The cache uses SHA-256 hashing of the key to generate unique, safe filenames for storage.
 
-The cache uses SHA-256 hashing of the key to generate unique filenames.
+**Example keys:**
+- `"my-datas3t:dataranges/000000000001-00000000000000000000-00000000000000000999.index.zst"`
+- `"another-datas3t:dataranges/000000000002-00000000000001000000-00000000000001000999.index.zst"`
 
 ## Features
 
@@ -25,6 +23,7 @@ The cache uses SHA-256 hashing of the key to generate unique filenames.
 - **Size-bounded**: Configurable maximum cache size in bytes that determines total disk space usage
 - **Memory-mapped access**: Uses memory-mapped files for efficient index access
 - **Atomic writes**: Uses temporary files and atomic renames to ensure data integrity
+- **Domain-agnostic**: No coupling to specific domain concepts - uses simple string keys
 
 ## Operations
 
@@ -35,7 +34,7 @@ The primary method for accessing cached tarindex data using a callback pattern:
 err := cache.OnIndex(key, callback, indexGenerator)
 ```
 
-- **key**: `DatarangeKey` identifying the specific datarange
+- **key**: `string` - unique identifier for the cached data
 - **callback**: `func(*tarindex.Index) error` - called with the loaded index
 - **indexGenerator**: `func() ([]byte, error)` - called to generate index data if not cached
 
@@ -56,12 +55,8 @@ if err != nil {
 }
 defer cache.Close()
 
-key := diskcache.DatarangeKey{
-    Datas3tName:        "my-datas3t",
-    FirstIndex:         0,
-    NumberOfDatapoints: 1000,
-    TotalSizeBytes:     50*1024*1024,
-}
+// Cache key combines relevant identifiers
+key := "my-datas3t" + "dataranges/000000000001-00000000000000000000-00000000000000000999.index.zst"
 
 err = cache.OnIndex(key, 
     func(index *tarindex.Index) error {
@@ -70,8 +65,8 @@ err = cache.OnIndex(key,
         return nil
     },
     func() ([]byte, error) {
-        // Generate index data if not cached
-        return generateIndexData(), nil
+        // Generate index data if not cached (e.g., download from S3)
+        return downloadIndexFromS3(), nil
     },
 )
 ```

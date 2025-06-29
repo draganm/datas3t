@@ -132,18 +132,35 @@ func (s *UploadDatarangeServer) StartDatarangeUpload(ctx context.Context, log *s
 
 	}
 
-	// Generate object key for the data
+	// Start a transaction for atomic operations
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	queries := postgresstore.New(tx)
+
+	// Increment upload counter and get the new value
+	uploadCounter, err := queries.IncrementUploadCounter(ctx, datas3t.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to increment upload counter: %w", err)
+	}
+
+	// Generate object key for the data using upload counter
 	objectKey := fmt.Sprintf(
-		"datas3t/%s/dataranges/%020d-%020d.tar",
+		"datas3t/%s/dataranges/%012d-%020d-%020d.tar",
 		req.Datas3tName,
+		uploadCounter,
 		req.FirstDatapointIndex,
 		req.FirstDatapointIndex+req.NumberOfDatapoints-1,
 	)
 
-	// Generate presigned URL for index
+	// Generate presigned URL for index using upload counter
 	indexObjectKey := fmt.Sprintf(
-		"datas3t/%s/dataranges/%020d-%020d.index.zst",
+		"datas3t/%s/dataranges/%012d-%020d-%020d.index.zst",
 		req.Datas3tName,
+		uploadCounter,
 		req.FirstDatapointIndex,
 		req.FirstDatapointIndex+req.NumberOfDatapoints-1,
 	)
@@ -198,20 +215,11 @@ func (s *UploadDatarangeServer) StartDatarangeUpload(ctx context.Context, log *s
 		return nil, fmt.Errorf("failed to generate index upload URL: %w", err)
 	}
 
-	// Start a transaction for atomic operations
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to start transaction: %w", err)
-	}
-	defer tx.Rollback(ctx)
-
-	queries := postgresstore.New(tx)
-
-	// Calculate datapoint range
+	// Calculate datapoint range for upload record creation
 	firstDatapointIndex := int64(req.FirstDatapointIndex)
 	lastDatapointIndex := firstDatapointIndex + int64(req.NumberOfDatapoints) - 1
 
-	// Check for overlapping dataranges (completed uploads)
+	// Check for overlapping dataranges (completed uploads) within transaction
 	hasDatarangeOverlap, err := queries.CheckDatarangeOverlap(ctx, postgresstore.CheckDatarangeOverlapParams{
 		Datas3tID:       datas3t.ID,
 		MinDatapointKey: lastDatapointIndex + 1, // Check if existing max >= our min
@@ -224,9 +232,6 @@ func (s *UploadDatarangeServer) StartDatarangeUpload(ctx context.Context, log *s
 	if hasDatarangeOverlap {
 		return nil, fmt.Errorf("%w: datarange overlaps with existing dataranges", ErrDatarangeOverlap)
 	}
-
-	// Allow overlapping uploads - they will be disambiguated at completion time
-	// Only the first one to complete will succeed
 
 	// Create datarange upload record
 	uploadRecordID, err := queries.CreateDatarangeUpload(ctx, postgresstore.CreateDatarangeUploadParams{

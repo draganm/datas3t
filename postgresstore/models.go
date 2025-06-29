@@ -34,11 +34,12 @@ type DatarangeUpload struct {
 }
 
 type Datas3t struct {
-	ID         int64
-	Name       string
-	S3BucketID int64
-	CreatedAt  pgtype.Timestamp
-	UpdatedAt  pgtype.Timestamp
+	ID            int64
+	Name          string
+	S3BucketID    int64
+	UploadCounter int64
+	CreatedAt     pgtype.Timestamp
+	UpdatedAt     pgtype.Timestamp
 }
 
 type KeysToDelete struct {

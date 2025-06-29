@@ -12,28 +12,9 @@ import (
 	"github.com/draganm/datas3t/tarindex"
 )
 
-// DatarangeKey represents the unique identifier for a datarange
-type DatarangeKey struct {
-	Datas3tName        string
-	FirstIndex         int64
-	NumberOfDatapoints int64
-	TotalSizeBytes     int64
-}
-
-// String returns a string representation of the datarange key for hashing
-func (dk DatarangeKey) String() string {
-	return fmt.Sprintf("%s:%d:%d:%d", dk.Datas3tName, dk.FirstIndex, dk.NumberOfDatapoints, dk.TotalSizeBytes)
-}
-
-// Hash returns a SHA-256 hash of the datarange key for use as filename
-func (dk DatarangeKey) Hash() string {
-	h := sha256.Sum256([]byte(dk.String()))
-	return fmt.Sprintf("%x", h)
-}
-
 // cacheEntry represents a cached tarindex with metadata
 type cacheEntry struct {
-	key          DatarangeKey
+	key          string
 	filename     string
 	lastAccessed time.Time
 	sizeBytes    int64
@@ -70,6 +51,12 @@ func NewIndexDiskCache(cacheDir string, maxSizeBytes int64) (*IndexDiskCache, er
 	}
 
 	return cache, nil
+}
+
+// hashKey returns a SHA-256 hash of the key for use as filename
+func hashKey(key string) string {
+	h := sha256.Sum256([]byte(key))
+	return fmt.Sprintf("%x", h)
 }
 
 // loadExistingEntries scans the cache directory and loads metadata for existing files
@@ -109,8 +96,8 @@ func (c *IndexDiskCache) loadExistingEntries() error {
 
 // OnIndex provides callback-based access to cached tarindex data
 // If the data is not cached, it will call the indexGenerator to create it
-func (c *IndexDiskCache) OnIndex(key DatarangeKey, callback func(*tarindex.Index) error, indexGenerator func() ([]byte, error)) error {
-	filename := key.Hash()
+func (c *IndexDiskCache) OnIndex(key string, callback func(*tarindex.Index) error, indexGenerator func() ([]byte, error)) error {
+	filename := hashKey(key)
 	fullPath := filepath.Join(c.cacheDir, filename)
 
 	c.mu.Lock()
@@ -149,7 +136,7 @@ func (c *IndexDiskCache) OnIndex(key DatarangeKey, callback func(*tarindex.Index
 		}
 	}
 
-	// Update last accessed time
+	// Update last accessed time and ensure key is set
 	entry.lastAccessed = time.Now()
 	entry.key = key // Ensure key is set (needed for entries loaded from disk)
 

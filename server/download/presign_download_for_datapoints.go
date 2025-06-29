@@ -14,7 +14,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/draganm/datas3t/postgresstore"
 	"github.com/draganm/datas3t/tarindex"
-	"github.com/draganm/datas3t/tarindex/diskcache"
 )
 
 type PreSignDownloadForDatapointsRequest struct {
@@ -64,13 +63,8 @@ func (s *DownloadServer) PreSignDownloadForDatapoints(ctx context.Context, reque
 			return PreSignDownloadForDatapointsResponse{}, fmt.Errorf("failed to create S3 client: %w", err)
 		}
 
-		// Create disk cache key for this datarange
-		cacheKey := diskcache.DatarangeKey{
-			Datas3tName:        datarange.Datas3tName,
-			FirstIndex:         datarange.MinDatapointKey,
-			NumberOfDatapoints: datarange.MaxDatapointKey - datarange.MinDatapointKey + 1,
-			TotalSizeBytes:     datarange.SizeBytes,
-		}
+		// Create disk cache key by concatenating datas3t name and index object key
+		cacheKey := datarange.Datas3tName + datarange.IndexObjectKey
 
 		// Get the tar index from disk cache
 		err = s.diskCache.OnIndex(cacheKey, func(index *tarindex.Index) error {

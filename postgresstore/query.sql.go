@@ -596,7 +596,7 @@ func (q *Queries) GetDatarangesForDatapoints(ctx context.Context, arg GetDataran
 }
 
 const getDatas3tWithBucket = `-- name: GetDatas3tWithBucket :one
-SELECT d.id, d.name, d.s3_bucket_id, 
+SELECT d.id, d.name, d.s3_bucket_id, d.upload_counter,
        s.endpoint, s.bucket, s.access_key, s.secret_key
 FROM datas3ts d
 JOIN s3_buckets s ON d.s3_bucket_id = s.id
@@ -604,13 +604,14 @@ WHERE d.name = $1
 `
 
 type GetDatas3tWithBucketRow struct {
-	ID         int64
-	Name       string
-	S3BucketID int64
-	Endpoint   string
-	Bucket     string
-	AccessKey  string
-	SecretKey  string
+	ID            int64
+	Name          string
+	S3BucketID    int64
+	UploadCounter int64
+	Endpoint      string
+	Bucket        string
+	AccessKey     string
+	SecretKey     string
 }
 
 func (q *Queries) GetDatas3tWithBucket(ctx context.Context, name string) (GetDatas3tWithBucketRow, error) {
@@ -620,12 +621,28 @@ func (q *Queries) GetDatas3tWithBucket(ctx context.Context, name string) (GetDat
 		&i.ID,
 		&i.Name,
 		&i.S3BucketID,
+		&i.UploadCounter,
 		&i.Endpoint,
 		&i.Bucket,
 		&i.AccessKey,
 		&i.SecretKey,
 	)
 	return i, err
+}
+
+const incrementUploadCounter = `-- name: IncrementUploadCounter :one
+UPDATE datas3ts 
+SET upload_counter = upload_counter + 1,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+RETURNING upload_counter
+`
+
+func (q *Queries) IncrementUploadCounter(ctx context.Context, id int64) (int64, error) {
+	row := q.db.QueryRow(ctx, incrementUploadCounter, id)
+	var upload_counter int64
+	err := row.Scan(&upload_counter)
+	return upload_counter, err
 }
 
 const listAllBuckets = `-- name: ListAllBuckets :many

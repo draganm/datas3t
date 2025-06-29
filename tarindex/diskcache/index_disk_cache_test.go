@@ -39,54 +39,6 @@ var _ = Describe("IndexDiskCache", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	Describe("DatarangeKey", func() {
-		It("should generate consistent string representation", func(ctx SpecContext) {
-			key := diskcache.DatarangeKey{
-				Datas3tName:        "test-datas3t",
-				FirstIndex:         100,
-				NumberOfDatapoints: 50,
-				TotalSizeBytes:     2048,
-			}
-
-			str1 := key.String()
-			str2 := key.String()
-			Expect(str1).To(Equal(str2))
-			Expect(str1).To(Equal("test-datas3t:100:50:2048"))
-		})
-
-		It("should generate consistent hash", func(ctx SpecContext) {
-			key := diskcache.DatarangeKey{
-				Datas3tName:        "test-datas3t",
-				FirstIndex:         100,
-				NumberOfDatapoints: 50,
-				TotalSizeBytes:     2048,
-			}
-
-			hash1 := key.Hash()
-			hash2 := key.Hash()
-			Expect(hash1).To(Equal(hash2))
-			Expect(hash1).To(HaveLen(64)) // SHA-256 hex string
-		})
-
-		It("should generate different hashes for different keys", func(ctx SpecContext) {
-			key1 := diskcache.DatarangeKey{
-				Datas3tName:        "test-datas3t",
-				FirstIndex:         100,
-				NumberOfDatapoints: 50,
-				TotalSizeBytes:     2048,
-			}
-
-			key2 := diskcache.DatarangeKey{
-				Datas3tName:        "test-datas3t",
-				FirstIndex:         200,
-				NumberOfDatapoints: 50,
-				TotalSizeBytes:     2048,
-			}
-
-			Expect(key1.Hash()).NotTo(Equal(key2.Hash()))
-		})
-	})
-
 	Describe("NewIndexDiskCache", func() {
 		It("should create cache directory if it doesn't exist", func(ctx SpecContext) {
 			nonExistentDir := filepath.Join(tempDir, "new_cache_dir")
@@ -123,12 +75,7 @@ var _ = Describe("IndexDiskCache", func() {
 
 	Describe("OnIndex", func() {
 		It("should call generator when index is not cached", func(ctx SpecContext) {
-			key := diskcache.DatarangeKey{
-				Datas3tName:        "test-datas3t",
-				FirstIndex:         0,
-				NumberOfDatapoints: 10,
-				TotalSizeBytes:     1024,
-			}
+			key := "test-datas3t:dataranges/000000000001-00000000000000000000-00000000000000000009.index.zst"
 
 			generatorCalled := false
 			callbackCalled := false
@@ -151,20 +98,14 @@ var _ = Describe("IndexDiskCache", func() {
 			Expect(generatorCalled).To(BeTrue())
 			Expect(callbackCalled).To(BeTrue())
 
-			// Verify file was written to disk
-			filename := key.Hash()
-			cachePath := filepath.Join(tempDir, filename)
-			_, err = os.Stat(cachePath)
+			// Verify file was written to disk (we can't predict the exact filename due to hashing)
+			files, err := os.ReadDir(tempDir)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(len(files)).To(Equal(1))
 		})
 
 		It("should use cached index when available", func(ctx SpecContext) {
-			key := diskcache.DatarangeKey{
-				Datas3tName:        "test-datas3t",
-				FirstIndex:         0,
-				NumberOfDatapoints: 10,
-				TotalSizeBytes:     1024,
-			}
+			key := "test-datas3t:dataranges/000000000001-00000000000000000000-00000000000000000009.index.zst"
 
 			expectedData := createDummyIndexData(10)
 
@@ -198,12 +139,7 @@ var _ = Describe("IndexDiskCache", func() {
 		})
 
 		It("should handle generator errors", func(ctx SpecContext) {
-			key := diskcache.DatarangeKey{
-				Datas3tName:        "test-datas3t",
-				FirstIndex:         0,
-				NumberOfDatapoints: 10,
-				TotalSizeBytes:     1024,
-			}
+			key := "test-datas3t:dataranges/000000000001-00000000000000000000-00000000000000000009.index.zst"
 
 			expectedError := fmt.Errorf("generator error")
 
@@ -221,12 +157,7 @@ var _ = Describe("IndexDiskCache", func() {
 		})
 
 		It("should handle callback errors", func(ctx SpecContext) {
-			key := diskcache.DatarangeKey{
-				Datas3tName:        "test-datas3t",
-				FirstIndex:         0,
-				NumberOfDatapoints: 10,
-				TotalSizeBytes:     1024,
-			}
+			key := "test-datas3t:dataranges/000000000001-00000000000000000000-00000000000000000009.index.zst"
 
 			expectedData := createDummyIndexData(10)
 			expectedError := fmt.Errorf("callback error")
@@ -253,9 +184,9 @@ var _ = Describe("IndexDiskCache", func() {
 			defer smallCache.Close()
 
 			// Create entries that will exceed the cache size
-			key1 := diskcache.DatarangeKey{Datas3tName: "test", FirstIndex: 1, NumberOfDatapoints: 5, TotalSizeBytes: 512}
-			key2 := diskcache.DatarangeKey{Datas3tName: "test", FirstIndex: 2, NumberOfDatapoints: 5, TotalSizeBytes: 512}
-			key3 := diskcache.DatarangeKey{Datas3tName: "test", FirstIndex: 3, NumberOfDatapoints: 5, TotalSizeBytes: 512}
+			key1 := "test1:dataranges/000000000001-00000000000000000000-00000000000000000004.index.zst"
+			key2 := "test2:dataranges/000000000001-00000000000000000000-00000000000000000004.index.zst"
+			key3 := "test3:dataranges/000000000001-00000000000000000000-00000000000000000004.index.zst"
 
 			data1 := createDummyIndexData(5)
 			data2 := createDummyIndexData(5)
@@ -305,12 +236,7 @@ var _ = Describe("IndexDiskCache", func() {
 					defer wg.Done()
 
 					for j := 0; j < numOperations; j++ {
-						key := diskcache.DatarangeKey{
-							Datas3tName:        fmt.Sprintf("test-%d", goroutineID%3), // Use 3 different datas3ts
-							FirstIndex:         int64(j),
-							NumberOfDatapoints: 10,
-							TotalSizeBytes:     1024,
-						}
+						key := fmt.Sprintf("test-%d:dataranges/000000000001-%020d-%020d.index.zst", goroutineID%3, j, j+9)
 
 						data := createDummyIndexData(10)
 
@@ -345,12 +271,7 @@ var _ = Describe("IndexDiskCache", func() {
 
 	Describe("Persistence", func() {
 		It("should persist cache across restarts", func(ctx SpecContext) {
-			key := diskcache.DatarangeKey{
-				Datas3tName:        "test-datas3t",
-				FirstIndex:         0,
-				NumberOfDatapoints: 10,
-				TotalSizeBytes:     1024,
-			}
+			key := "test-datas3t:dataranges/000000000001-00000000000000000000-00000000000000000009.index.zst"
 
 			expectedData := createDummyIndexData(10)
 
@@ -401,12 +322,7 @@ var _ = Describe("IndexDiskCache", func() {
 			Expect(initialStats.CacheDir).To(Equal(tempDir))
 
 			// Add an entry
-			key := diskcache.DatarangeKey{
-				Datas3tName:        "test-datas3t",
-				FirstIndex:         0,
-				NumberOfDatapoints: 10,
-				TotalSizeBytes:     1024,
-			}
+			key := "test-datas3t:dataranges/000000000001-00000000000000000000-00000000000000000009.index.zst"
 
 			data := createDummyIndexData(10)
 			err := cache.OnIndex(key,
@@ -423,12 +339,7 @@ var _ = Describe("IndexDiskCache", func() {
 		It("should clear all entries", func(ctx SpecContext) {
 			// Add multiple entries
 			for i := 0; i < 3; i++ {
-				key := diskcache.DatarangeKey{
-					Datas3tName:        "test-datas3t",
-					FirstIndex:         int64(i),
-					NumberOfDatapoints: 10,
-					TotalSizeBytes:     1024,
-				}
+				key := fmt.Sprintf("test-datas3t:dataranges/000000000001-%020d-%020d.index.zst", i, i+9)
 
 				data := createDummyIndexData(10)
 				err := cache.OnIndex(key,

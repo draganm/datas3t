@@ -36,7 +36,7 @@ FROM s3_buckets
 ORDER BY name;
 
 -- name: GetDatas3tWithBucket :one
-SELECT d.id, d.name, d.s3_bucket_id, 
+SELECT d.id, d.name, d.s3_bucket_id, d.upload_counter,
        s.endpoint, s.bucket, s.access_key, s.secret_key
 FROM datas3ts d
 JOIN s3_buckets s ON d.s3_bucket_id = s.id
@@ -176,3 +176,10 @@ WHERE d.name = $1
   AND dr.min_datapoint_key <= $2  -- datarange starts before or at our last datapoint
   AND dr.max_datapoint_key >= $3  -- datarange ends after or at our first datapoint
 ORDER BY dr.min_datapoint_key;
+
+-- name: IncrementUploadCounter :one
+UPDATE datas3ts 
+SET upload_counter = upload_counter + 1,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+RETURNING upload_counter;
