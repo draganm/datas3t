@@ -45,7 +45,7 @@ func (s *UploadDatarangeServer) CancelDatarangeUpload(
 		return fmt.Errorf("failed to get datarange upload details: %w", err)
 	}
 
-	s3Client, err := s.createS3ClientFromUploadDetails(ctx, uploadDetails)
+	s3Client, err := s.createS3ClientFromUploadDetails(ctx, log, uploadDetails)
 	if err != nil {
 		return fmt.Errorf("failed to create S3 client: %w", err)
 	}

@@ -306,7 +306,7 @@ var _ = Describe("PresignDownloadForDatapoints", func() {
 				LastDatapoint:  7,
 			}
 
-			resp, err := downloadSrv.PreSignDownloadForDatapoints(ctx, req)
+			resp, err := downloadSrv.PreSignDownloadForDatapoints(ctx, logger, req)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp.DownloadSegments).To(HaveLen(1))
 
@@ -328,7 +328,7 @@ var _ = Describe("PresignDownloadForDatapoints", func() {
 				LastDatapoint:  35,
 			}
 
-			resp, err := downloadSrv.PreSignDownloadForDatapoints(ctx, req)
+			resp, err := downloadSrv.PreSignDownloadForDatapoints(ctx, logger, req)
 			Expect(err).NotTo(HaveOccurred())
 			// Should have segments from 3 dataranges: 5-9, 20-29, 30-35
 			Expect(resp.DownloadSegments).To(HaveLen(3))
@@ -353,7 +353,7 @@ var _ = Describe("PresignDownloadForDatapoints", func() {
 				LastDatapoint:  9,
 			}
 
-			resp, err := downloadSrv.PreSignDownloadForDatapoints(ctx, req)
+			resp, err := downloadSrv.PreSignDownloadForDatapoints(ctx, logger, req)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp.DownloadSegments).To(HaveLen(1))
 
@@ -369,7 +369,7 @@ var _ = Describe("PresignDownloadForDatapoints", func() {
 				LastDatapoint:  25,
 			}
 
-			resp, err := downloadSrv.PreSignDownloadForDatapoints(ctx, req)
+			resp, err := downloadSrv.PreSignDownloadForDatapoints(ctx, logger, req)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp.DownloadSegments).To(HaveLen(1))
 
@@ -385,7 +385,7 @@ var _ = Describe("PresignDownloadForDatapoints", func() {
 				LastDatapoint:  55, // Extends beyond last datarange (30-49)
 			}
 
-			resp, err := downloadSrv.PreSignDownloadForDatapoints(ctx, req)
+			resp, err := downloadSrv.PreSignDownloadForDatapoints(ctx, logger, req)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp.DownloadSegments).To(HaveLen(1)) // Only the overlapping part (45-49)
 
@@ -408,7 +408,7 @@ var _ = Describe("PresignDownloadForDatapoints", func() {
 				LastDatapoint:  15,
 			}
 
-			_, err := downloadSrv.PreSignDownloadForDatapoints(ctx, req)
+			_, err := downloadSrv.PreSignDownloadForDatapoints(ctx, logger, req)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("datas3t_name is required"))
 		})
@@ -420,7 +420,7 @@ var _ = Describe("PresignDownloadForDatapoints", func() {
 				LastDatapoint:  10,
 			}
 
-			_, err := downloadSrv.PreSignDownloadForDatapoints(ctx, req)
+			_, err := downloadSrv.PreSignDownloadForDatapoints(ctx, logger, req)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("first_datapoint (20) cannot be greater than last_datapoint (10)"))
 		})
@@ -432,7 +432,7 @@ var _ = Describe("PresignDownloadForDatapoints", func() {
 				LastDatapoint:  15,
 			}
 
-			_, err := downloadSrv.PreSignDownloadForDatapoints(ctx, req)
+			_, err := downloadSrv.PreSignDownloadForDatapoints(ctx, logger, req)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("no dataranges found"))
 		})
@@ -444,7 +444,7 @@ var _ = Describe("PresignDownloadForDatapoints", func() {
 				LastDatapoint:  200,
 			}
 
-			_, err := downloadSrv.PreSignDownloadForDatapoints(ctx, req)
+			_, err := downloadSrv.PreSignDownloadForDatapoints(ctx, logger, req)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("no dataranges found for datapoints 100-200"))
 		})
@@ -458,7 +458,7 @@ var _ = Describe("PresignDownloadForDatapoints", func() {
 				LastDatapoint:  10,
 			}
 
-			_, err := downloadSrv.PreSignDownloadForDatapoints(ctx, req)
+			_, err := downloadSrv.PreSignDownloadForDatapoints(ctx, logger, req)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("no dataranges found"))
 		})
@@ -478,12 +478,12 @@ var _ = Describe("PresignDownloadForDatapoints", func() {
 			}
 
 			// First request - should download and cache the index
-			resp1, err := downloadSrv.PreSignDownloadForDatapoints(ctx, req)
+			resp1, err := downloadSrv.PreSignDownloadForDatapoints(ctx, logger, req)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp1.DownloadSegments).To(HaveLen(1))
 
 			// Second request - should use cached index
-			resp2, err := downloadSrv.PreSignDownloadForDatapoints(ctx, req)
+			resp2, err := downloadSrv.PreSignDownloadForDatapoints(ctx, logger, req)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp2.DownloadSegments).To(HaveLen(1))
 
@@ -506,7 +506,7 @@ var _ = Describe("PresignDownloadForDatapoints", func() {
 				LastDatapoint:  150,
 			}
 
-			resp, err := downloadSrv.PreSignDownloadForDatapoints(ctx, req)
+			resp, err := downloadSrv.PreSignDownloadForDatapoints(ctx, logger, req)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp.DownloadSegments).To(HaveLen(2)) // Two dataranges
 

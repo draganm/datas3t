@@ -4,14 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net/http"
-	"regexp"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	awsutil "github.com/draganm/datas3t/aws"
 	"github.com/draganm/datas3t/postgresstore"
 )
 
@@ -125,7 +122,7 @@ func (s *UploadDatarangeServer) StartDatarangeUpload(ctx context.Context, log *s
 		// Only the first one to complete will succeed
 
 		// Create S3 client
-		s3Client, err = s.createS3Client(ctx, datas3t)
+		s3Client, err = s.createS3Client(ctx, log, datas3t)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create S3 client: %w", err)
 		}
@@ -285,43 +282,20 @@ func (s *UploadDatarangeServer) calculateNumberOfParts(dataSize, partSize uint64
 	return numParts
 }
 
-func (s *UploadDatarangeServer) createS3Client(ctx context.Context, datas3t postgresstore.GetDatas3tWithBucketRow) (*s3.Client, error) {
+func (s *UploadDatarangeServer) createS3Client(ctx context.Context, log *slog.Logger, datas3t postgresstore.GetDatas3tWithBucketRow) (*s3.Client, error) {
 	// Decrypt credentials
 	accessKey, secretKey, err := s.encryptor.DecryptCredentials(datas3t.AccessKey, datas3t.SecretKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt credentials: %w", err)
 	}
 
-	// Normalize endpoint to ensure it has proper protocol scheme
-	endpoint := datas3t.Endpoint
-	if !regexp.MustCompile(`^https?://`).MatchString(endpoint) {
-		// If no scheme provided, default to http (non-TLS)
-		endpoint = "http://" + endpoint
-	}
-
-	// Create AWS config with custom credentials and timeouts
-	cfg, err := config.LoadDefaultConfig(ctx,
-		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
-			accessKey,
-			secretKey,
-			"", // token
-		)),
-		config.WithRegion("us-east-1"), // default region
-		config.WithHTTPClient(&http.Client{
-			Timeout: 30 * time.Second, // 30 second timeout for all HTTP operations
-		}),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load AWS config: %w", err)
-	}
-
-	// Create S3 client with custom endpoint
-	s3Client := s3.NewFromConfig(cfg, func(o *s3.Options) {
-		o.BaseEndpoint = aws.String(endpoint)
-		o.UsePathStyle = true // Use path-style addressing for custom S3 endpoints
+	// Use shared AWS utility for S3 client creation with logging
+	return awsutil.CreateS3Client(ctx, awsutil.S3ClientConfig{
+		AccessKey: accessKey,
+		SecretKey: secretKey,
+		Endpoint:  datas3t.Endpoint,
+		Logger:    log,
 	})
-
-	return s3Client, nil
 }
 
 func (s *UploadDatarangeServer) generateMultipartUploadURLs(ctx context.Context, s3Client *s3.Client, bucket, objectKey, uploadID string, numParts int) ([]string, error) {

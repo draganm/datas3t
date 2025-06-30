@@ -7,16 +7,14 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
-	"regexp"
 	"strings"
 	"time"
 
 	"archive/tar"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	awsutil "github.com/draganm/datas3t/aws"
 	"github.com/draganm/datas3t/postgresstore"
 	"github.com/draganm/datas3t/server/bucket"
 	"github.com/draganm/datas3t/server/dataranges"
@@ -243,27 +241,14 @@ var _ = Describe("UploadDatarange", func() {
 		err = minioClient.MakeBucket(ctx, testBucketName, miniogo.MakeBucketOptions{})
 		Expect(err).NotTo(HaveOccurred())
 
-		// Create S3 client for test operations
-		cfg, err := config.LoadDefaultConfig(ctx,
-			config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
-				minioAccessKey,
-				minioSecretKey,
-				"",
-			)),
-			config.WithRegion("us-east-1"),
-		)
-		Expect(err).NotTo(HaveOccurred())
-
-		// Build endpoint URL with proper scheme (consistent with bucket_info.go approach)
-		s3Endpoint := minioEndpoint
-		if !regexp.MustCompile(`^https?://`).MatchString(s3Endpoint) {
-			s3Endpoint = "http://" + s3Endpoint
-		}
-
-		s3Client = s3.NewFromConfig(cfg, func(o *s3.Options) {
-			o.BaseEndpoint = aws.String(s3Endpoint)
-			o.UsePathStyle = true
+		// Create S3 client for test operations using shared utility
+		s3Client, err = awsutil.CreateS3Client(ctx, awsutil.S3ClientConfig{
+			AccessKey: minioAccessKey,
+			SecretKey: minioSecretKey,
+			Endpoint:  minioEndpoint,
+			Logger:    logger,
 		})
+		Expect(err).NotTo(HaveOccurred())
 
 		// Create server instances
 		uploadSrv, err = dataranges.NewServer(db, "dGVzdC1rZXktMzItYnl0ZXMtZm9yLXRlc3RpbmchIQ==")

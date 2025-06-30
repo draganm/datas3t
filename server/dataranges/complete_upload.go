@@ -8,16 +8,14 @@ import (
 	"io"
 	"log/slog"
 	"math/rand"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	awsutil "github.com/draganm/datas3t/aws"
 	"github.com/draganm/datas3t/postgresstore"
 	"github.com/draganm/datas3t/tarindex"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -48,7 +46,7 @@ func (s *UploadDatarangeServer) CompleteDatarangeUpload(ctx context.Context, log
 	}
 
 	// 2. Create S3 client
-	s3Client, err := s.createS3ClientFromUploadDetails(ctx, uploadDetails)
+	s3Client, err := s.createS3ClientFromUploadDetails(ctx, log, uploadDetails)
 	if err != nil {
 		return fmt.Errorf("failed to create S3 client: %w", err)
 	}
@@ -256,43 +254,20 @@ func (s *UploadDatarangeServer) handleFailureInTransaction(ctx context.Context, 
 	return originalErr
 }
 
-func (s *UploadDatarangeServer) createS3ClientFromUploadDetails(ctx context.Context, uploadDetails postgresstore.GetDatarangeUploadWithDetailsRow) (*s3.Client, error) {
+func (s *UploadDatarangeServer) createS3ClientFromUploadDetails(ctx context.Context, log *slog.Logger, uploadDetails postgresstore.GetDatarangeUploadWithDetailsRow) (*s3.Client, error) {
 	// Decrypt credentials
 	accessKey, secretKey, err := s.encryptor.DecryptCredentials(uploadDetails.AccessKey, uploadDetails.SecretKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt credentials: %w", err)
 	}
 
-	// Normalize endpoint to ensure it has proper protocol scheme
-	endpoint := uploadDetails.Endpoint
-	if !strings.HasPrefix(endpoint, "https://") && !strings.HasPrefix(endpoint, "http://") {
-		// If no scheme provided, default to http (non-TLS)
-		endpoint = "http://" + endpoint
-	}
-
-	// Create AWS config with custom credentials and timeouts
-	cfg, err := config.LoadDefaultConfig(ctx,
-		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
-			accessKey,
-			secretKey,
-			"", // token
-		)),
-		config.WithRegion("us-east-1"), // default region
-		config.WithHTTPClient(&http.Client{
-			Timeout: 30 * time.Second, // 30 second timeout for all HTTP operations
-		}),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load AWS config: %w", err)
-	}
-
-	// Create S3 client with custom endpoint
-	s3Client := s3.NewFromConfig(cfg, func(o *s3.Options) {
-		o.BaseEndpoint = aws.String(endpoint)
-		o.UsePathStyle = true // Use path-style addressing for custom S3 endpoints
+	// Use shared AWS utility for S3 client creation with logging
+	return awsutil.CreateS3Client(ctx, awsutil.S3ClientConfig{
+		AccessKey: accessKey,
+		SecretKey: secretKey,
+		Endpoint:  uploadDetails.Endpoint,
+		Logger:    log,
 	})
-
-	return s3Client, nil
 }
 
 // validateTarIndex performs random sampling validation of tar entries

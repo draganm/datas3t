@@ -21,7 +21,7 @@ func (s *BucketServer) AddBucket(ctx context.Context, log *slog.Logger, req *Buc
 		}
 	}()
 
-	err = req.Validate(ctx)
+	err = req.Validate(ctx, log)
 	if err != nil {
 		return fmt.Errorf("failed to validate bucket info: %w", err)
 	}

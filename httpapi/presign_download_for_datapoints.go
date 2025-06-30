@@ -15,7 +15,7 @@ func (a *api) presignDownloadForDatapoints(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	resp, err := a.s.PreSignDownloadForDatapoints(r.Context(), *req)
+	resp, err := a.s.PreSignDownloadForDatapoints(r.Context(), a.log, *req)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

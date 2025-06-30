@@ -4,14 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/http"
-	"regexp"
+	"log/slog"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	awsutil "github.com/draganm/datas3t/aws"
 	"github.com/draganm/datas3t/postgresstore"
 	"github.com/draganm/datas3t/tarindex"
 )
@@ -31,7 +29,7 @@ type PreSignDownloadForDatapointsResponse struct {
 	DownloadSegments []DownloadSegment `json:"download_segments"`
 }
 
-func (s *DownloadServer) PreSignDownloadForDatapoints(ctx context.Context, request PreSignDownloadForDatapointsRequest) (PreSignDownloadForDatapointsResponse, error) {
+func (s *DownloadServer) PreSignDownloadForDatapoints(ctx context.Context, log *slog.Logger, request PreSignDownloadForDatapointsRequest) (PreSignDownloadForDatapointsResponse, error) {
 	// 1. Validate request
 	err := request.Validate()
 	if err != nil {
@@ -58,7 +56,7 @@ func (s *DownloadServer) PreSignDownloadForDatapoints(ctx context.Context, reque
 	// 3. For each datarange, get the index from the disk cache and create download segments
 	for _, datarange := range dataranges {
 		// Create S3 client for this datarange
-		s3Client, err := s.createS3Client(ctx, datarange)
+		s3Client, err := s.createS3Client(ctx, log, datarange)
 		if err != nil {
 			return PreSignDownloadForDatapointsResponse{}, fmt.Errorf("failed to create S3 client: %w", err)
 		}
@@ -102,43 +100,21 @@ func (r *PreSignDownloadForDatapointsRequest) Validate() error {
 	return nil
 }
 
-func (s *DownloadServer) createS3Client(ctx context.Context, datarange postgresstore.GetDatarangesForDatapointsRow) (*s3.Client, error) {
+func (s *DownloadServer) createS3Client(ctx context.Context, log *slog.Logger, datarange postgresstore.GetDatarangesForDatapointsRow) (*s3.Client, error) {
 	// Decrypt credentials
 	accessKey, secretKey, err := s.encryptor.DecryptCredentials(datarange.AccessKey, datarange.SecretKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt credentials: %w", err)
 	}
 
-	// Normalize endpoint to ensure it has proper protocol scheme
-	endpoint := datarange.Endpoint
-	if !regexp.MustCompile(`^https?://`).MatchString(endpoint) {
-		// If no scheme provided, default to http (non-TLS)
-		endpoint = "http://" + endpoint
-	}
-
-	// Create AWS config with custom credentials and timeouts
-	cfg, err := config.LoadDefaultConfig(ctx,
-		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
-			accessKey,
-			secretKey,
-			"", // token
-		)),
-		config.WithRegion("us-east-1"), // default region
-		config.WithHTTPClient(&http.Client{
-			Timeout: 30 * time.Second, // 30 second timeout for all HTTP operations
-		}),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load AWS config: %w", err)
-	}
-
-	// Create S3 client with custom endpoint
-	s3Client := s3.NewFromConfig(cfg, func(o *s3.Options) {
-		o.BaseEndpoint = aws.String(endpoint)
-		o.UsePathStyle = true // Use path-style addressing for custom S3 endpoints
+	// Use shared AWS utility for S3 client creation with logging
+	return awsutil.CreateS3Client(ctx, awsutil.S3ClientConfig{
+		AccessKey: accessKey,
+		SecretKey: secretKey,
+		Endpoint:  datarange.Endpoint,
+		Logger:    log,
+		// Note: Could add a logger here if needed for debugging download operations
 	})
-
-	return s3Client, nil
 }
 
 func (s *DownloadServer) downloadIndexFromS3(ctx context.Context, s3Client *s3.Client, bucket, indexObjectKey string) ([]byte, error) {
