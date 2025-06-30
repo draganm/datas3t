@@ -404,6 +404,69 @@ func (q *Queries) GetAllDataranges(ctx context.Context) ([]GetAllDatarangesRow, 
 	return items, nil
 }
 
+const getDatarangeByExactRange = `-- name: GetDatarangeByExactRange :one
+SELECT 
+    dr.id,
+    dr.datas3t_id,
+    dr.data_object_key,
+    dr.index_object_key,
+    dr.min_datapoint_key,
+    dr.max_datapoint_key,
+    dr.size_bytes,
+    d.name as datas3t_name,
+    s.endpoint,
+    s.bucket,
+    s.access_key,
+    s.secret_key
+FROM dataranges dr
+JOIN datas3ts d ON dr.datas3t_id = d.id
+JOIN s3_buckets s ON d.s3_bucket_id = s.id
+WHERE d.name = $1
+  AND dr.min_datapoint_key = $2
+  AND dr.max_datapoint_key = $3
+`
+
+type GetDatarangeByExactRangeParams struct {
+	Name            string
+	MinDatapointKey int64
+	MaxDatapointKey int64
+}
+
+type GetDatarangeByExactRangeRow struct {
+	ID              int64
+	Datas3tID       int64
+	DataObjectKey   string
+	IndexObjectKey  string
+	MinDatapointKey int64
+	MaxDatapointKey int64
+	SizeBytes       int64
+	Datas3tName     string
+	Endpoint        string
+	Bucket          string
+	AccessKey       string
+	SecretKey       string
+}
+
+func (q *Queries) GetDatarangeByExactRange(ctx context.Context, arg GetDatarangeByExactRangeParams) (GetDatarangeByExactRangeRow, error) {
+	row := q.db.QueryRow(ctx, getDatarangeByExactRange, arg.Name, arg.MinDatapointKey, arg.MaxDatapointKey)
+	var i GetDatarangeByExactRangeRow
+	err := row.Scan(
+		&i.ID,
+		&i.Datas3tID,
+		&i.DataObjectKey,
+		&i.IndexObjectKey,
+		&i.MinDatapointKey,
+		&i.MaxDatapointKey,
+		&i.SizeBytes,
+		&i.Datas3tName,
+		&i.Endpoint,
+		&i.Bucket,
+		&i.AccessKey,
+		&i.SecretKey,
+	)
+	return i, err
+}
+
 const getDatarangeFields = `-- name: GetDatarangeFields :many
 SELECT min_datapoint_key, max_datapoint_key, size_bytes
 FROM dataranges

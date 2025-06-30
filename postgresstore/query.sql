@@ -183,3 +183,24 @@ SET upload_counter = upload_counter + 1,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = $1
 RETURNING upload_counter;
+
+-- name: GetDatarangeByExactRange :one
+SELECT 
+    dr.id,
+    dr.datas3t_id,
+    dr.data_object_key,
+    dr.index_object_key,
+    dr.min_datapoint_key,
+    dr.max_datapoint_key,
+    dr.size_bytes,
+    d.name as datas3t_name,
+    s.endpoint,
+    s.bucket,
+    s.access_key,
+    s.secret_key
+FROM dataranges dr
+JOIN datas3ts d ON dr.datas3t_id = d.id
+JOIN s3_buckets s ON d.s3_bucket_id = s.id
+WHERE d.name = $1
+  AND dr.min_datapoint_key = $2
+  AND dr.max_datapoint_key = $3;

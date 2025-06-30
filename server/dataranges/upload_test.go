@@ -1280,4 +1280,255 @@ var _ = Describe("UploadDatarange", func() {
 			})
 		})
 	})
+
+	Context("DeleteDatarange", func() {
+		var testDataObjectKey string
+		var testIndexObjectKey string
+
+		// Helper function to create a completed datarange for testing deletion
+		createCompletedDatarange := func(ctx SpecContext, firstDatapoint, numDatapoints uint64) {
+			// Create proper TAR data and index
+			properTarData, properTarIndex := createProperTarWithIndex(int(numDatapoints), int64(firstDatapoint))
+
+			// Start upload
+			req := &dataranges.UploadDatarangeRequest{
+				Datas3tName:         testDatas3tName,
+				DataSize:            uint64(len(properTarData)),
+				NumberOfDatapoints:  numDatapoints,
+				FirstDatapointIndex: firstDatapoint,
+			}
+
+			uploadResp, err := uploadSrv.StartDatarangeUpload(ctx, logger, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Upload data and index
+			dataResp, err := httpPut(uploadResp.PresignedDataPutURL, bytes.NewReader(properTarData))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(dataResp.StatusCode).To(Equal(http.StatusOK))
+			dataResp.Body.Close()
+
+			indexResp, err := httpPut(uploadResp.PresignedIndexPutURL, bytes.NewReader(properTarIndex))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(indexResp.StatusCode).To(Equal(http.StatusOK))
+			indexResp.Body.Close()
+
+			// Complete upload
+			completeReq := &dataranges.CompleteUploadRequest{
+				DatarangeUploadID: uploadResp.DatarangeID,
+			}
+
+			err = uploadSrv.CompleteDatarangeUpload(ctx, logger, completeReq)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Get the created datarange details
+			testDataObjectKey = uploadResp.ObjectKey
+
+			// Get the index object key from upload details (before it was deleted)
+			uploadDetails, err := queries.GetDatarangeByExactRange(ctx, postgresstore.GetDatarangeByExactRangeParams{
+				Name:            testDatas3tName,
+				MinDatapointKey: int64(firstDatapoint),
+				MaxDatapointKey: int64(firstDatapoint + numDatapoints - 1),
+			})
+			Expect(err).NotTo(HaveOccurred())
+			testIndexObjectKey = uploadDetails.IndexObjectKey
+		}
+
+		Context("when deleting an existing datarange", func() {
+			BeforeEach(func(ctx SpecContext) {
+				createCompletedDatarange(ctx, 0, 10) // Create datarange from 0-9
+			})
+
+			It("should successfully delete the datarange and S3 objects", func(ctx SpecContext) {
+				// Verify initial state
+				datarangeCount, err := queries.CountDataranges(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(datarangeCount).To(Equal(int64(1)))
+
+				// Verify S3 objects exist
+				_, err = s3Client.HeadObject(ctx, &s3.HeadObjectInput{
+					Bucket: aws.String(testBucketName),
+					Key:    aws.String(testDataObjectKey),
+				})
+				Expect(err).NotTo(HaveOccurred()) // Data object should exist
+
+				_, err = s3Client.HeadObject(ctx, &s3.HeadObjectInput{
+					Bucket: aws.String(testBucketName),
+					Key:    aws.String(testIndexObjectKey),
+				})
+				Expect(err).NotTo(HaveOccurred()) // Index object should exist
+
+				// Delete the datarange
+				deleteReq := &dataranges.DeleteDatarangeRequest{
+					Datas3tName:       testDatas3tName,
+					FirstDatapointKey: 0,
+					LastDatapointKey:  9,
+				}
+
+				err = uploadSrv.DeleteDatarange(ctx, logger, deleteReq)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Verify datarange was deleted from database
+				datarangeCount2, err := queries.CountDataranges(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(datarangeCount2).To(Equal(int64(0)))
+
+				// Verify S3 objects were deleted
+				_, err = s3Client.HeadObject(ctx, &s3.HeadObjectInput{
+					Bucket: aws.String(testBucketName),
+					Key:    aws.String(testDataObjectKey),
+				})
+				Expect(err).To(HaveOccurred()) // Data object should be deleted
+
+				_, err = s3Client.HeadObject(ctx, &s3.HeadObjectInput{
+					Bucket: aws.String(testBucketName),
+					Key:    aws.String(testIndexObjectKey),
+				})
+				Expect(err).To(HaveOccurred()) // Index object should be deleted
+
+				// Verify no cleanup tasks were scheduled (immediate deletion succeeded)
+				cleanupTasks, err := queries.CountKeysToDelete(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(cleanupTasks).To(Equal(int64(0)))
+			})
+		})
+
+		Context("when validation fails", func() {
+			It("should reject empty datas3t name", func(ctx SpecContext) {
+				deleteReq := &dataranges.DeleteDatarangeRequest{
+					Datas3tName:       "",
+					FirstDatapointKey: 0,
+					LastDatapointKey:  9,
+				}
+
+				err := uploadSrv.DeleteDatarange(ctx, logger, deleteReq)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("datas3t_name is required"))
+			})
+
+			It("should reject invalid datapoint key range", func(ctx SpecContext) {
+				deleteReq := &dataranges.DeleteDatarangeRequest{
+					Datas3tName:       testDatas3tName,
+					FirstDatapointKey: 10,
+					LastDatapointKey:  5, // Last < First
+				}
+
+				err := uploadSrv.DeleteDatarange(ctx, logger, deleteReq)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("last_datapoint_key must be greater than or equal to first_datapoint_key"))
+			})
+
+			It("should reject non-existent datas3t", func(ctx SpecContext) {
+				deleteReq := &dataranges.DeleteDatarangeRequest{
+					Datas3tName:       "non-existent-datas3t",
+					FirstDatapointKey: 0,
+					LastDatapointKey:  9,
+				}
+
+				err := uploadSrv.DeleteDatarange(ctx, logger, deleteReq)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("failed to find datarange"))
+			})
+
+			It("should reject non-existent datarange", func(ctx SpecContext) {
+				deleteReq := &dataranges.DeleteDatarangeRequest{
+					Datas3tName:       testDatas3tName,
+					FirstDatapointKey: 100, // Non-existent range
+					LastDatapointKey:  199,
+				}
+
+				err := uploadSrv.DeleteDatarange(ctx, logger, deleteReq)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("failed to find datarange"))
+			})
+		})
+
+		Context("when datarange exists but S3 objects don't exist", func() {
+			BeforeEach(func(ctx SpecContext) {
+				createCompletedDatarange(ctx, 0, 10) // Create datarange from 0-9
+
+				// Manually delete the S3 objects to simulate a scenario where they don't exist
+				_, err := s3Client.DeleteObject(ctx, &s3.DeleteObjectInput{
+					Bucket: aws.String(testBucketName),
+					Key:    aws.String(testDataObjectKey),
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				_, err = s3Client.DeleteObject(ctx, &s3.DeleteObjectInput{
+					Bucket: aws.String(testBucketName),
+					Key:    aws.String(testIndexObjectKey),
+				})
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should successfully delete the datarange even when S3 objects don't exist", func(ctx SpecContext) {
+				// Verify initial state
+				datarangeCount, err := queries.CountDataranges(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(datarangeCount).To(Equal(int64(1)))
+
+				// Delete the datarange
+				deleteReq := &dataranges.DeleteDatarangeRequest{
+					Datas3tName:       testDatas3tName,
+					FirstDatapointKey: 0,
+					LastDatapointKey:  9,
+				}
+
+				err = uploadSrv.DeleteDatarange(ctx, logger, deleteReq)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Verify datarange was deleted from database
+				datarangeCount2, err := queries.CountDataranges(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(datarangeCount2).To(Equal(int64(0)))
+
+				// Verify no cleanup tasks were scheduled (objects didn't exist)
+				cleanupTasks, err := queries.CountKeysToDelete(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(cleanupTasks).To(Equal(int64(0)))
+			})
+		})
+
+		Context("when multiple dataranges exist", func() {
+			BeforeEach(func(ctx SpecContext) {
+				// Create multiple dataranges
+				createCompletedDatarange(ctx, 0, 10)  // 0-9
+				createCompletedDatarange(ctx, 10, 10) // 10-19
+				createCompletedDatarange(ctx, 100, 5) // 100-104
+			})
+
+			It("should delete only the specified datarange", func(ctx SpecContext) {
+				// Verify initial state
+				datarangeCount, err := queries.CountDataranges(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(datarangeCount).To(Equal(int64(3)))
+
+				// Delete the middle datarange (10-19)
+				deleteReq := &dataranges.DeleteDatarangeRequest{
+					Datas3tName:       testDatas3tName,
+					FirstDatapointKey: 10,
+					LastDatapointKey:  19,
+				}
+
+				err = uploadSrv.DeleteDatarange(ctx, logger, deleteReq)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Verify only one datarange was deleted
+				datarangeCount2, err := queries.CountDataranges(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(datarangeCount2).To(Equal(int64(2)))
+
+				// Verify the correct dataranges remain
+				remainingDataranges, err := queries.GetAllDataranges(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(len(remainingDataranges)).To(Equal(2))
+
+				// Check that we have the expected ranges (0-9 and 100-104)
+				minKeys := []int64{remainingDataranges[0].MinDatapointKey, remainingDataranges[1].MinDatapointKey}
+				maxKeys := []int64{remainingDataranges[0].MaxDatapointKey, remainingDataranges[1].MaxDatapointKey}
+
+				Expect(minKeys).To(ContainElements(int64(0), int64(100)))
+				Expect(maxKeys).To(ContainElements(int64(9), int64(104)))
+			})
+		})
+	})
 })
