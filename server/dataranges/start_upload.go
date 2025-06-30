@@ -146,20 +146,20 @@ func (s *UploadDatarangeServer) StartDatarangeUpload(ctx context.Context, log *s
 
 	// Generate object key for the data using upload counter
 	objectKey := fmt.Sprintf(
-		"datas3t/%s/dataranges/%012d-%020d-%020d.tar",
+		"datas3t/%s/dataranges/%020d-%020d-%012d.tar",
 		req.Datas3tName,
-		uploadCounter,
 		req.FirstDatapointIndex,
 		req.FirstDatapointIndex+req.NumberOfDatapoints-1,
+		uploadCounter,
 	)
 
 	// Generate presigned URL for index using upload counter
 	indexObjectKey := fmt.Sprintf(
-		"datas3t/%s/dataranges/%012d-%020d-%020d.index.zst",
+		"datas3t/%s/dataranges/%020d-%020d-%012d.index",
 		req.Datas3tName,
-		uploadCounter,
 		req.FirstDatapointIndex,
 		req.FirstDatapointIndex+req.NumberOfDatapoints-1,
+		uploadCounter,
 	)
 
 	// Determine upload method based on data size
