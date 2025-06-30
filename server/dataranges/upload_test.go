@@ -848,10 +848,10 @@ var _ = Describe("UploadDatarange", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(datarangeCount2).To(Equal(int64(0)))
 
-				// Verify cleanup tasks were scheduled
+				// Verify no cleanup tasks needed (objects didn't exist, so immediate deletion succeeded)
 				cleanupTasks, err := queries.CountKeysToDelete(ctx)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(cleanupTasks).To(Equal(int64(2)))
+				Expect(cleanupTasks).To(Equal(int64(0)))
 			})
 		})
 
@@ -901,10 +901,10 @@ var _ = Describe("UploadDatarange", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(datarangeCount2).To(Equal(int64(0)))
 
-				// Verify cleanup tasks were scheduled
+				// Verify no cleanup tasks needed (objects didn't exist, so immediate deletion succeeded)
 				cleanupTasks, err := queries.CountKeysToDelete(ctx)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(cleanupTasks).To(Equal(int64(2)))
+				Expect(cleanupTasks).To(Equal(int64(0)))
 			})
 
 			It("should handle partial uploads by cancelling and cleaning up properly", func(ctx SpecContext) {
@@ -936,10 +936,173 @@ var _ = Describe("UploadDatarange", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(datarangeCount).To(Equal(int64(0)))
 
-				// Verify cleanup tasks were scheduled
+				// Verify no cleanup tasks needed (multipart abort cleaned up parts, objects didn't exist)
 				cleanupTasks, err := queries.CountKeysToDelete(ctx)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(cleanupTasks).To(Equal(int64(2)))
+				Expect(cleanupTasks).To(Equal(int64(0)))
+			})
+
+			It("should delete uploaded multipart parts and index when cancelling", func(ctx SpecContext) {
+				// Upload both parts and index to S3
+				testData := make([]byte, 10*1024*1024) // 10MB total
+				for i := range testData {
+					testData[i] = byte(i % 256)
+				}
+				testIndex := []byte("test index data for cancel multipart")
+
+				// Upload both multipart parts
+				partSize := 5 * 1024 * 1024 // 5MB per part
+				for i, url := range uploadResp.PresignedMultipartUploadPutURLs {
+					startOffset := i * partSize
+					endOffset := startOffset + partSize
+					if endOffset > len(testData) {
+						endOffset = len(testData)
+					}
+
+					partData := testData[startOffset:endOffset]
+					resp, err := httpPut(url, bytes.NewReader(partData))
+					Expect(err).NotTo(HaveOccurred())
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+					resp.Body.Close()
+				}
+
+				// Upload index file
+				indexResp, err := httpPut(uploadResp.PresignedIndexPutURL, bytes.NewReader(testIndex))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(indexResp.StatusCode).To(Equal(http.StatusOK))
+				indexResp.Body.Close()
+
+				// Get the actual index object key from the database
+				uploadDetails, err := queries.GetDatarangeUploadWithDetails(ctx, uploadResp.DatarangeID)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Verify index was uploaded
+				_, err = s3Client.HeadObject(ctx, &s3.HeadObjectInput{
+					Bucket: aws.String(testBucketName),
+					Key:    aws.String(uploadDetails.IndexObjectKey),
+				})
+				Expect(err).NotTo(HaveOccurred()) // Index should exist
+
+				// Cancel the upload
+				cancelReq := &dataranges.CancelUploadRequest{
+					DatarangeUploadID: uploadResp.DatarangeID,
+				}
+
+				err = uploadSrv.CancelDatarangeUpload(ctx, logger, cancelReq)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Verify database cleanup
+				uploadCount, err := queries.CountDatarangeUploads(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(uploadCount).To(Equal(int64(0)))
+
+				// Verify multipart upload was aborted (data object should not exist)
+				_, err = s3Client.HeadObject(ctx, &s3.HeadObjectInput{
+					Bucket: aws.String(testBucketName),
+					Key:    aws.String(uploadResp.ObjectKey),
+				})
+				Expect(err).To(HaveOccurred()) // Data object should not exist after abort
+
+				// Verify index was deleted
+				_, err = s3Client.HeadObject(ctx, &s3.HeadObjectInput{
+					Bucket: aws.String(testBucketName),
+					Key:    aws.String(uploadDetails.IndexObjectKey),
+				})
+				Expect(err).To(HaveOccurred()) // Index should be deleted
+
+				// Verify no cleanup tasks needed (immediate deletion succeeded)
+				cleanupTasks, err := queries.CountKeysToDelete(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(cleanupTasks).To(Equal(int64(0)))
+			})
+		})
+
+		Context("when cancelling a direct PUT upload with actual data", func() {
+			var uploadResp *dataranges.UploadDatarangeResponse
+
+			BeforeEach(func(ctx SpecContext) {
+				// Start a small upload that uses direct PUT
+				req := &dataranges.UploadDatarangeRequest{
+					Datas3tName:         testDatas3tName,
+					DataSize:            1024, // Small size < 5MB
+					NumberOfDatapoints:  10,
+					FirstDatapointIndex: 0,
+				}
+
+				var err error
+				uploadResp, err = uploadSrv.StartDatarangeUpload(ctx, logger, req)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(uploadResp.UseDirectPut).To(BeTrue())
+			})
+
+			It("should delete uploaded data object and index when cancelling", func(ctx SpecContext) {
+				// Upload both data and index to S3
+				testData := make([]byte, 1024)
+				for i := range testData {
+					testData[i] = byte(i % 256)
+				}
+				testIndex := []byte("test index data for cancel direct PUT")
+
+				// Upload data file
+				dataResp, err := httpPut(uploadResp.PresignedDataPutURL, bytes.NewReader(testData))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(dataResp.StatusCode).To(Equal(http.StatusOK))
+				dataResp.Body.Close()
+
+				// Upload index file
+				indexResp, err := httpPut(uploadResp.PresignedIndexPutURL, bytes.NewReader(testIndex))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(indexResp.StatusCode).To(Equal(http.StatusOK))
+				indexResp.Body.Close()
+
+				// Get the actual index object key from the database
+				uploadDetails, err := queries.GetDatarangeUploadWithDetails(ctx, uploadResp.DatarangeID)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Verify both objects were uploaded
+				_, err = s3Client.HeadObject(ctx, &s3.HeadObjectInput{
+					Bucket: aws.String(testBucketName),
+					Key:    aws.String(uploadResp.ObjectKey),
+				})
+				Expect(err).NotTo(HaveOccurred()) // Data object should exist
+
+				_, err = s3Client.HeadObject(ctx, &s3.HeadObjectInput{
+					Bucket: aws.String(testBucketName),
+					Key:    aws.String(uploadDetails.IndexObjectKey),
+				})
+				Expect(err).NotTo(HaveOccurred()) // Index should exist
+
+				// Cancel the upload
+				cancelReq := &dataranges.CancelUploadRequest{
+					DatarangeUploadID: uploadResp.DatarangeID,
+				}
+
+				err = uploadSrv.CancelDatarangeUpload(ctx, logger, cancelReq)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Verify database cleanup
+				uploadCount, err := queries.CountDatarangeUploads(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(uploadCount).To(Equal(int64(0)))
+
+				// Verify data object was deleted
+				_, err = s3Client.HeadObject(ctx, &s3.HeadObjectInput{
+					Bucket: aws.String(testBucketName),
+					Key:    aws.String(uploadResp.ObjectKey),
+				})
+				Expect(err).To(HaveOccurred()) // Data object should be deleted
+
+				// Verify index was deleted
+				_, err = s3Client.HeadObject(ctx, &s3.HeadObjectInput{
+					Bucket: aws.String(testBucketName),
+					Key:    aws.String(uploadDetails.IndexObjectKey),
+				})
+				Expect(err).To(HaveOccurred()) // Index should be deleted
+
+				// Verify no cleanup tasks needed (immediate deletion succeeded)
+				cleanupTasks, err := queries.CountKeysToDelete(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(cleanupTasks).To(Equal(int64(0)))
 			})
 		})
 
