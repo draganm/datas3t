@@ -204,3 +204,9 @@ JOIN s3_buckets s ON d.s3_bucket_id = s.id
 WHERE d.name = $1
   AND dr.min_datapoint_key = $2
   AND dr.max_datapoint_key = $3;
+
+-- name: GetDatarangesForDatas3t :many
+SELECT min_datapoint_key, max_datapoint_key
+FROM dataranges dr
+JOIN datas3ts d ON dr.datas3t_id = d.id
+WHERE d.name = $1;

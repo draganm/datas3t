@@ -658,6 +658,38 @@ func (q *Queries) GetDatarangesForDatapoints(ctx context.Context, arg GetDataran
 	return items, nil
 }
 
+const getDatarangesForDatas3t = `-- name: GetDatarangesForDatas3t :many
+SELECT min_datapoint_key, max_datapoint_key
+FROM dataranges dr
+JOIN datas3ts d ON dr.datas3t_id = d.id
+WHERE d.name = $1
+`
+
+type GetDatarangesForDatas3tRow struct {
+	MinDatapointKey int64
+	MaxDatapointKey int64
+}
+
+func (q *Queries) GetDatarangesForDatas3t(ctx context.Context, name string) ([]GetDatarangesForDatas3tRow, error) {
+	rows, err := q.db.Query(ctx, getDatarangesForDatas3t, name)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetDatarangesForDatas3tRow
+	for rows.Next() {
+		var i GetDatarangesForDatas3tRow
+		if err := rows.Scan(&i.MinDatapointKey, &i.MaxDatapointKey); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getDatas3tWithBucket = `-- name: GetDatas3tWithBucket :one
 SELECT d.id, d.name, d.s3_bucket_id, d.upload_counter,
        s.endpoint, s.bucket, s.access_key, s.secret_key

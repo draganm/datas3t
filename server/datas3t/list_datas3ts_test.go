@@ -373,4 +373,118 @@ var _ = Describe("ListDatas3ts", func() {
 			Expect(datasetC.TotalBytes).To(Equal(int64(15000))) // 10000 + 5000
 		})
 	})
+
+	Context("GetDatapointsBitmap functionality", func() {
+		BeforeEach(func(ctx SpecContext) {
+			// Add multiple test datasets with different dataranges
+			datasets := []string{"bitmap-test-a", "bitmap-test-b", "bitmap-test-c"}
+			for _, name := range datasets {
+				datasetReq := &datas3t.AddDatas3tRequest{
+					Bucket: testBucketConfigName,
+					Name:   name,
+				}
+
+				err := srv.AddDatas3t(ctx, logger, datasetReq)
+				Expect(err).NotTo(HaveOccurred())
+			}
+
+			queries := postgresstore.New(db)
+
+			// Add dataranges to bitmap-test-a: single range 10-14 (5 datapoints)
+			datasetA, err := queries.GetDatas3tWithBucket(ctx, "bitmap-test-a")
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = queries.CreateDatarange(ctx, postgresstore.CreateDatarangeParams{
+				Datas3tID:       datasetA.ID,
+				DataObjectKey:   "data-a-1",
+				IndexObjectKey:  "index-a-1",
+				MinDatapointKey: 10,
+				MaxDatapointKey: 14,
+				SizeBytes:       500,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Leave bitmap-test-b empty (no dataranges)
+
+			// Add dataranges to bitmap-test-c: multiple ranges
+			datasetC, err := queries.GetDatas3tWithBucket(ctx, "bitmap-test-c")
+			Expect(err).NotTo(HaveOccurred())
+
+			// Range 1: 100-102 (3 datapoints)
+			_, err = queries.CreateDatarange(ctx, postgresstore.CreateDatarangeParams{
+				Datas3tID:       datasetC.ID,
+				DataObjectKey:   "data-c-1",
+				IndexObjectKey:  "index-c-1",
+				MinDatapointKey: 100,
+				MaxDatapointKey: 102,
+				SizeBytes:       1000,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Range 2: 200-200 (1 datapoint)
+			_, err = queries.CreateDatarange(ctx, postgresstore.CreateDatarangeParams{
+				Datas3tID:       datasetC.ID,
+				DataObjectKey:   "data-c-2",
+				IndexObjectKey:  "index-c-2",
+				MinDatapointKey: 200,
+				MaxDatapointKey: 200,
+				SizeBytes:       500,
+			})
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return correct bitmaps for different datasets", func(ctx SpecContext) {
+			// Test dataset with single range
+			bitmapA, err := srv.GetDatapointsBitmap(ctx, logger, "bitmap-test-a")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(bitmapA).NotTo(BeNil())
+			Expect(bitmapA.GetCardinality()).To(Equal(uint64(5))) // 10-14 inclusive
+
+			// Verify specific datapoints
+			for i := uint64(10); i <= 14; i++ {
+				Expect(bitmapA.Contains(i)).To(BeTrue())
+			}
+			Expect(bitmapA.Contains(9)).To(BeFalse())
+			Expect(bitmapA.Contains(15)).To(BeFalse())
+
+			// Test empty dataset
+			bitmapB, err := srv.GetDatapointsBitmap(ctx, logger, "bitmap-test-b")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(bitmapB).NotTo(BeNil())
+			Expect(bitmapB.GetCardinality()).To(Equal(uint64(0)))
+
+			// Test dataset with multiple ranges
+			bitmapC, err := srv.GetDatapointsBitmap(ctx, logger, "bitmap-test-c")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(bitmapC).NotTo(BeNil())
+			Expect(bitmapC.GetCardinality()).To(Equal(uint64(4))) // 3 + 1 = 4 datapoints
+
+			// Verify first range: 100-102
+			for i := uint64(100); i <= 102; i++ {
+				Expect(bitmapC.Contains(i)).To(BeTrue())
+			}
+			// Verify second range: 200
+			Expect(bitmapC.Contains(200)).To(BeTrue())
+
+			// Verify gaps
+			Expect(bitmapC.Contains(99)).To(BeFalse())
+			Expect(bitmapC.Contains(103)).To(BeFalse())
+			Expect(bitmapC.Contains(199)).To(BeFalse())
+			Expect(bitmapC.Contains(201)).To(BeFalse())
+		})
+
+		It("should handle validation errors", func(ctx SpecContext) {
+			// Test empty datas3t name
+			bitmap, err := srv.GetDatapointsBitmap(ctx, logger, "")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("datas3t_name is required"))
+			Expect(bitmap).To(BeNil())
+
+			// Test non-existent datas3t
+			bitmap, err = srv.GetDatapointsBitmap(ctx, logger, "non-existent")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(bitmap).NotTo(BeNil())
+			Expect(bitmap.GetCardinality()).To(Equal(uint64(0)))
+		})
+	})
 })
