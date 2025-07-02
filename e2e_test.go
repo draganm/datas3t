@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/RoaringBitmap/roaring/roaring64"
 	"github.com/draganm/datas3t"
 	"github.com/draganm/datas3t/tarindex"
 	"github.com/golang-migrate/migrate/v4"
@@ -953,6 +954,106 @@ var _ = Describe("End-to-End Server Test", func() {
 		logger.Info("DatapointIterator validation completed successfully",
 			"datapoints_processed", datapointCount,
 			"expected_datapoints", expectedCount)
+
+		// Step 8: Test GetDatapointsBitmap functionality
+		logger.Info("Step 8: Testing GetDatapointsBitmap functionality")
+
+		// Get the datapoints bitmap using the client
+		bitmap, err := client.GetDatapointsBitmap(ctx, testDatas3tName)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(bitmap).NotTo(BeNil())
+
+		// Validate the bitmap has the correct total cardinality
+		// Should be 36,000 datapoints (18,000 from first range + 18,000 from second range)
+		expectedCardinality := uint64(36000)
+		actualCardinality := bitmap.GetCardinality()
+		Expect(actualCardinality).To(Equal(expectedCardinality),
+			"Bitmap should contain exactly %d datapoints", expectedCardinality)
+
+		logger.Info("Bitmap cardinality validation passed",
+			"expected_cardinality", expectedCardinality,
+			"actual_cardinality", actualCardinality)
+
+		// Validate specific datapoints are set correctly
+		// Test first datarange boundaries (0-17999)
+		Expect(bitmap.Contains(0)).To(BeTrue(), "Datapoint 0 should be set")
+		Expect(bitmap.Contains(1)).To(BeTrue(), "Datapoint 1 should be set")
+		Expect(bitmap.Contains(17998)).To(BeTrue(), "Datapoint 17998 should be set")
+		Expect(bitmap.Contains(17999)).To(BeTrue(), "Datapoint 17999 should be set")
+
+		// Test gap datapoints are NOT set (18000-19999)
+		Expect(bitmap.Contains(18000)).To(BeFalse(), "Datapoint 18000 should NOT be set (gap)")
+		Expect(bitmap.Contains(18500)).To(BeFalse(), "Datapoint 18500 should NOT be set (gap)")
+		Expect(bitmap.Contains(19999)).To(BeFalse(), "Datapoint 19999 should NOT be set (gap)")
+
+		// Test second datarange boundaries (20000-37999)
+		Expect(bitmap.Contains(20000)).To(BeTrue(), "Datapoint 20000 should be set")
+		Expect(bitmap.Contains(20001)).To(BeTrue(), "Datapoint 20001 should be set")
+		Expect(bitmap.Contains(37998)).To(BeTrue(), "Datapoint 37998 should be set")
+		Expect(bitmap.Contains(37999)).To(BeTrue(), "Datapoint 37999 should be set")
+
+		// Test datapoints beyond the ranges are NOT set
+		Expect(bitmap.Contains(38000)).To(BeFalse(), "Datapoint 38000 should NOT be set (beyond range)")
+		Expect(bitmap.Contains(100000)).To(BeFalse(), "Datapoint 100000 should NOT be set (beyond range)")
+
+		logger.Info("Bitmap individual datapoint validation passed")
+
+		// Validate that the bitmap contains exactly the expected ranges
+		// Check a sample of datapoints from each range
+		for i := uint64(0); i < 100; i++ {
+			Expect(bitmap.Contains(i)).To(BeTrue(), "Datapoint %d should be set (first range)", i)
+		}
+		for i := uint64(17900); i < 18000; i++ {
+			Expect(bitmap.Contains(i)).To(BeTrue(), "Datapoint %d should be set (first range end)", i)
+		}
+		for i := uint64(20000); i < 20100; i++ {
+			Expect(bitmap.Contains(i)).To(BeTrue(), "Datapoint %d should be set (second range start)", i)
+		}
+		for i := uint64(37900); i < 38000; i++ {
+			Expect(bitmap.Contains(i)).To(BeTrue(), "Datapoint %d should be set (second range end)", i)
+		}
+
+		// Test bitmap operations
+		// Create a test bitmap with some overlapping datapoints
+		testBitmap := roaring64.New()
+		testBitmap.AddRange(17990, 20011) // AddRange uses exclusive upper bound, so this adds 17990-20010
+
+		// Intersection should only contain the datapoints that exist in both bitmaps
+		intersection := roaring64.And(bitmap, testBitmap)
+		expectedIntersectionCardinality := uint64(21) // 10 from first range (17990-17999) + 11 from second range (20000-20010)
+		Expect(intersection.GetCardinality()).To(Equal(expectedIntersectionCardinality),
+			"Intersection should contain exactly %d datapoints", expectedIntersectionCardinality)
+
+		// Validate the intersection contains the expected datapoints
+		for i := uint64(17990); i <= 17999; i++ {
+			Expect(intersection.Contains(i)).To(BeTrue(), "Intersection should contain datapoint %d", i)
+		}
+		for i := uint64(18000); i <= 19999; i++ {
+			Expect(intersection.Contains(i)).To(BeFalse(), "Intersection should NOT contain datapoint %d (gap)", i)
+		}
+		for i := uint64(20000); i <= 20010; i++ {
+			Expect(intersection.Contains(i)).To(BeTrue(), "Intersection should contain datapoint %d", i)
+		}
+
+		logger.Info("Bitmap operations validation passed",
+			"intersection_cardinality", intersection.GetCardinality(),
+			"expected_intersection_cardinality", expectedIntersectionCardinality)
+
+		// Test error cases - try to get bitmap for non-existent datas3t
+		nonExistentBitmap, err := client.GetDatapointsBitmap(ctx, "non-existent-datas3t")
+		Expect(err).NotTo(HaveOccurred()) // Should not error for non-existent datas3t
+		Expect(nonExistentBitmap).NotTo(BeNil())
+		Expect(nonExistentBitmap.GetCardinality()).To(Equal(uint64(0)), "Non-existent datas3t should return empty bitmap")
+
+		// Get bitmap size in bytes for reporting
+		bitmapBytes, err := bitmap.MarshalBinary()
+		Expect(err).NotTo(HaveOccurred())
+
+		logger.Info("GetDatapointsBitmap validation completed successfully",
+			"total_datapoints_in_bitmap", actualCardinality,
+			"bitmap_size_bytes", len(bitmapBytes),
+			"intersection_test_passed", true,
+			"error_case_test_passed", true)
 
 		logger.Info("End-to-end test with CLI completed successfully",
 			"partial_tar_size_mb", len(partialTarData)/(1024*1024),

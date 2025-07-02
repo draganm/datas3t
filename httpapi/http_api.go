@@ -25,5 +25,6 @@ func NewHTTPAPI(s *server.Server, log *slog.Logger) *http.ServeMux {
 	mux.HandleFunc("POST /api/v1/upload-datarange/cancel", a.cancelDatarangeUpload)
 	mux.HandleFunc("POST /api/v1/datarange/delete", a.deleteDatarange)
 	mux.HandleFunc("POST /api/v1/download", a.presignDownloadForDatapoints)
+	mux.HandleFunc("GET /api/v1/datapoints-bitmap", a.getDatapointsBitmap)
 	return mux
 }
