@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/draganm/datas3t"
 	"github.com/draganm/datas3t/tarindex"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -895,12 +896,71 @@ var _ = Describe("End-to-End Server Test", func() {
 
 		Expect(completeTarData).To(Equal(expectedCompleteTarData), "Downloaded complete TAR should match expected TAR exactly")
 
+		// Step 7: Validate DatapointIterator streaming functionality
+		logger.Info("Step 7: Testing DatapointIterator streaming with payload validation")
+
+		// Create a client to use the DatapointIterator
+		client := datas3t.NewClient(serverBaseURL)
+
+		// Use DatapointIterator for the same partial range (17990-20010) to validate streaming
+		datapointCount := 0
+		expectedDatapoints := []int{}
+
+		// Build list of expected datapoint indices (17990-17999 and 20000-20010)
+		for i := 17990; i <= 17999; i++ {
+			expectedDatapoints = append(expectedDatapoints, i)
+		}
+		for i := 20000; i <= 20010; i++ {
+			expectedDatapoints = append(expectedDatapoints, i)
+		}
+
+		datapointIndex := 0
+		for content, err := range client.DatapointIterator(ctx, testDatas3tName, 17990, 20010) {
+			if err != nil {
+				logger.Error("DatapointIterator error", "error", err)
+				Expect(err).NotTo(HaveOccurred())
+			}
+
+			// Validate content is not empty
+			Expect(content).NotTo(BeEmpty(), "Datapoint content should not be empty")
+
+			// Validate content matches expected pattern for this datapoint
+			expectedDatapointNum := expectedDatapoints[datapointIndex]
+			expectedContentPrefix := fmt.Sprintf("Content of file %d - ", expectedDatapointNum)
+
+			contentStr := string(content)
+			Expect(contentStr).To(HavePrefix(expectedContentPrefix),
+				"Datapoint %d content should have expected prefix", expectedDatapointNum)
+
+			// Validate content size matches expected size (same as original files)
+			expectedSize := targetFileSize
+			Expect(len(content)).To(Equal(expectedSize),
+				"Datapoint %d content size should match expected size", expectedDatapointNum)
+
+			// Validate content is valid UTF-8
+			Expect(isValidUTF8(content)).To(BeTrue(),
+				"Datapoint %d content should be valid UTF-8", expectedDatapointNum)
+
+			datapointCount++
+			datapointIndex++
+		}
+
+		// Validate we got exactly the expected number of datapoints
+		expectedCount := len(expectedDatapoints) // 21 datapoints (10 from first range + 11 from second range)
+		Expect(datapointCount).To(Equal(expectedCount),
+			"Should receive exactly %d datapoints via iterator", expectedCount)
+
+		logger.Info("DatapointIterator validation completed successfully",
+			"datapoints_processed", datapointCount,
+			"expected_datapoints", expectedCount)
+
 		logger.Info("End-to-end test with CLI completed successfully",
 			"partial_tar_size_mb", len(partialTarData)/(1024*1024),
 			"complete_tar_size_mb", len(completeTarData)/(1024*1024),
 			"partial_tar_size_bytes", len(partialTarData),
 			"complete_tar_size_bytes", len(completeTarData),
 			"total_data_processed_mb", (len(partialTarData)+len(completeTarData))/(1024*1024),
-			"total_datapoints_processed", 36000)
+			"total_datapoints_processed", 36000,
+			"iterator_datapoints_validated", datapointCount)
 	})
 })
