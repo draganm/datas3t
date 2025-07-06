@@ -210,3 +210,83 @@ SELECT min_datapoint_key, max_datapoint_key
 FROM dataranges dr
 JOIN datas3ts d ON dr.datas3t_id = d.id
 WHERE d.name = $1;
+
+-- name: CheckFullDatarangeCoverage :one
+-- Check if a datapoint range is fully covered by existing dataranges with no gaps
+-- Returns true if the range is fully covered by at least two dataranges
+SELECT 
+    CASE 
+        WHEN COUNT(dr.id) >= 2 
+        AND MIN(dr.min_datapoint_key) <= $2 
+        AND MAX(dr.max_datapoint_key) >= $3 
+        THEN true
+        ELSE false
+    END as is_fully_covered
+FROM dataranges dr
+JOIN datas3ts d ON dr.datas3t_id = d.id
+WHERE d.name = $1
+  AND dr.min_datapoint_key <= $3  -- datarange starts before or at our last datapoint
+  AND dr.max_datapoint_key >= $2; -- datarange ends after or at our first datapoint
+
+-- name: GetDatarangesInRange :many
+SELECT 
+    dr.id,
+    dr.data_object_key,
+    dr.index_object_key,
+    dr.min_datapoint_key,
+    dr.max_datapoint_key,
+    dr.size_bytes,
+    d.name as datas3t_name,
+    s.endpoint,
+    s.bucket,
+    s.access_key,
+    s.secret_key
+FROM dataranges dr
+JOIN datas3ts d ON dr.datas3t_id = d.id
+JOIN s3_buckets s ON d.s3_bucket_id = s.id
+WHERE d.name = $1
+  AND dr.min_datapoint_key <= $3  -- datarange starts before or at our last datapoint
+  AND dr.max_datapoint_key >= $2  -- datarange ends after or at our first datapoint
+ORDER BY dr.min_datapoint_key;
+
+-- name: CreateAggregateUpload :one
+INSERT INTO aggregate_uploads (
+    datas3t_id,
+    upload_id,
+    data_object_key,
+    index_object_key,
+    first_datapoint_index,
+    last_datapoint_index,
+    total_data_size,
+    source_datarange_ids
+)
+VALUES (@datas3t_id, @upload_id, @data_object_key, @index_object_key, @first_datapoint_index, @last_datapoint_index, @total_data_size, @source_datarange_ids)
+RETURNING id;
+
+-- name: GetAggregateUploadWithDetails :one
+SELECT 
+    au.id,
+    au.datas3t_id,
+    au.upload_id,
+    au.first_datapoint_index,
+    au.last_datapoint_index,
+    au.total_data_size,
+    au.source_datarange_ids,
+    au.data_object_key,
+    au.index_object_key,
+    d.name as datas3t_name,
+    d.s3_bucket_id,
+    s.endpoint,
+    s.bucket,
+    s.access_key,
+    s.secret_key
+FROM aggregate_uploads au
+JOIN datas3ts d ON au.datas3t_id = d.id
+JOIN s3_buckets s ON d.s3_bucket_id = s.id
+WHERE au.id = $1;
+
+-- name: DeleteAggregateUpload :exec
+DELETE FROM aggregate_uploads WHERE id = $1;
+
+-- name: DeleteDatarangesByIDs :exec
+DELETE FROM dataranges WHERE id = ANY($1::BIGINT[]);

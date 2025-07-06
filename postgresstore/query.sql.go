@@ -190,6 +190,37 @@ func (q *Queries) CheckDatarangeUploadOverlap(ctx context.Context, arg CheckData
 	return column_1, err
 }
 
+const checkFullDatarangeCoverage = `-- name: CheckFullDatarangeCoverage :one
+SELECT 
+    CASE 
+        WHEN COUNT(dr.id) >= 2 
+        AND MIN(dr.min_datapoint_key) <= $2 
+        AND MAX(dr.max_datapoint_key) >= $3 
+        THEN true
+        ELSE false
+    END as is_fully_covered
+FROM dataranges dr
+JOIN datas3ts d ON dr.datas3t_id = d.id
+WHERE d.name = $1
+  AND dr.min_datapoint_key <= $3  -- datarange starts before or at our last datapoint
+  AND dr.max_datapoint_key >= $2
+`
+
+type CheckFullDatarangeCoverageParams struct {
+	Name            string
+	MinDatapointKey int64
+	MaxDatapointKey int64
+}
+
+// Check if a datapoint range is fully covered by existing dataranges with no gaps
+// Returns true if the range is fully covered by at least two dataranges
+func (q *Queries) CheckFullDatarangeCoverage(ctx context.Context, arg CheckFullDatarangeCoverageParams) (bool, error) {
+	row := q.db.QueryRow(ctx, checkFullDatarangeCoverage, arg.Name, arg.MinDatapointKey, arg.MaxDatapointKey)
+	var is_fully_covered bool
+	err := row.Scan(&is_fully_covered)
+	return is_fully_covered, err
+}
+
 const countDatarangeUploads = `-- name: CountDatarangeUploads :one
 SELECT count(*)
 FROM datarange_uploads
@@ -224,6 +255,48 @@ func (q *Queries) CountKeysToDelete(ctx context.Context) (int64, error) {
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const createAggregateUpload = `-- name: CreateAggregateUpload :one
+INSERT INTO aggregate_uploads (
+    datas3t_id,
+    upload_id,
+    data_object_key,
+    index_object_key,
+    first_datapoint_index,
+    last_datapoint_index,
+    total_data_size,
+    source_datarange_ids
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id
+`
+
+type CreateAggregateUploadParams struct {
+	Datas3tID           int64
+	UploadID            string
+	DataObjectKey       string
+	IndexObjectKey      string
+	FirstDatapointIndex int64
+	LastDatapointIndex  int64
+	TotalDataSize       int64
+	SourceDatarangeIds  []int64
+}
+
+func (q *Queries) CreateAggregateUpload(ctx context.Context, arg CreateAggregateUploadParams) (int64, error) {
+	row := q.db.QueryRow(ctx, createAggregateUpload,
+		arg.Datas3tID,
+		arg.UploadID,
+		arg.DataObjectKey,
+		arg.IndexObjectKey,
+		arg.FirstDatapointIndex,
+		arg.LastDatapointIndex,
+		arg.TotalDataSize,
+		arg.SourceDatarangeIds,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
 }
 
 const createDatarange = `-- name: CreateDatarange :one
@@ -306,6 +379,15 @@ func (q *Queries) Datas3tExists(ctx context.Context) (bool, error) {
 	return column_1, err
 }
 
+const deleteAggregateUpload = `-- name: DeleteAggregateUpload :exec
+DELETE FROM aggregate_uploads WHERE id = $1
+`
+
+func (q *Queries) DeleteAggregateUpload(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, deleteAggregateUpload, id)
+	return err
+}
+
 const deleteDatarange = `-- name: DeleteDatarange :exec
 DELETE FROM dataranges WHERE id = $1
 `
@@ -322,6 +404,79 @@ DELETE FROM datarange_uploads WHERE id = $1
 func (q *Queries) DeleteDatarangeUpload(ctx context.Context, id int64) error {
 	_, err := q.db.Exec(ctx, deleteDatarangeUpload, id)
 	return err
+}
+
+const deleteDatarangesByIDs = `-- name: DeleteDatarangesByIDs :exec
+DELETE FROM dataranges WHERE id = ANY($1::BIGINT[])
+`
+
+func (q *Queries) DeleteDatarangesByIDs(ctx context.Context, dollar_1 []int64) error {
+	_, err := q.db.Exec(ctx, deleteDatarangesByIDs, dollar_1)
+	return err
+}
+
+const getAggregateUploadWithDetails = `-- name: GetAggregateUploadWithDetails :one
+SELECT 
+    au.id,
+    au.datas3t_id,
+    au.upload_id,
+    au.first_datapoint_index,
+    au.last_datapoint_index,
+    au.total_data_size,
+    au.source_datarange_ids,
+    au.data_object_key,
+    au.index_object_key,
+    d.name as datas3t_name,
+    d.s3_bucket_id,
+    s.endpoint,
+    s.bucket,
+    s.access_key,
+    s.secret_key
+FROM aggregate_uploads au
+JOIN datas3ts d ON au.datas3t_id = d.id
+JOIN s3_buckets s ON d.s3_bucket_id = s.id
+WHERE au.id = $1
+`
+
+type GetAggregateUploadWithDetailsRow struct {
+	ID                  int64
+	Datas3tID           int64
+	UploadID            string
+	FirstDatapointIndex int64
+	LastDatapointIndex  int64
+	TotalDataSize       int64
+	SourceDatarangeIds  []int64
+	DataObjectKey       string
+	IndexObjectKey      string
+	Datas3tName         string
+	S3BucketID          int64
+	Endpoint            string
+	Bucket              string
+	AccessKey           string
+	SecretKey           string
+}
+
+func (q *Queries) GetAggregateUploadWithDetails(ctx context.Context, id int64) (GetAggregateUploadWithDetailsRow, error) {
+	row := q.db.QueryRow(ctx, getAggregateUploadWithDetails, id)
+	var i GetAggregateUploadWithDetailsRow
+	err := row.Scan(
+		&i.ID,
+		&i.Datas3tID,
+		&i.UploadID,
+		&i.FirstDatapointIndex,
+		&i.LastDatapointIndex,
+		&i.TotalDataSize,
+		&i.SourceDatarangeIds,
+		&i.DataObjectKey,
+		&i.IndexObjectKey,
+		&i.Datas3tName,
+		&i.S3BucketID,
+		&i.Endpoint,
+		&i.Bucket,
+		&i.AccessKey,
+		&i.SecretKey,
+	)
+	return i, err
 }
 
 const getAllDatarangeUploads = `-- name: GetAllDatarangeUploads :many
@@ -680,6 +835,82 @@ func (q *Queries) GetDatarangesForDatas3t(ctx context.Context, name string) ([]G
 	for rows.Next() {
 		var i GetDatarangesForDatas3tRow
 		if err := rows.Scan(&i.MinDatapointKey, &i.MaxDatapointKey); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getDatarangesInRange = `-- name: GetDatarangesInRange :many
+
+SELECT 
+    dr.id,
+    dr.data_object_key,
+    dr.index_object_key,
+    dr.min_datapoint_key,
+    dr.max_datapoint_key,
+    dr.size_bytes,
+    d.name as datas3t_name,
+    s.endpoint,
+    s.bucket,
+    s.access_key,
+    s.secret_key
+FROM dataranges dr
+JOIN datas3ts d ON dr.datas3t_id = d.id
+JOIN s3_buckets s ON d.s3_bucket_id = s.id
+WHERE d.name = $1
+  AND dr.min_datapoint_key <= $3  -- datarange starts before or at our last datapoint
+  AND dr.max_datapoint_key >= $2  -- datarange ends after or at our first datapoint
+ORDER BY dr.min_datapoint_key
+`
+
+type GetDatarangesInRangeParams struct {
+	Name            string
+	MaxDatapointKey int64
+	MinDatapointKey int64
+}
+
+type GetDatarangesInRangeRow struct {
+	ID              int64
+	DataObjectKey   string
+	IndexObjectKey  string
+	MinDatapointKey int64
+	MaxDatapointKey int64
+	SizeBytes       int64
+	Datas3tName     string
+	Endpoint        string
+	Bucket          string
+	AccessKey       string
+	SecretKey       string
+}
+
+// datarange ends after or at our first datapoint
+func (q *Queries) GetDatarangesInRange(ctx context.Context, arg GetDatarangesInRangeParams) ([]GetDatarangesInRangeRow, error) {
+	rows, err := q.db.Query(ctx, getDatarangesInRange, arg.Name, arg.MaxDatapointKey, arg.MinDatapointKey)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetDatarangesInRangeRow
+	for rows.Next() {
+		var i GetDatarangesInRangeRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DataObjectKey,
+			&i.IndexObjectKey,
+			&i.MinDatapointKey,
+			&i.MaxDatapointKey,
+			&i.SizeBytes,
+			&i.Datas3tName,
+			&i.Endpoint,
+			&i.Bucket,
+			&i.AccessKey,
+			&i.SecretKey,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

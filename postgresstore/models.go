@@ -8,6 +8,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AggregateUpload struct {
+	ID                  int64
+	Datas3tID           int64
+	UploadID            string
+	DataObjectKey       string
+	IndexObjectKey      string
+	FirstDatapointIndex int64
+	LastDatapointIndex  int64
+	TotalDataSize       int64
+	SourceDatarangeIds  []int64
+	CreatedAt           pgtype.Timestamp
+	UpdatedAt           pgtype.Timestamp
+}
+
 type Datarange struct {
 	ID              int64
 	Datas3tID       int64
