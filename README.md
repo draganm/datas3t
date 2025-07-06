@@ -33,6 +33,12 @@ datas3t is designed for efficiently managing datas3ts containing millions of ind
 - Bypasses server for large file operations
 - Supports multipart uploads for large datas3ts
 
+### 🔄 **Datarange Aggregation**
+- Combines multiple small dataranges into larger ones
+- Reduces S3 object count and improves download performance
+- Validates continuous datapoint coverage before aggregation
+- Atomic operations with automatic cleanup on failure
+
 ### 🛡️ **Data Integrity**
 - Validates TAR structure and file naming conventions
 - Ensures datapoint consistency across operations
@@ -82,6 +88,13 @@ Contiguous chunks of datapoints stored as TAR archives:
 ### TAR Indices
 Lightweight index files enabling fast random access:
 - `datas3t/my-datas3t/dataranges/00000000000000000001-00000000000000001000.index.zst`
+
+### Aggregation Operations
+Process of combining multiple small dataranges into larger ones for improved efficiency:
+- **Coverage Validation**: Ensures continuous datapoint coverage with no gaps
+- **Atomic Replacement**: Original dataranges are replaced atomically after successful aggregation
+- **Parallel Processing**: Downloads and uploads are performed in parallel for optimal performance
+- **Multipart Support**: Large aggregates use multipart uploads for reliability
 
 ## Quick Start
 
@@ -183,6 +196,26 @@ curl -X POST http://localhost:8765/api/download/presign \
   }'
 ```
 
+### 5. Aggregate Dataranges
+
+```bash
+# Start aggregation
+curl -X POST http://localhost:8765/api/v1/aggregate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "datas3t_name": "my-datas3t",
+    "first_datapoint_index": 1,
+    "last_datapoint_index": 5000
+  }'
+
+# Complete aggregation (after processing returned URLs)
+curl -X POST http://localhost:8765/api/v1/aggregate/complete \
+  -H "Content-Type: application/json" \
+  -d '{
+    "aggregate_upload_id": 456
+  }'
+```
+
 ## Client Library Usage
 
 ```go
@@ -216,6 +249,18 @@ datas3ts, err := c.ListDatas3ts(context.Background())
     // Use presigned URLs to download data directly from S3
     for _, segment := range response.DownloadSegments {
         // Download using segment.PresignedURL and segment.Range
+    }
+    
+    // Aggregate multiple dataranges into a single larger one
+    err = c.AggregateDataRanges(context.Background(), "my-datas3t", 1, 5000, &client.AggregateOptions{
+        MaxParallelism: 8,
+        MaxRetries:     3,
+        ProgressCallback: func(phase string, current, total int64) {
+            fmt.Printf("Phase %s: %d/%d\n", phase, current, total)
+        },
+    })
+    if err != nil {
+        panic(err)
     }
 }
 ```
@@ -387,6 +432,10 @@ export ENCRYPTION_KEY="generated-key-here"
   --first-datapoint 100 \
   --last-datapoint 200 \
   --output ./images-100-200.tar
+
+# 8. Aggregate small dataranges for better efficiency
+# (using client library - no direct CLI command available)
+# This would combine multiple small dataranges into larger ones
 ```
 
 ### Environment Variables
@@ -446,6 +495,8 @@ Datapoints must follow the naming pattern `%020d.<extension>`:
 - **datas3ts**: Datas3t metadata
 - **dataranges**: TAR archive metadata and byte ranges
 - **datarange_uploads**: Temporary upload state management
+- **aggregate_uploads**: Aggregation operation tracking and state management
+- **keys_to_delete**: Scheduled deletion of S3 objects
 
 ### TAR Index Format
 Binary format with 16-byte entries per file:
