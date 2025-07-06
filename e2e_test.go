@@ -19,6 +19,7 @@ import (
 
 	"github.com/RoaringBitmap/roaring/roaring64"
 	"github.com/draganm/datas3t"
+	datas3tclient "github.com/draganm/datas3t/client"
 	"github.com/draganm/datas3t/tarindex"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -1063,5 +1064,257 @@ var _ = Describe("End-to-End Server Test", func() {
 			"total_data_processed_mb", (len(partialTarData)+len(completeTarData))/(1024*1024),
 			"total_datapoints_processed", 36000,
 			"iterator_datapoints_validated", datapointCount)
+	})
+
+	It("should complete full aggregation workflow", func(ctx SpecContext) {
+		// Step 1: Add bucket configuration using CLI
+		logger.Info("Step 1: Adding bucket configuration for aggregation test")
+		err := runCLICommand(cliPath, "bucket", "add",
+			"--name", testBucketConfigName,
+			"--endpoint", "http://"+minioEndpoint,
+			"--bucket", testBucketName,
+			"--access-key", minioAccessKey,
+			"--secret-key", minioSecretKey,
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Step 2: Add datas3t using CLI
+		logger.Info("Step 2: Adding datas3t for aggregation test")
+		err = runCLICommand(cliPath, "datas3t", "add",
+			"--name", testDatas3tName,
+			"--bucket", testBucketConfigName,
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Step 3: Upload multiple small dataranges for aggregation
+		logger.Info("Step 3: Uploading multiple small dataranges for aggregation")
+		
+		// Create 4 small dataranges (each 5,000 datapoints, ~5MB each)
+		datarangeInfo := []struct {
+			startIndex int64
+			numFiles   int
+			filename   string
+		}{
+			{0, 5000, "datarange1.tar"},      // 0-4999
+			{5000, 5000, "datarange2.tar"},   // 5000-9999
+			{10000, 5000, "datarange3.tar"},  // 10000-14999
+			{15000, 5000, "datarange4.tar"},  // 15000-19999
+		}
+
+		for i, info := range datarangeInfo {
+			logger.Info("Creating and uploading datarange", "index", i+1, "start", info.startIndex, "count", info.numFiles)
+			
+			testData, _ := createTestTarWithIndex(info.numFiles, info.startIndex)
+			tarFile := filepath.Join(tempDir, info.filename)
+			err = os.WriteFile(tarFile, testData, 0644)
+			Expect(err).NotTo(HaveOccurred())
+
+			err = runCLICommand(cliPath, "datarange", "upload-tar",
+				"--datas3t", testDatas3tName,
+				"--file", tarFile,
+			)
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		// Step 4: Test aggregation using the client library
+		logger.Info("Step 4: Testing aggregation using client library")
+		
+		client := datas3t.NewClient(serverBaseURL)
+
+		// Test 1: Aggregate first 2 dataranges (0-9999) - should use direct PUT
+		logger.Info("Test 1: Aggregating first 2 dataranges (0-9999) using direct PUT")
+		
+		err = client.AggregateDataRanges(ctx, testDatas3tName, 0, 9999, &datas3tclient.AggregateOptions{
+			MaxParallelism: 2,
+			MaxRetries:     3,
+			ProgressCallback: func(info datas3tclient.ProgressInfo) {
+				logger.Info("Aggregation progress", 
+					"phase", info.Phase,
+					"percent", fmt.Sprintf("%.1f%%", info.PercentComplete),
+					"step", info.CurrentStep)
+			},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		// Verify the aggregation worked by checking the bitmap
+		bitmap, err := client.GetDatapointsBitmap(ctx, testDatas3tName)
+		Expect(err).NotTo(HaveOccurred())
+		
+		// Should still have all 20,000 datapoints (10,000 in aggregate + 10,000 in remaining ranges)
+		Expect(bitmap.GetCardinality()).To(Equal(uint64(20000)))
+		
+		// Verify specific datapoints in the aggregated range still exist
+		for i := uint64(0); i < 100; i++ {
+			Expect(bitmap.Contains(i)).To(BeTrue(), "Datapoint %d should still exist after aggregation", i)
+		}
+		for i := uint64(9900); i < 10000; i++ {
+			Expect(bitmap.Contains(i)).To(BeTrue(), "Datapoint %d should still exist after aggregation", i)
+		}
+
+		logger.Info("Direct PUT aggregation test passed")
+
+		// Test 2: Aggregate remaining dataranges (10000-19999) - should use multipart upload
+		logger.Info("Test 2: Aggregating remaining dataranges (10000-19999) using multipart upload")
+		
+		err = client.AggregateDataRanges(ctx, testDatas3tName, 10000, 19999, &datas3tclient.AggregateOptions{
+			MaxParallelism: 3,
+			MaxRetries:     3,
+			ProgressCallback: func(info datas3tclient.ProgressInfo) {
+				logger.Info("Large aggregation progress", 
+					"phase", info.Phase,
+					"percent", fmt.Sprintf("%.1f%%", info.PercentComplete),
+					"step", info.CurrentStep,
+					"speed_mbps", fmt.Sprintf("%.2f", info.Speed/(1024*1024)))
+			},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		// Verify the second aggregation worked
+		bitmap, err = client.GetDatapointsBitmap(ctx, testDatas3tName)
+		Expect(err).NotTo(HaveOccurred())
+		
+		// Should still have all 20,000 datapoints (now in 2 aggregated ranges)
+		Expect(bitmap.GetCardinality()).To(Equal(uint64(20000)))
+
+		// Verify specific datapoints in the second aggregated range still exist
+		for i := uint64(10000); i < 10100; i++ {
+			Expect(bitmap.Contains(i)).To(BeTrue(), "Datapoint %d should still exist after second aggregation", i)
+		}
+		for i := uint64(19900); i < 20000; i++ {
+			Expect(bitmap.Contains(i)).To(BeTrue(), "Datapoint %d should still exist after second aggregation", i)
+		}
+
+		logger.Info("Multipart aggregation test passed")
+
+		// Step 5: Test aggregated data integrity by downloading and validating
+		logger.Info("Step 5: Testing aggregated data integrity")
+
+		// Download a range that spans the boundary of the first aggregation (9995-10005)
+		boundaryTarPath := filepath.Join(tempDir, "boundary_download.tar")
+		err = runCLICommand(cliPath, "datarange", "download-tar",
+			"--datas3t", testDatas3tName,
+			"--first-datapoint", "9995",
+			"--last-datapoint", "10005",
+			"--output", boundaryTarPath,
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Read and validate the boundary TAR file
+		boundaryTarData, err := os.ReadFile(boundaryTarPath)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Validate TAR structure
+		err = validateTarArchive(boundaryTarData)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Extract files and verify content continuity across aggregation boundary
+		boundaryFiles := make(map[string][]byte)
+		err = extractFilesFromTar(boundaryTarData, boundaryFiles)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Verify we have the expected 11 files (9995-10005)
+		Expect(len(boundaryFiles)).To(Equal(11))
+
+		// Verify specific files exist and have correct content
+		for i := 9995; i <= 10005; i++ {
+			filename := fmt.Sprintf("%020d.txt", i)
+			content, exists := boundaryFiles[filename]
+			Expect(exists).To(BeTrue(), "File %s should exist", filename)
+			
+			expectedPrefix := fmt.Sprintf("Content of file %d - ", i)
+			Expect(string(content)).To(HavePrefix(expectedPrefix), 
+				"File %s should have correct content", filename)
+		}
+
+		logger.Info("Aggregated data integrity test passed")
+
+		// Step 6: Test final aggregation of everything (0-19999)
+		logger.Info("Step 6: Testing final aggregation of all data (0-19999)")
+		
+		err = client.AggregateDataRanges(ctx, testDatas3tName, 0, 19999, &datas3tclient.AggregateOptions{
+			MaxParallelism: 4,
+			MaxRetries:     3,
+			ProgressCallback: func(info datas3tclient.ProgressInfo) {
+				logger.Info("Final aggregation progress", 
+					"phase", info.Phase,
+					"percent", fmt.Sprintf("%.1f%%", info.PercentComplete),
+					"step", info.CurrentStep,
+					"eta", info.EstimatedETA.Round(time.Second))
+			},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		// Verify final state - should still have all datapoints
+		bitmap, err = client.GetDatapointsBitmap(ctx, testDatas3tName)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(bitmap.GetCardinality()).To(Equal(uint64(20000)))
+
+		// Step 7: Test error conditions
+		logger.Info("Step 7: Testing aggregation error conditions")
+
+		// Test 1: Try to aggregate insufficient dataranges (only 1 datarange)
+		logger.Info("Testing insufficient dataranges error")
+		err = client.AggregateDataRanges(ctx, testDatas3tName, 0, 4999, nil)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("not fully covered"))
+
+		// Test 2: Try to aggregate non-existent datas3t
+		logger.Info("Testing non-existent datas3t error")
+		err = client.AggregateDataRanges(ctx, "non-existent-datas3t", 0, 10000, nil)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("failed to start aggregate"))
+
+		// Test 3: Try to aggregate with gaps
+		logger.Info("Testing aggregation with gaps error")
+		err = client.AggregateDataRanges(ctx, testDatas3tName, 0, 30000, nil)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("not fully covered"))
+
+		logger.Info("Error condition tests passed")
+
+		// Step 8: Validate final data integrity with complete download
+		logger.Info("Step 8: Final data integrity validation")
+
+		// Download the complete aggregated dataset
+		finalTarPath := filepath.Join(tempDir, "final_aggregated.tar")
+		err = runCLICommand(cliPath, "datarange", "download-tar",
+			"--datas3t", testDatas3tName,
+			"--first-datapoint", "0",
+			"--last-datapoint", "19999",
+			"--output", finalTarPath,
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Validate the final aggregated TAR
+		finalTarData, err := os.ReadFile(finalTarPath)
+		Expect(err).NotTo(HaveOccurred())
+
+		err = validateTarArchive(finalTarData)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Test using DatapointIterator on the aggregated data
+		logger.Info("Testing DatapointIterator on aggregated data")
+		datapointCount := 0
+		for content, err := range client.DatapointIterator(ctx, testDatas3tName, 0, 19999) {
+			Expect(err).NotTo(HaveOccurred())
+			Expect(content).NotTo(BeEmpty())
+			
+			// Validate content pattern for first and last few datapoints
+			if datapointCount < 10 || datapointCount >= 19990 {
+				expectedPrefix := fmt.Sprintf("Content of file %d - ", datapointCount)
+				Expect(string(content)).To(HavePrefix(expectedPrefix))
+			}
+			
+			datapointCount++
+		}
+
+		Expect(datapointCount).To(Equal(20000), "Should iterate over all 20,000 datapoints")
+
+		logger.Info("Aggregation workflow completed successfully",
+			"original_dataranges", 4,
+			"aggregation_operations", 3,
+			"final_datapoint_count", datapointCount,
+			"final_tar_size_mb", len(finalTarData)/(1024*1024),
+			"aggregation_integrity_verified", true)
 	})
 })
