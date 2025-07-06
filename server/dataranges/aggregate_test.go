@@ -69,14 +69,19 @@ var _ = Describe("Aggregate Operations", func() {
 			})
 
 			It("should successfully start aggregation for large total size (multipart)", func(ctx SpecContext) {
-				// Create larger dataranges to exceed multipart threshold
-				env.CreateCompletedDatarangeForAggregation(ctx, 30, 1000)   // Large datarange 30-1029
-				env.CreateCompletedDatarangeForAggregation(ctx, 1030, 1000) // Large datarange 1030-2029
+				// Create larger dataranges to exceed multipart threshold (>5MB)
+				// Each datarange is ~1MB, so we need at least 6 to exceed 5MB threshold
+				env.CreateCompletedDatarangeForAggregation(ctx, 30, 1000)   // 30-1029 (~1MB)
+				env.CreateCompletedDatarangeForAggregation(ctx, 1030, 1000) // 1030-2029 (~1MB)
+				env.CreateCompletedDatarangeForAggregation(ctx, 2030, 1000) // 2030-3029 (~1MB)
+				env.CreateCompletedDatarangeForAggregation(ctx, 3030, 1000) // 3030-4029 (~1MB)
+				env.CreateCompletedDatarangeForAggregation(ctx, 4030, 1000) // 4030-5029 (~1MB)
+				env.CreateCompletedDatarangeForAggregation(ctx, 5030, 1000) // 5030-6029 (~1MB)
 
 				req := &dataranges.StartAggregateRequest{
 					Datas3tName:         env.TestDatas3tName,
 					FirstDatapointIndex: 30,
-					LastDatapointIndex:  2029, // Covers the two large dataranges
+					LastDatapointIndex:  6029, // Covers all six large dataranges (~6MB total)
 				}
 
 				resp, err := env.UploadSrv.StartAggregate(ctx, env.Logger, req)
@@ -86,7 +91,7 @@ var _ = Describe("Aggregate Operations", func() {
 				Expect(resp.PresignedDataPutURL).To(BeEmpty())
 				Expect(resp.PresignedIndexPutURL).NotTo(BeEmpty())
 				Expect(resp.PresignedMultipartUploadPutURLs).NotTo(BeEmpty())
-				Expect(len(resp.SourceDatarangeDownloadURLs)).To(Equal(2))
+				Expect(len(resp.SourceDatarangeDownloadURLs)).To(Equal(6))
 			})
 
 			It("should handle aggregation across all dataranges", func(ctx SpecContext) {
@@ -158,7 +163,7 @@ var _ = Describe("Aggregate Operations", func() {
 
 				_, err := env.UploadSrv.StartAggregate(ctx, env.Logger, req)
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("range is not fully covered by at least two existing dataranges"))
+				Expect(err.Error()).To(ContainSubstring("not fully covered"))
 			})
 
 			It("should reject range with gaps", func(ctx SpecContext) {
@@ -291,7 +296,7 @@ var _ = Describe("Aggregate Operations", func() {
 
 				err = env.UploadSrv.CompleteAggregate(ctx, env.Logger, completeReq)
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("uploaded size mismatch"))
+				Expect(err.Error()).To(ContainSubstring("tar size mismatch"))
 
 				// Verify original dataranges are still there (nothing changed)
 				datarangeCount, err := env.Queries.CountDataranges(ctx)

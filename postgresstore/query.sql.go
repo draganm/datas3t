@@ -191,19 +191,35 @@ func (q *Queries) CheckDatarangeUploadOverlap(ctx context.Context, arg CheckData
 }
 
 const checkFullDatarangeCoverage = `-- name: CheckFullDatarangeCoverage :one
+WITH overlapping_ranges AS (
+    SELECT dr.min_datapoint_key, dr.max_datapoint_key
+    FROM dataranges dr
+    JOIN datas3ts d ON dr.datas3t_id = d.id
+    WHERE d.name = $4
+      AND dr.min_datapoint_key <= $2  -- datarange starts before or at our last datapoint
+      AND dr.max_datapoint_key >= $1  -- datarange ends after or at our first datapoint
+    ORDER BY dr.min_datapoint_key
+)
 SELECT 
     CASE 
-        WHEN COUNT(dr.id) >= 2 
-        AND MIN(dr.min_datapoint_key) <= $2 
-        AND MAX(dr.max_datapoint_key) >= $3 
-        THEN true
-        ELSE false
+        WHEN COUNT(*) < 2 THEN false
+        WHEN MIN(min_datapoint_key) > $1 THEN false
+        WHEN MAX(max_datapoint_key) < $2 THEN false
+        ELSE (
+            -- For gap detection using a different approach:
+            -- Check if sum of individual range sizes equals the span they should cover
+            -- This approach works for continuous ranges
+            (SELECT COUNT(*) FROM (
+                SELECT 
+                    min_datapoint_key,
+                    max_datapoint_key,
+                    LAG(max_datapoint_key, 1, $3- 1) OVER (ORDER BY min_datapoint_key) as prev_end
+                FROM overlapping_ranges
+            ) gap_check 
+            WHERE min_datapoint_key > prev_end + 1) = 0
+        )
     END as is_fully_covered
-FROM dataranges dr
-JOIN datas3ts d ON dr.datas3t_id = d.id
-WHERE d.name = $1
-  AND dr.min_datapoint_key <= $3  -- datarange starts before or at our last datapoint
-  AND dr.max_datapoint_key >= $2
+FROM overlapping_ranges
 `
 
 type CheckFullDatarangeCoverageParams struct {
@@ -215,7 +231,12 @@ type CheckFullDatarangeCoverageParams struct {
 // Check if a datapoint range is fully covered by existing dataranges with no gaps
 // Returns true if the range is fully covered by at least two dataranges
 func (q *Queries) CheckFullDatarangeCoverage(ctx context.Context, arg CheckFullDatarangeCoverageParams) (bool, error) {
-	row := q.db.QueryRow(ctx, checkFullDatarangeCoverage, arg.Name, arg.MinDatapointKey, arg.MaxDatapointKey)
+	row := q.db.QueryRow(ctx, checkFullDatarangeCoverage,
+		arg.MinDatapointKey,
+		arg.MaxDatapointKey,
+		arg.MinDatapointKey,
+		arg.Name,
+	)
 	var is_fully_covered bool
 	err := row.Scan(&is_fully_covered)
 	return is_fully_covered, err
@@ -846,7 +867,6 @@ func (q *Queries) GetDatarangesForDatas3t(ctx context.Context, name string) ([]G
 }
 
 const getDatarangesInRange = `-- name: GetDatarangesInRange :many
-
 SELECT 
     dr.id,
     dr.data_object_key,
@@ -863,8 +883,8 @@ FROM dataranges dr
 JOIN datas3ts d ON dr.datas3t_id = d.id
 JOIN s3_buckets s ON d.s3_bucket_id = s.id
 WHERE d.name = $1
-  AND dr.min_datapoint_key <= $3  -- datarange starts before or at our last datapoint
-  AND dr.max_datapoint_key >= $2  -- datarange ends after or at our first datapoint
+  AND dr.min_datapoint_key <= $2  -- datarange starts before or at our last datapoint
+  AND dr.max_datapoint_key >= $3  -- datarange ends after or at our first datapoint
 ORDER BY dr.min_datapoint_key
 `
 
@@ -888,7 +908,6 @@ type GetDatarangesInRangeRow struct {
 	SecretKey       string
 }
 
-// datarange ends after or at our first datapoint
 func (q *Queries) GetDatarangesInRange(ctx context.Context, arg GetDatarangesInRangeParams) ([]GetDatarangesInRangeRow, error) {
 	rows, err := q.db.Query(ctx, getDatarangesInRange, arg.Name, arg.MaxDatapointKey, arg.MinDatapointKey)
 	if err != nil {

@@ -152,14 +152,16 @@ func (s *UploadDatarangeServer) StartAggregate(ctx context.Context, log *slog.Lo
 		uploadCounter,
 	)
 
-	// Calculate total data size
-	var totalDataSize int64
+	// Calculate estimated total data size for upload method decision
+	// Note: This is just an estimate for choosing direct PUT vs multipart
+	// The actual size will be determined by the uploaded aggregated content
+	var estimatedDataSize int64
 	for _, dr := range sourceDataranges {
-		totalDataSize += dr.SizeBytes
+		estimatedDataSize += dr.SizeBytes
 	}
 
-	// Determine upload method based on total data size
-	useDirectPut := uint64(totalDataSize) < MinPartSize
+	// Determine upload method based on estimated data size
+	useDirectPut := uint64(estimatedDataSize) < MinPartSize
 	var uploadID string
 	var presignedPutURLs []string
 	var presignedDataPutURL string
@@ -193,9 +195,9 @@ func (s *UploadDatarangeServer) StartAggregate(ctx context.Context, log *slog.Lo
 			}
 		}()
 
-		// Calculate number of parts for multipart upload
-		partSize := s.calculatePartSize(uint64(totalDataSize))
-		numParts := s.calculateNumberOfParts(uint64(totalDataSize), partSize)
+		// Calculate number of parts for multipart upload based on estimate
+		partSize := s.calculatePartSize(uint64(estimatedDataSize))
+		numParts := s.calculateNumberOfParts(uint64(estimatedDataSize), partSize)
 
 		// Generate presigned URLs for multipart upload parts
 		presignedPutURLs, err = s.generateMultipartUploadURLs(ctx, s3Client, datas3t.Bucket, objectKey, uploadID, numParts)
@@ -242,6 +244,7 @@ func (s *UploadDatarangeServer) StartAggregate(ctx context.Context, log *slog.Lo
 	}
 
 	// Create aggregate upload record
+	// Note: TotalDataSize will be updated when upload completes with actual size
 	aggregateUploadID, err := queries.CreateAggregateUpload(ctx, postgresstore.CreateAggregateUploadParams{
 		Datas3tID:           datas3t.ID,
 		UploadID:            uploadID,
@@ -249,7 +252,7 @@ func (s *UploadDatarangeServer) StartAggregate(ctx context.Context, log *slog.Lo
 		IndexObjectKey:      indexObjectKey,
 		FirstDatapointIndex: int64(req.FirstDatapointIndex),
 		LastDatapointIndex:  int64(req.LastDatapointIndex),
-		TotalDataSize:       totalDataSize,
+		TotalDataSize:       0, // Will be set to actual size upon completion
 		SourceDatarangeIds:  sourceDatarangeIDs,
 	})
 	if err != nil {

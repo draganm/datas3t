@@ -3,12 +3,13 @@
   inputs = {
 
     nixpkgs = { url = "github:NixOS/nixpkgs/nixos-25.05"; };
+    nixpkgs-unstable = { url = "github:NixOS/nixpkgs/nixos-unstable"; };
     
     systems.url = "github:nix-systems/default";
 
   };
 
-  outputs = { self, nixpkgs, systems, ... }@inputs:
+  outputs = { self, nixpkgs, nixpkgs-unstable, systems, ... }@inputs:
     let
       eachSystem = f:
         nixpkgs.lib.genAttrs (import systems) (system:
@@ -17,9 +18,13 @@
               inherit system;
               config = { allowUnfree = true; };
             };
-          in f { inherit pkgs; });
+            pkgs-unstable = import nixpkgs-unstable {
+              inherit system;
+              config = { allowUnfree = true; };
+            };
+          in f { inherit pkgs pkgs-unstable; });
     in {
-      devShells = eachSystem ({ pkgs }: {
+      devShells = eachSystem ({ pkgs, pkgs-unstable }: {
         default = pkgs.mkShell {
           shellHook = ''
             # Set here the env vars you want to be available in the shell
@@ -32,6 +37,7 @@
             sqlc
             minio
             docker
+            pkgs-unstable.claude-code
           ];
         };
       });

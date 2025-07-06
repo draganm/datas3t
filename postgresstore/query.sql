@@ -214,19 +214,35 @@ WHERE d.name = $1;
 -- name: CheckFullDatarangeCoverage :one
 -- Check if a datapoint range is fully covered by existing dataranges with no gaps
 -- Returns true if the range is fully covered by at least two dataranges
+WITH overlapping_ranges AS (
+    SELECT dr.min_datapoint_key, dr.max_datapoint_key
+    FROM dataranges dr
+    JOIN datas3ts d ON dr.datas3t_id = d.id
+    WHERE d.name = @name
+      AND dr.min_datapoint_key <= @max_datapoint_key  -- datarange starts before or at our last datapoint
+      AND dr.max_datapoint_key >= @min_datapoint_key  -- datarange ends after or at our first datapoint
+    ORDER BY dr.min_datapoint_key
+)
 SELECT 
     CASE 
-        WHEN COUNT(dr.id) >= 2 
-        AND MIN(dr.min_datapoint_key) <= $2 
-        AND MAX(dr.max_datapoint_key) >= $3 
-        THEN true
-        ELSE false
+        WHEN COUNT(*) < 2 THEN false
+        WHEN MIN(min_datapoint_key) > @min_datapoint_key THEN false
+        WHEN MAX(max_datapoint_key) < @max_datapoint_key THEN false
+        ELSE (
+            -- For gap detection using a different approach:
+            -- Check if sum of individual range sizes equals the span they should cover
+            -- This approach works for continuous ranges
+            (SELECT COUNT(*) FROM (
+                SELECT 
+                    min_datapoint_key,
+                    max_datapoint_key,
+                    LAG(max_datapoint_key, 1, @min_datapoint_key - 1) OVER (ORDER BY min_datapoint_key) as prev_end
+                FROM overlapping_ranges
+            ) gap_check 
+            WHERE min_datapoint_key > prev_end + 1) = 0
+        )
     END as is_fully_covered
-FROM dataranges dr
-JOIN datas3ts d ON dr.datas3t_id = d.id
-WHERE d.name = $1
-  AND dr.min_datapoint_key <= $3  -- datarange starts before or at our last datapoint
-  AND dr.max_datapoint_key >= $2; -- datarange ends after or at our first datapoint
+FROM overlapping_ranges;
 
 -- name: GetDatarangesInRange :many
 SELECT 
@@ -244,9 +260,9 @@ SELECT
 FROM dataranges dr
 JOIN datas3ts d ON dr.datas3t_id = d.id
 JOIN s3_buckets s ON d.s3_bucket_id = s.id
-WHERE d.name = $1
-  AND dr.min_datapoint_key <= $3  -- datarange starts before or at our last datapoint
-  AND dr.max_datapoint_key >= $2  -- datarange ends after or at our first datapoint
+WHERE d.name = @name
+  AND dr.min_datapoint_key <= @max_datapoint_key  -- datarange starts before or at our last datapoint
+  AND dr.max_datapoint_key >= @min_datapoint_key  -- datarange ends after or at our first datapoint
 ORDER BY dr.min_datapoint_key;
 
 -- name: CreateAggregateUpload :one

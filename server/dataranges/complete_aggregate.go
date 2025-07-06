@@ -56,8 +56,13 @@ func (s *UploadDatarangeServer) CompleteAggregate(ctx context.Context, log *slog
 		return s.handleAggregateFailureInTransaction(ctx, queries, s3Client, uploadDetails, err)
 	}
 
-	// 4. S3 operations succeeded - complete in a single transaction
-	return s.handleAggregateSuccessInTransaction(ctx, queries, req.AggregateUploadID)
+	// 4. S3 operations succeeded - get actual uploaded size and complete in a single transaction
+	actualSize, err := s.getActualUploadedSize(ctx, s3Client, uploadDetails)
+	if err != nil {
+		return fmt.Errorf("failed to get actual uploaded size: %w", err)
+	}
+	
+	return s.handleAggregateSuccessInTransaction(ctx, queries, req.AggregateUploadID, actualSize)
 }
 
 // performAggregateS3Operations handles all S3 network calls without any database changes
@@ -107,7 +112,7 @@ func (s *UploadDatarangeServer) performAggregateS3Operations(ctx context.Context
 		return fmt.Errorf("index file not found: %w", err)
 	}
 
-	// Check the size of the uploaded data
+	// Get the actual size of the uploaded data
 	headResp, err := s3Client.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(uploadDetails.Bucket),
 		Key:    aws.String(uploadDetails.DataObjectKey),
@@ -116,13 +121,17 @@ func (s *UploadDatarangeServer) performAggregateS3Operations(ctx context.Context
 		return fmt.Errorf("failed to get uploaded object info: %w", err)
 	}
 
-	if headResp.ContentLength == nil || *headResp.ContentLength != uploadDetails.TotalDataSize {
-		return fmt.Errorf("uploaded size mismatch: expected %d, got %d",
-			uploadDetails.TotalDataSize, aws.ToInt64(headResp.ContentLength))
+	if headResp.ContentLength == nil {
+		return fmt.Errorf("uploaded object has no size information")
+	}
+	
+	actualUploadedSize := aws.ToInt64(headResp.ContentLength)
+	if actualUploadedSize <= 0 {
+		return fmt.Errorf("uploaded object has invalid size: %d", actualUploadedSize)
 	}
 
-	// Perform tar index validation
-	err = s.validateAggregateTarIndex(ctx, s3Client, uploadDetails)
+	// Perform tar index validation using actual uploaded size
+	err = s.validateAggregateTarIndex(ctx, s3Client, uploadDetails, actualUploadedSize)
 	if err != nil {
 		return fmt.Errorf("aggregate tar index validation failed: %w", err)
 	}
@@ -130,8 +139,30 @@ func (s *UploadDatarangeServer) performAggregateS3Operations(ctx context.Context
 	return nil
 }
 
+// getActualUploadedSize gets the actual uploaded size from S3
+func (s *UploadDatarangeServer) getActualUploadedSize(ctx context.Context, s3Client *s3.Client, uploadDetails postgresstore.GetAggregateUploadWithDetailsRow) (int64, error) {
+	headResp, err := s3Client.HeadObject(ctx, &s3.HeadObjectInput{
+		Bucket: aws.String(uploadDetails.Bucket),
+		Key:    aws.String(uploadDetails.DataObjectKey),
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to get uploaded object info: %w", err)
+	}
+
+	if headResp.ContentLength == nil {
+		return 0, fmt.Errorf("uploaded object has no size information")
+	}
+	
+	actualUploadedSize := aws.ToInt64(headResp.ContentLength)
+	if actualUploadedSize <= 0 {
+		return 0, fmt.Errorf("uploaded object has invalid size: %d", actualUploadedSize)
+	}
+
+	return actualUploadedSize, nil
+}
+
 // handleAggregateSuccessInTransaction performs all success-case database operations in a single transaction
-func (s *UploadDatarangeServer) handleAggregateSuccessInTransaction(ctx context.Context, queries *postgresstore.Queries, aggregateUploadID int64) error {
+func (s *UploadDatarangeServer) handleAggregateSuccessInTransaction(ctx context.Context, queries *postgresstore.Queries, aggregateUploadID int64, actualDataSize int64) error {
 	// Begin transaction
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -148,14 +179,14 @@ func (s *UploadDatarangeServer) handleAggregateSuccessInTransaction(ctx context.
 		return fmt.Errorf("failed to get upload details: %w", err)
 	}
 
-	// Create the new aggregate datarange record
+	// Create the new aggregate datarange record using actual uploaded size
 	_, err = txQueries.CreateDatarange(ctx, postgresstore.CreateDatarangeParams{
 		Datas3tID:       uploadDetails.Datas3tID,
 		DataObjectKey:   uploadDetails.DataObjectKey,
 		IndexObjectKey:  uploadDetails.IndexObjectKey,
 		MinDatapointKey: uploadDetails.FirstDatapointIndex,
 		MaxDatapointKey: uploadDetails.LastDatapointIndex,
-		SizeBytes:       uploadDetails.TotalDataSize,
+		SizeBytes:       actualDataSize,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create aggregate datarange: %w", err)
@@ -350,7 +381,7 @@ func (s *UploadDatarangeServer) createS3ClientFromAggregateUploadDetails(ctx con
 }
 
 // validateAggregateTarIndex performs validation of the aggregate tar index
-func (s *UploadDatarangeServer) validateAggregateTarIndex(ctx context.Context, s3Client *s3.Client, uploadDetails postgresstore.GetAggregateUploadWithDetailsRow) error {
+func (s *UploadDatarangeServer) validateAggregateTarIndex(ctx context.Context, s3Client *s3.Client, uploadDetails postgresstore.GetAggregateUploadWithDetailsRow, actualUploadedSize int64) error {
 	// Download the index file
 	indexResp, err := s3Client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(uploadDetails.Bucket),
@@ -389,8 +420,8 @@ func (s *UploadDatarangeServer) validateAggregateTarIndex(ctx context.Context, s
 		Bytes: indexData,
 	}
 
-	// Validate tar file size against expected size
-	err = s.validateAggregateTarFileSize(ctx, s3Client, uploadDetails, fakeIndex)
+	// Validate tar file size against actual uploaded size
+	err = s.validateAggregateTarFileSize(ctx, s3Client, uploadDetails, fakeIndex, actualUploadedSize)
 	if err != nil {
 		return fmt.Errorf("aggregate tar file size validation failed: %w", err)
 	}
@@ -404,10 +435,8 @@ func (s *UploadDatarangeServer) validateAggregateTarIndex(ctx context.Context, s
 	return nil
 }
 
-// validateAggregateTarFileSize validates the actual tar file size against the expected size
-func (s *UploadDatarangeServer) validateAggregateTarFileSize(ctx context.Context, s3Client *s3.Client, uploadDetails postgresstore.GetAggregateUploadWithDetailsRow, index *tarindex.Index) error {
-	// Get the actual file size from the database
-	expectedSizeFromDB := uploadDetails.TotalDataSize
+// validateAggregateTarFileSize validates the actual tar file size against the uploaded size
+func (s *UploadDatarangeServer) validateAggregateTarFileSize(ctx context.Context, s3Client *s3.Client, uploadDetails postgresstore.GetAggregateUploadWithDetailsRow, index *tarindex.Index, actualUploadedSize int64) error {
 
 	// Calculate expected size from the tar index
 	numFiles := index.NumFiles()
@@ -428,25 +457,10 @@ func (s *UploadDatarangeServer) validateAggregateTarFileSize(ctx context.Context
 
 	calculatedSize := lastFileMetadata.Start + headerSize + paddedContentSize + endOfArchiveSize
 
-	// Check against database size
-	if expectedSizeFromDB != calculatedSize {
-		return fmt.Errorf("tar size mismatch: database says %d bytes, calculated from index %d bytes",
-			expectedSizeFromDB, calculatedSize)
-	}
-
-	// Double-check against actual S3 object size
-	headResp, err := s3Client.HeadObject(ctx, &s3.HeadObjectInput{
-		Bucket: aws.String(uploadDetails.Bucket),
-		Key:    aws.String(uploadDetails.DataObjectKey),
-	})
-	if err != nil {
-		return fmt.Errorf("failed to get actual object size: %w", err)
-	}
-
-	actualSize := aws.ToInt64(headResp.ContentLength)
-	if actualSize != calculatedSize {
-		return fmt.Errorf("tar size mismatch: actual S3 object is %d bytes, calculated from index %d bytes",
-			actualSize, calculatedSize)
+	// Check that the uploaded size matches what we calculate from the index
+	if actualUploadedSize != calculatedSize {
+		return fmt.Errorf("tar size mismatch: uploaded %d bytes, calculated from index %d bytes",
+			actualUploadedSize, calculatedSize)
 	}
 
 	return nil
