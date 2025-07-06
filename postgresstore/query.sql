@@ -214,20 +214,23 @@ WHERE d.name = $1;
 -- name: CheckFullDatarangeCoverage :one
 -- Check if a datapoint range is fully covered by existing dataranges with no gaps
 -- Returns true if the range is fully covered by at least two dataranges
-WITH overlapping_ranges AS (
+WITH range_params AS (
+    SELECT @name::text as datas3t_name, @min_datapoint_key::bigint as min_key, @max_datapoint_key::bigint as max_key
+), overlapping_ranges AS (
     SELECT dr.min_datapoint_key, dr.max_datapoint_key
     FROM dataranges dr
     JOIN datas3ts d ON dr.datas3t_id = d.id
-    WHERE d.name = @name
-      AND dr.min_datapoint_key <= @max_datapoint_key  -- datarange starts before or at our last datapoint
-      AND dr.max_datapoint_key >= @min_datapoint_key  -- datarange ends after or at our first datapoint
+    CROSS JOIN range_params rp
+    WHERE d.name = rp.datas3t_name
+      AND dr.min_datapoint_key <= rp.max_key  -- datarange starts before or at our last datapoint
+      AND dr.max_datapoint_key >= rp.min_key  -- datarange ends after or at our first datapoint
     ORDER BY dr.min_datapoint_key
 )
 SELECT 
     CASE 
         WHEN COUNT(*) < 2 THEN false
-        WHEN MIN(min_datapoint_key) > @min_datapoint_key THEN false
-        WHEN MAX(max_datapoint_key) < @max_datapoint_key THEN false
+        WHEN MIN(min_datapoint_key) > (SELECT min_key FROM range_params) THEN false
+        WHEN MAX(max_datapoint_key) < (SELECT max_key FROM range_params) THEN false
         ELSE (
             -- For gap detection using a different approach:
             -- Check if sum of individual range sizes equals the span they should cover
@@ -236,12 +239,12 @@ SELECT
                 SELECT 
                     min_datapoint_key,
                     max_datapoint_key,
-                    LAG(max_datapoint_key, 1, @min_datapoint_key - 1) OVER (ORDER BY min_datapoint_key) as prev_end
+                    LAG(max_datapoint_key, 1, (SELECT min_key FROM range_params) - 1) OVER (ORDER BY min_datapoint_key) as prev_end
                 FROM overlapping_ranges
             ) gap_check 
             WHERE min_datapoint_key > prev_end + 1) = 0
         )
-    END as is_fully_covered
+    END::boolean as is_fully_covered
 FROM overlapping_ranges;
 
 -- name: GetDatarangesInRange :many

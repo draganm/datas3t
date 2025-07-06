@@ -191,20 +191,23 @@ func (q *Queries) CheckDatarangeUploadOverlap(ctx context.Context, arg CheckData
 }
 
 const checkFullDatarangeCoverage = `-- name: CheckFullDatarangeCoverage :one
-WITH overlapping_ranges AS (
+WITH range_params AS (
+    SELECT $1::text as datas3t_name, $2::bigint as min_key, $3::bigint as max_key
+), overlapping_ranges AS (
     SELECT dr.min_datapoint_key, dr.max_datapoint_key
     FROM dataranges dr
     JOIN datas3ts d ON dr.datas3t_id = d.id
-    WHERE d.name = $4
-      AND dr.min_datapoint_key <= $2  -- datarange starts before or at our last datapoint
-      AND dr.max_datapoint_key >= $1  -- datarange ends after or at our first datapoint
+    CROSS JOIN range_params rp
+    WHERE d.name = rp.datas3t_name
+      AND dr.min_datapoint_key <= rp.max_key  -- datarange starts before or at our last datapoint
+      AND dr.max_datapoint_key >= rp.min_key  -- datarange ends after or at our first datapoint
     ORDER BY dr.min_datapoint_key
 )
 SELECT 
     CASE 
         WHEN COUNT(*) < 2 THEN false
-        WHEN MIN(min_datapoint_key) > $1 THEN false
-        WHEN MAX(max_datapoint_key) < $2 THEN false
+        WHEN MIN(min_datapoint_key) > (SELECT min_key FROM range_params) THEN false
+        WHEN MAX(max_datapoint_key) < (SELECT max_key FROM range_params) THEN false
         ELSE (
             -- For gap detection using a different approach:
             -- Check if sum of individual range sizes equals the span they should cover
@@ -213,12 +216,12 @@ SELECT
                 SELECT 
                     min_datapoint_key,
                     max_datapoint_key,
-                    LAG(max_datapoint_key, 1, $3- 1) OVER (ORDER BY min_datapoint_key) as prev_end
+                    LAG(max_datapoint_key, 1, (SELECT min_key FROM range_params) - 1) OVER (ORDER BY min_datapoint_key) as prev_end
                 FROM overlapping_ranges
             ) gap_check 
             WHERE min_datapoint_key > prev_end + 1) = 0
         )
-    END as is_fully_covered
+    END::boolean as is_fully_covered
 FROM overlapping_ranges
 `
 
@@ -231,12 +234,7 @@ type CheckFullDatarangeCoverageParams struct {
 // Check if a datapoint range is fully covered by existing dataranges with no gaps
 // Returns true if the range is fully covered by at least two dataranges
 func (q *Queries) CheckFullDatarangeCoverage(ctx context.Context, arg CheckFullDatarangeCoverageParams) (bool, error) {
-	row := q.db.QueryRow(ctx, checkFullDatarangeCoverage,
-		arg.MinDatapointKey,
-		arg.MaxDatapointKey,
-		arg.MinDatapointKey,
-		arg.Name,
-	)
+	row := q.db.QueryRow(ctx, checkFullDatarangeCoverage, arg.Name, arg.MinDatapointKey, arg.MaxDatapointKey)
 	var is_fully_covered bool
 	err := row.Scan(&is_fully_covered)
 	return is_fully_covered, err
