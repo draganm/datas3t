@@ -3,7 +3,6 @@ package datas3t_test
 import (
 	"archive/tar"
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -33,37 +32,6 @@ import (
 	tc_postgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
-
-// Helper functions for HTTP requests (kept for potential future use)
-func httpPost(url string, body interface{}) (*http.Response, error) {
-	var reqBody io.Reader
-	if body != nil {
-		jsonData, err := json.Marshal(body)
-		if err != nil {
-			return nil, err
-		}
-		reqBody = bytes.NewReader(jsonData)
-	}
-
-	req, err := http.NewRequest("POST", url, reqBody)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	return client.Do(req)
-}
-
-func httpPut(url string, body io.Reader) (*http.Response, error) {
-	req, err := http.NewRequest("PUT", url, body)
-	if err != nil {
-		return nil, err
-	}
-
-	client := &http.Client{}
-	return client.Do(req)
-}
 
 // createTestTarWithIndex creates a TAR archive with correctly named files and returns both the tar data and index
 func createTestTarWithIndex(numFiles int, startIndex int64) ([]byte, []byte) {
@@ -154,96 +122,6 @@ func createTestTarWithIndex(numFiles int, startIndex int64) ([]byte, []byte) {
 	}
 
 	return tarBuf.Bytes(), indexData
-}
-
-// validateTarSegment checks if the downloaded segment data contains valid tar entries
-// This is used for partial tar data (segments) that don't need to have complete tar structure
-func validateTarSegment(data []byte) error {
-	if len(data) == 0 {
-		return fmt.Errorf("tar segment is empty")
-	}
-
-	// Try to parse the tar segment - segments may not have proper tar endings
-	reader := tar.NewReader(bytes.NewReader(data))
-	fileCount := 0
-
-	for {
-		header, err := reader.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return fmt.Errorf("error reading tar header: %w", err)
-		}
-
-		fileCount++
-
-		// Validate header fields
-		if header.Name == "" {
-			return fmt.Errorf("file %d has empty name", fileCount)
-		}
-
-		// Validate file size is reasonable
-		if header.Size < 0 {
-			return fmt.Errorf("file %s has negative size: %d", header.Name, header.Size)
-		}
-
-		// Validate mode is reasonable (not zero or invalid)
-		if header.Mode == 0 {
-			return fmt.Errorf("file %s has zero mode", header.Name)
-		}
-
-		// Validate filename format matches expected pattern (20-digit zero-padded number)
-		if !strings.HasSuffix(header.Name, ".txt") {
-			return fmt.Errorf("file %s does not have .txt extension", header.Name)
-		}
-
-		baseName := strings.TrimSuffix(header.Name, ".txt")
-		if len(baseName) != 20 {
-			return fmt.Errorf("file %s does not have 20-character base name: got %d characters", header.Name, len(baseName))
-		}
-
-		// Check if name contains only digits
-		for _, c := range baseName {
-			if c < '0' || c > '9' {
-				return fmt.Errorf("file %s contains non-digit characters in base name", header.Name)
-			}
-		}
-
-		// Read and validate file content
-		content, err := io.ReadAll(reader)
-		if err != nil {
-			return fmt.Errorf("error reading file %s content: %w", header.Name, err)
-		}
-
-		// Verify actual content size matches header
-		if int64(len(content)) != header.Size {
-			return fmt.Errorf("file %s content size mismatch: header says %d, actual %d",
-				header.Name, header.Size, len(content))
-		}
-
-		// Validate content matches expected pattern
-		fileNum := strings.TrimLeft(baseName, "0")
-		if fileNum == "" {
-			fileNum = "0" // Handle case where filename is all zeros
-		}
-		expectedContentPrefix := fmt.Sprintf("Content of file %s - ", fileNum)
-		if !strings.HasPrefix(string(content), expectedContentPrefix) {
-			return fmt.Errorf("file %s has unexpected content prefix: got %q, expected prefix %q",
-				header.Name, string(content[:min(50, len(content))]), expectedContentPrefix)
-		}
-
-		// Validate that content is valid UTF-8 text
-		if !isValidUTF8(content) {
-			return fmt.Errorf("file %s contains invalid UTF-8 content", header.Name)
-		}
-	}
-
-	if fileCount == 0 {
-		return fmt.Errorf("tar segment contains no files")
-	}
-
-	return nil
 }
 
 // validateTarArchive checks if the downloaded data is a valid tar archive with comprehensive format validation
@@ -354,14 +232,6 @@ func validateTarArchive(data []byte) error {
 // isValidUTF8 checks if the byte slice contains valid UTF-8 encoded text
 func isValidUTF8(data []byte) bool {
 	return len(data) == 0 || strings.ToValidUTF8(string(data), "") == string(data)
-}
-
-// min returns the minimum of two integers
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 // runCLICommand executes a CLI command and returns the output
