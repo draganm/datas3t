@@ -7,10 +7,10 @@ import (
 	"log"
 	"os"
 
-	"github.com/draganm/datas3t/cmd/datas3t/commands/bucket"
-	"github.com/draganm/datas3t/cmd/datas3t/commands/datarange"
-	"github.com/draganm/datas3t/cmd/datas3t/commands/datas3t"
-	"github.com/draganm/datas3t/cmd/datas3t/commands/server"
+	"github.com/draganm/datas3t/cmd/datas3t/bucket"
+	"github.com/draganm/datas3t/cmd/datas3t/datarange"
+	"github.com/draganm/datas3t/cmd/datas3t/datas3t"
+	"github.com/draganm/datas3t/cmd/datas3t/server"
 	"github.com/urfave/cli/v2"
 )
 
