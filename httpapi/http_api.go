@@ -20,6 +20,7 @@ func NewHTTPAPI(s *server.Server, log *slog.Logger) *http.ServeMux {
 	mux.HandleFunc("POST /api/v1/buckets", a.addBucket)
 	mux.HandleFunc("GET /api/v1/datas3ts", a.listDatas3ts)
 	mux.HandleFunc("POST /api/v1/datas3ts", a.addDatas3t)
+	mux.HandleFunc("POST /api/v1/datas3ts/import", a.importDatas3t)
 	mux.HandleFunc("POST /api/v1/upload-datarange", a.startDatarangeUpload)
 	mux.HandleFunc("POST /api/v1/upload-datarange/complete", a.completeDatarangeUpload)
 	mux.HandleFunc("POST /api/v1/upload-datarange/cancel", a.cancelDatarangeUpload)

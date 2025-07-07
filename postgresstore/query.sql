@@ -309,3 +309,14 @@ DELETE FROM aggregate_uploads WHERE id = $1;
 
 -- name: DeleteDatarangesByIDs :exec
 DELETE FROM dataranges WHERE id = ANY($1::BIGINT[]);
+
+-- name: GetBucketCredentials :one
+SELECT id, name, endpoint, bucket, access_key, secret_key
+FROM s3_buckets
+WHERE name = $1;
+
+-- name: UpdateUploadCounter :exec
+UPDATE datas3ts 
+SET upload_counter = $2,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1;
