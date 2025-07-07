@@ -39,6 +39,13 @@ datas3t is designed for efficiently managing datas3ts containing millions of ind
 - Validates continuous datapoint coverage before aggregation
 - Atomic operations with automatic cleanup on failure
 
+### 📦 **Datas3t Import**
+- Discovers and imports existing datas3ts from S3 buckets
+- Scans for objects matching datas3t patterns automatically
+- Disaster recovery and migration support
+- Maintains upload counter consistency
+- Prevents duplicate imports with idempotent operations
+
 ### 🛡️ **Data Integrity**
 - Validates TAR structure and file naming conventions
 - Ensures datapoint consistency across operations
@@ -82,12 +89,19 @@ Individual files within a datas3t, numbered sequentially:
 
 ### Dataranges
 Contiguous chunks of datapoints stored as TAR archives:
-- `datas3t/my-datas3t/dataranges/00000000000000000001-00000000000000001000.tar`
-- `datas3t/my-datas3t/dataranges/00000000000000001001-00000000000000002000.tar`
+- `datas3t/my-datas3t/dataranges/00000000000000000001-00000000000000001000-000000000001.tar`
+- `datas3t/my-datas3t/dataranges/00000000000000001001-00000000000000002000-000000000002.tar`
 
 ### TAR Indices
 Lightweight index files enabling fast random access:
-- `datas3t/my-datas3t/dataranges/00000000000000000001-00000000000000001000.index.zst`
+- `datas3t/my-datas3t/dataranges/00000000000000000001-00000000000000001000-000000000001.index`
+
+### Import Operations
+Process of discovering and importing existing datas3ts from S3 buckets:
+- **Pattern Recognition**: Automatically detects objects matching datas3t naming conventions
+- **Duplicate Prevention**: Skips existing dataranges to prevent conflicts
+- **Upload Counter Management**: Maintains counter consistency for future uploads
+- **Transaction Safety**: All imports are performed atomically per datas3t
 
 ### Aggregation Operations
 Process of combining multiple small dataranges into larger ones for improved efficiency:
@@ -196,7 +210,18 @@ curl -X POST http://localhost:8765/api/download/presign \
   }'
 ```
 
-### 5. Aggregate Dataranges
+### 5. Import Existing Datas3ts
+
+```bash
+# Import datas3ts from S3 bucket
+curl -X POST http://localhost:8765/api/v1/datas3ts/import \
+  -H "Content-Type: application/json" \
+  -d '{
+    "bucket_name": "my-bucket-config"
+  }'
+```
+
+### 6. Aggregate Dataranges
 
 ```bash
 # Start aggregation
@@ -250,6 +275,15 @@ datas3ts, err := c.ListDatas3ts(context.Background())
     for _, segment := range response.DownloadSegments {
         // Download using segment.PresignedURL and segment.Range
     }
+    
+    // Import existing datas3ts from S3 bucket
+    importResponse, err := c.ImportDatas3t(context.Background(), &client.ImportDatas3tRequest{
+        BucketName: "my-bucket-config",
+    })
+    if err != nil {
+        panic(err)
+    }
+    fmt.Printf("Imported %d datas3ts: %v\n", importResponse.ImportedCount, importResponse.ImportedDatas3ts)
     
     // Aggregate multiple dataranges into a single larger one
     err = c.AggregateDataRanges(context.Background(), "my-datas3t", 1, 5000, &client.AggregateOptions{
@@ -357,6 +391,22 @@ export ENCRYPTION_KEY="your-encryption-key"
 ./datas3t datas3t list --json
 ```
 
+#### Import Existing Datas3ts
+```bash
+# Import datas3ts from S3 bucket
+./datas3t datas3t import \
+  --bucket my-bucket-config
+
+# Output as JSON
+./datas3t datas3t import \
+  --bucket my-bucket-config \
+  --json
+```
+
+**Options:**
+- `--bucket` - Bucket configuration name to scan for existing datas3ts (required)
+- `--json` - Output results as JSON
+
 ### Datarange Operations
 
 #### Upload TAR File
@@ -426,14 +476,18 @@ export ENCRYPTION_KEY="generated-key-here"
 # 6. List datasets
 ./datas3t datas3t list
 
-# 7. Download specific range
+# 7. Import existing datas3ts (disaster recovery/migration)
+./datas3t datas3t import \
+  --bucket production-bucket
+
+# 8. Download specific range
 ./datas3t datarange download-tar \
   --datas3t image-dataset \
   --first-datapoint 100 \
   --last-datapoint 200 \
   --output ./images-100-200.tar
 
-# 8. Aggregate small dataranges for better efficiency
+# 9. Aggregate small dataranges for better efficiency
 # (using client library - no direct CLI command available)
 # This would combine multiple small dataranges into larger ones
 ```
@@ -474,19 +528,7 @@ Datapoints must follow the naming pattern `%020d.<extension>`:
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Make changes following the existing patterns
-4. Run tests: `nix develop -c go test ./...`
-5. Submit a pull request
-
-### Development Guidelines
-
-- Use the Nix development environment for consistency
-- Follow Go error handling best practices
-- Use the `postgresstore` package for all database queries
-- Add tests for new functionality
-- Update API documentation for new endpoints
+Currently we are not accepting contributions to this project.
 
 ## Architecture Details
 

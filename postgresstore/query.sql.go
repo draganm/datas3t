@@ -578,6 +578,35 @@ func (q *Queries) GetAllDataranges(ctx context.Context) ([]GetAllDatarangesRow, 
 	return items, nil
 }
 
+const getBucketCredentials = `-- name: GetBucketCredentials :one
+SELECT id, name, endpoint, bucket, access_key, secret_key
+FROM s3_buckets
+WHERE name = $1
+`
+
+type GetBucketCredentialsRow struct {
+	ID        int64
+	Name      string
+	Endpoint  string
+	Bucket    string
+	AccessKey string
+	SecretKey string
+}
+
+func (q *Queries) GetBucketCredentials(ctx context.Context, name string) (GetBucketCredentialsRow, error) {
+	row := q.db.QueryRow(ctx, getBucketCredentials, name)
+	var i GetBucketCredentialsRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Endpoint,
+		&i.Bucket,
+		&i.AccessKey,
+		&i.SecretKey,
+	)
+	return i, err
+}
+
 const getDatarangeByExactRange = `-- name: GetDatarangeByExactRange :one
 SELECT 
     dr.id,
@@ -1086,5 +1115,22 @@ type ScheduleKeyForDeletionParams struct {
 
 func (q *Queries) ScheduleKeyForDeletion(ctx context.Context, arg ScheduleKeyForDeletionParams) error {
 	_, err := q.db.Exec(ctx, scheduleKeyForDeletion, arg.PresignedDeleteUrl, arg.DeleteAfter)
+	return err
+}
+
+const updateUploadCounter = `-- name: UpdateUploadCounter :exec
+UPDATE datas3ts 
+SET upload_counter = $2,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+`
+
+type UpdateUploadCounterParams struct {
+	ID            int64
+	UploadCounter int64
+}
+
+func (q *Queries) UpdateUploadCounter(ctx context.Context, arg UpdateUploadCounterParams) error {
+	_, err := q.db.Exec(ctx, updateUploadCounter, arg.ID, arg.UploadCounter)
 	return err
 }

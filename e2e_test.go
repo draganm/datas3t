@@ -20,6 +20,7 @@ import (
 	"github.com/RoaringBitmap/roaring/roaring64"
 	"github.com/draganm/datas3t"
 	datas3tclient "github.com/draganm/datas3t/client"
+	datas3tserver "github.com/draganm/datas3t/server/datas3t"
 	"github.com/draganm/datas3t/tarindex"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -1088,22 +1089,22 @@ var _ = Describe("End-to-End Server Test", func() {
 
 		// Step 3: Upload multiple small dataranges for aggregation
 		logger.Info("Step 3: Uploading multiple small dataranges for aggregation")
-		
+
 		// Create 4 small dataranges (each 5,000 datapoints, ~5MB each)
 		datarangeInfo := []struct {
 			startIndex int64
 			numFiles   int
 			filename   string
 		}{
-			{0, 5000, "datarange1.tar"},      // 0-4999
-			{5000, 5000, "datarange2.tar"},   // 5000-9999
-			{10000, 5000, "datarange3.tar"},  // 10000-14999
-			{15000, 5000, "datarange4.tar"},  // 15000-19999
+			{0, 5000, "datarange1.tar"},     // 0-4999
+			{5000, 5000, "datarange2.tar"},  // 5000-9999
+			{10000, 5000, "datarange3.tar"}, // 10000-14999
+			{15000, 5000, "datarange4.tar"}, // 15000-19999
 		}
 
 		for i, info := range datarangeInfo {
 			logger.Info("Creating and uploading datarange", "index", i+1, "start", info.startIndex, "count", info.numFiles)
-			
+
 			testData, _ := createTestTarWithIndex(info.numFiles, info.startIndex)
 			tarFile := filepath.Join(tempDir, info.filename)
 			err = os.WriteFile(tarFile, testData, 0644)
@@ -1118,17 +1119,17 @@ var _ = Describe("End-to-End Server Test", func() {
 
 		// Step 4: Test aggregation using the client library
 		logger.Info("Step 4: Testing aggregation using client library")
-		
+
 		client := datas3t.NewClient(serverBaseURL)
 
 		// Test 1: Aggregate first 2 dataranges (0-9999) - should use direct PUT
 		logger.Info("Test 1: Aggregating first 2 dataranges (0-9999) using direct PUT")
-		
+
 		err = client.AggregateDataRanges(ctx, testDatas3tName, 0, 9999, &datas3tclient.AggregateOptions{
 			MaxParallelism: 2,
 			MaxRetries:     3,
 			ProgressCallback: func(info datas3tclient.ProgressInfo) {
-				logger.Info("Aggregation progress", 
+				logger.Info("Aggregation progress",
 					"phase", info.Phase,
 					"percent", fmt.Sprintf("%.1f%%", info.PercentComplete),
 					"step", info.CurrentStep)
@@ -1139,10 +1140,10 @@ var _ = Describe("End-to-End Server Test", func() {
 		// Verify the aggregation worked by checking the bitmap
 		bitmap, err := client.GetDatapointsBitmap(ctx, testDatas3tName)
 		Expect(err).NotTo(HaveOccurred())
-		
+
 		// Should still have all 20,000 datapoints (10,000 in aggregate + 10,000 in remaining ranges)
 		Expect(bitmap.GetCardinality()).To(Equal(uint64(20000)))
-		
+
 		// Verify specific datapoints in the aggregated range still exist
 		for i := uint64(0); i < 100; i++ {
 			Expect(bitmap.Contains(i)).To(BeTrue(), "Datapoint %d should still exist after aggregation", i)
@@ -1155,12 +1156,12 @@ var _ = Describe("End-to-End Server Test", func() {
 
 		// Test 2: Aggregate remaining dataranges (10000-19999) - should use multipart upload
 		logger.Info("Test 2: Aggregating remaining dataranges (10000-19999) using multipart upload")
-		
+
 		err = client.AggregateDataRanges(ctx, testDatas3tName, 10000, 19999, &datas3tclient.AggregateOptions{
 			MaxParallelism: 3,
 			MaxRetries:     3,
 			ProgressCallback: func(info datas3tclient.ProgressInfo) {
-				logger.Info("Large aggregation progress", 
+				logger.Info("Large aggregation progress",
 					"phase", info.Phase,
 					"percent", fmt.Sprintf("%.1f%%", info.PercentComplete),
 					"step", info.CurrentStep,
@@ -1172,7 +1173,7 @@ var _ = Describe("End-to-End Server Test", func() {
 		// Verify the second aggregation worked
 		bitmap, err = client.GetDatapointsBitmap(ctx, testDatas3tName)
 		Expect(err).NotTo(HaveOccurred())
-		
+
 		// Should still have all 20,000 datapoints (now in 2 aggregated ranges)
 		Expect(bitmap.GetCardinality()).To(Equal(uint64(20000)))
 
@@ -1220,9 +1221,9 @@ var _ = Describe("End-to-End Server Test", func() {
 			filename := fmt.Sprintf("%020d.txt", i)
 			content, exists := boundaryFiles[filename]
 			Expect(exists).To(BeTrue(), "File %s should exist", filename)
-			
+
 			expectedPrefix := fmt.Sprintf("Content of file %d - ", i)
-			Expect(string(content)).To(HavePrefix(expectedPrefix), 
+			Expect(string(content)).To(HavePrefix(expectedPrefix),
 				"File %s should have correct content", filename)
 		}
 
@@ -1230,12 +1231,12 @@ var _ = Describe("End-to-End Server Test", func() {
 
 		// Step 6: Test final aggregation of everything (0-19999)
 		logger.Info("Step 6: Testing final aggregation of all data (0-19999)")
-		
+
 		err = client.AggregateDataRanges(ctx, testDatas3tName, 0, 19999, &datas3tclient.AggregateOptions{
 			MaxParallelism: 4,
 			MaxRetries:     3,
 			ProgressCallback: func(info datas3tclient.ProgressInfo) {
-				logger.Info("Final aggregation progress", 
+				logger.Info("Final aggregation progress",
 					"phase", info.Phase,
 					"percent", fmt.Sprintf("%.1f%%", info.PercentComplete),
 					"step", info.CurrentStep,
@@ -1298,13 +1299,13 @@ var _ = Describe("End-to-End Server Test", func() {
 		for content, err := range client.DatapointIterator(ctx, testDatas3tName, 0, 19999) {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(content).NotTo(BeEmpty())
-			
+
 			// Validate content pattern for first and last few datapoints
 			if datapointCount < 10 || datapointCount >= 19990 {
 				expectedPrefix := fmt.Sprintf("Content of file %d - ", datapointCount)
 				Expect(string(content)).To(HavePrefix(expectedPrefix))
 			}
-			
+
 			datapointCount++
 		}
 
@@ -1317,4 +1318,374 @@ var _ = Describe("End-to-End Server Test", func() {
 			"final_tar_size_mb", len(finalTarData)/(1024*1024),
 			"aggregation_integrity_verified", true)
 	})
+
+	It("should complete full datas3t import workflow using CLI", func(ctx SpecContext) {
+		// Step 1: Add bucket configuration using CLI
+		logger.Info("Step 1: Adding bucket configuration for import test")
+		err := runCLICommand(cliPath, "bucket", "add",
+			"--name", testBucketConfigName,
+			"--endpoint", "http://"+minioEndpoint,
+			"--bucket", testBucketName,
+			"--access-key", minioAccessKey,
+			"--secret-key", minioSecretKey,
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Step 2: Manually create datas3t objects in S3 to simulate pre-existing data
+		logger.Info("Step 2: Creating pre-existing datas3t objects in S3")
+
+		// Create MinIO client to directly upload test objects
+		minioClient, err := miniogo.New(minioHost, &miniogo.Options{
+			Creds:  miniocreds.NewStaticV4(minioAccessKey, minioSecretKey, ""),
+			Secure: false,
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		// Create test dataranges that match the datas3t pattern
+		// Pattern: datas3t/{datas3t_name}/dataranges/{first_datapoint}-{last_datapoint}-{upload_counter}.tar
+
+		// Dataset 1: import-test-dataset-1 (3 dataranges)
+		dataset1Objects := []struct {
+			objectKey     string
+			indexKey      string
+			startIndex    int64
+			numFiles      int
+			uploadCounter int64
+		}{
+			{
+				objectKey:     "datas3t/import-test-dataset-1/dataranges/00000000000000000000-00000000000000001999-000000000001.tar",
+				indexKey:      "datas3t/import-test-dataset-1/dataranges/00000000000000000000-00000000000000001999-000000000001.index",
+				startIndex:    0,
+				numFiles:      2000,
+				uploadCounter: 1,
+			},
+			{
+				objectKey:     "datas3t/import-test-dataset-1/dataranges/00000000000000002000-00000000000000003999-000000000002.tar",
+				indexKey:      "datas3t/import-test-dataset-1/dataranges/00000000000000002000-00000000000000003999-000000000002.index",
+				startIndex:    2000,
+				numFiles:      2000,
+				uploadCounter: 2,
+			},
+			{
+				objectKey:     "datas3t/import-test-dataset-1/dataranges/00000000000000006000-00000000000000007999-000000000005.tar",
+				indexKey:      "datas3t/import-test-dataset-1/dataranges/00000000000000006000-00000000000000007999-000000000005.index",
+				startIndex:    6000,
+				numFiles:      2000,
+				uploadCounter: 5, // Higher upload counter to test upload_counter updating
+			},
+		}
+
+		// Dataset 2: import-test-dataset-2 (2 dataranges)
+		dataset2Objects := []struct {
+			objectKey     string
+			indexKey      string
+			startIndex    int64
+			numFiles      int
+			uploadCounter int64
+		}{
+			{
+				objectKey:     "datas3t/import-test-dataset-2/dataranges/00000000000000010000-00000000000000011999-000000000003.tar",
+				indexKey:      "datas3t/import-test-dataset-2/dataranges/00000000000000010000-00000000000000011999-000000000003.index",
+				startIndex:    10000,
+				numFiles:      2000,
+				uploadCounter: 3,
+			},
+			{
+				objectKey:     "datas3t/import-test-dataset-2/dataranges/00000000000000012000-00000000000000013999-000000000007.tar",
+				indexKey:      "datas3t/import-test-dataset-2/dataranges/00000000000000012000-00000000000000013999-000000000007.index",
+				startIndex:    12000,
+				numFiles:      2000,
+				uploadCounter: 7, // Higher upload counter for this dataset
+			},
+		}
+
+		// Upload all dataset1 objects
+		for i, obj := range dataset1Objects {
+			logger.Info("Creating dataset1 object", "index", i+1, "start", obj.startIndex, "files", obj.numFiles, "upload_counter", obj.uploadCounter)
+
+			// Create TAR data and index
+			tarData, indexData := createTestTarWithIndex(obj.numFiles, obj.startIndex)
+
+			// Upload TAR file
+			_, err = minioClient.PutObject(ctx, testBucketName, obj.objectKey,
+				bytes.NewReader(tarData), int64(len(tarData)), miniogo.PutObjectOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Upload index file
+			_, err = minioClient.PutObject(ctx, testBucketName, obj.indexKey,
+				bytes.NewReader(indexData), int64(len(indexData)), miniogo.PutObjectOptions{})
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		// Upload all dataset2 objects
+		for i, obj := range dataset2Objects {
+			logger.Info("Creating dataset2 object", "index", i+1, "start", obj.startIndex, "files", obj.numFiles, "upload_counter", obj.uploadCounter)
+
+			// Create TAR data and index
+			tarData, indexData := createTestTarWithIndex(obj.numFiles, obj.startIndex)
+
+			// Upload TAR file
+			_, err = minioClient.PutObject(ctx, testBucketName, obj.objectKey,
+				bytes.NewReader(tarData), int64(len(tarData)), miniogo.PutObjectOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Upload index file
+			_, err = minioClient.PutObject(ctx, testBucketName, obj.indexKey,
+				bytes.NewReader(indexData), int64(len(indexData)), miniogo.PutObjectOptions{})
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		// Step 3: Add some non-datas3t objects to verify they're ignored
+		logger.Info("Step 3: Adding non-datas3t objects that should be ignored")
+
+		// Random file that doesn't match pattern
+		_, err = minioClient.PutObject(ctx, testBucketName, "random-file.txt",
+			bytes.NewReader([]byte("random content")), 14, miniogo.PutObjectOptions{})
+		Expect(err).NotTo(HaveOccurred())
+
+		// Object in datas3t folder but wrong pattern
+		_, err = minioClient.PutObject(ctx, testBucketName, "datas3t/invalid-pattern.txt",
+			bytes.NewReader([]byte("invalid pattern")), 15, miniogo.PutObjectOptions{})
+		Expect(err).NotTo(HaveOccurred())
+
+		// Object with invalid naming convention
+		_, err = minioClient.PutObject(ctx, testBucketName, "datas3t/test/dataranges/invalid-name.tar",
+			bytes.NewReader([]byte("invalid naming")), 14, miniogo.PutObjectOptions{})
+		Expect(err).NotTo(HaveOccurred())
+
+		// Step 4: Verify no datas3ts exist yet in the database
+		logger.Info("Step 4: Verifying database is empty before import")
+
+		err = runCLICommand(cliPath, "datas3t", "list", "--json")
+		Expect(err).NotTo(HaveOccurred())
+
+		// Step 5: Perform import using CLI
+		logger.Info("Step 5: Performing import using CLI")
+
+		err = runCLICommand(cliPath, "datas3t", "import",
+			"--bucket", testBucketConfigName,
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Step 6: Verify imported datas3ts using CLI
+		logger.Info("Step 6: Verifying imported datas3ts using CLI")
+
+		err = runCLICommand(cliPath, "datas3t", "list")
+		Expect(err).NotTo(HaveOccurred())
+
+		// Step 7: Verify imported data using client
+		logger.Info("Step 7: Verifying imported data using client")
+
+		client := datas3tclient.NewClient(serverBaseURL)
+
+		// List all datas3ts to verify import
+		datas3ts, err := client.ListDatas3ts(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(datas3ts).To(HaveLen(2))
+
+		// Sort datas3ts by name for consistent testing
+		var dataset1, dataset2 *datas3tserver.Datas3tInfo
+		for i := range datas3ts {
+			if datas3ts[i].Datas3tName == "import-test-dataset-1" {
+				dataset1 = &datas3ts[i]
+			} else if datas3ts[i].Datas3tName == "import-test-dataset-2" {
+				dataset2 = &datas3ts[i]
+			}
+		}
+
+		Expect(dataset1).NotTo(BeNil())
+		Expect(dataset2).NotTo(BeNil())
+
+		// Verify dataset1 statistics
+		Expect(dataset1.BucketName).To(Equal(testBucketConfigName))
+		Expect(dataset1.DatarangeCount).To(Equal(int64(3)))
+		Expect(dataset1.TotalDatapoints).To(Equal(int64(6000))) // 2000 + 2000 + 2000
+		Expect(dataset1.LowestDatapoint).To(Equal(int64(0)))
+		Expect(dataset1.HighestDatapoint).To(Equal(int64(7999)))
+
+		// Verify dataset2 statistics
+		Expect(dataset2.BucketName).To(Equal(testBucketConfigName))
+		Expect(dataset2.DatarangeCount).To(Equal(int64(2)))
+		Expect(dataset2.TotalDatapoints).To(Equal(int64(4000))) // 2000 + 2000
+		Expect(dataset2.LowestDatapoint).To(Equal(int64(10000)))
+		Expect(dataset2.HighestDatapoint).To(Equal(int64(13999)))
+
+		logger.Info("Import verification passed",
+			"dataset1_datapoints", dataset1.TotalDatapoints,
+			"dataset2_datapoints", dataset2.TotalDatapoints)
+
+		// Step 8: Test upload counter updates
+		logger.Info("Step 8: Verifying upload counter updates")
+
+		// We can't directly check upload counters via CLI, but we can test that new uploads
+		// get higher counters by uploading new data and checking the object keys in S3
+
+		// Add new datarange to dataset1 using CLI
+		testData, _ := createTestTarWithIndex(1000, 8000) // files 8000-8999
+		newTarFile := filepath.Join(tempDir, "new_upload.tar")
+		err = os.WriteFile(newTarFile, testData, 0644)
+		Expect(err).NotTo(HaveOccurred())
+
+		err = runCLICommand(cliPath, "datarange", "upload-tar",
+			"--datas3t", "import-test-dataset-1",
+			"--file", newTarFile,
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		// List objects in bucket to verify new upload has counter > 5
+		objectsInfo := minioClient.ListObjects(ctx, testBucketName, miniogo.ListObjectsOptions{
+			Prefix: "datas3t/import-test-dataset-1/dataranges/",
+		})
+
+		foundNewObject := false
+		for objInfo := range objectsInfo {
+			if objInfo.Err != nil {
+				continue
+			}
+			// Look for objects with counter > 5 (should be 6 or higher)
+			if strings.Contains(objInfo.Key, "000000000006.tar") ||
+				strings.Contains(objInfo.Key, "000000000007.tar") ||
+				strings.Contains(objInfo.Key, "000000000008.tar") {
+				foundNewObject = true
+				break
+			}
+		}
+		Expect(foundNewObject).To(BeTrue(), "New upload should have upload counter > 5")
+
+		logger.Info("Upload counter verification passed")
+
+		// Step 9: Test data integrity of imported data
+		logger.Info("Step 9: Testing data integrity of imported data")
+
+		// Test bitmap functionality
+		bitmap1, err := client.GetDatapointsBitmap(ctx, "import-test-dataset-1")
+		Expect(err).NotTo(HaveOccurred())
+
+		// Should include the newly uploaded data too
+		Expect(bitmap1.GetCardinality()).To(BeNumerically(">=", 6000))
+
+		// Verify specific datapoints exist from imported data
+		// Dataset1: 0-1999, 2000-3999, 6000-7999
+		for i := uint64(0); i < 100; i++ {
+			Expect(bitmap1.Contains(i)).To(BeTrue(), "Datapoint %d should exist", i)
+		}
+		for i := uint64(2000); i < 2100; i++ {
+			Expect(bitmap1.Contains(i)).To(BeTrue(), "Datapoint %d should exist", i)
+		}
+		for i := uint64(6000); i < 6100; i++ {
+			Expect(bitmap1.Contains(i)).To(BeTrue(), "Datapoint %d should exist", i)
+		}
+
+		// Verify gap doesn't exist (4000-5999)
+		for i := uint64(4000); i < 4100; i++ {
+			Expect(bitmap1.Contains(i)).To(BeFalse(), "Datapoint %d should NOT exist (gap)", i)
+		}
+
+		logger.Info("Bitmap verification passed")
+
+		// Step 10: Test download of imported data
+		logger.Info("Step 10: Testing download of imported data")
+
+		// Download a range spanning imported dataranges
+		downloadTarPath := filepath.Join(tempDir, "imported_download.tar")
+		err = runCLICommand(cliPath, "datarange", "download-tar",
+			"--datas3t", "import-test-dataset-1",
+			"--first-datapoint", "1900",
+			"--last-datapoint", "2100",
+			"--output", downloadTarPath,
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Validate downloaded data
+		downloadedData, err := os.ReadFile(downloadTarPath)
+		Expect(err).NotTo(HaveOccurred())
+
+		err = validateTarArchive(downloadedData)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Extract and verify content
+		downloadedFiles := make(map[string][]byte)
+		err = extractFilesFromTar(downloadedData, downloadedFiles)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Should have 201 files (1900-2100)
+		Expect(len(downloadedFiles)).To(Equal(201))
+
+		// Verify specific files have correct content
+		for i := 1900; i <= 2100; i++ {
+			filename := fmt.Sprintf("%020d.txt", i)
+			content, exists := downloadedFiles[filename]
+			Expect(exists).To(BeTrue(), "File %s should exist", filename)
+
+			expectedPrefix := fmt.Sprintf("Content of file %d - ", i)
+			Expect(string(content)).To(HavePrefix(expectedPrefix))
+		}
+
+		logger.Info("Download verification passed")
+
+		// Step 11: Test DatapointIterator on imported data
+		logger.Info("Step 11: Testing DatapointIterator on imported data")
+
+		datapointCount := 0
+		for content, err := range client.DatapointIterator(ctx, "import-test-dataset-2", 10000, 10099) {
+			Expect(err).NotTo(HaveOccurred())
+			Expect(content).NotTo(BeEmpty())
+
+			// Verify content pattern
+			expectedPrefix := fmt.Sprintf("Content of file %d - ", 10000+datapointCount)
+			Expect(string(content)).To(HavePrefix(expectedPrefix))
+
+			datapointCount++
+		}
+
+		Expect(datapointCount).To(Equal(100), "Should iterate over 100 datapoints")
+
+		logger.Info("DatapointIterator verification passed")
+
+		// Step 12: Test re-import (should not create duplicates)
+		logger.Info("Step 12: Testing re-import to verify no duplicates")
+
+		err = runCLICommand(cliPath, "datas3t", "import",
+			"--bucket", testBucketConfigName,
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Verify counts haven't changed (no duplicates)
+		datas3tsAfterReimport, err := client.ListDatas3ts(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(datas3tsAfterReimport).To(HaveLen(2))
+
+		// Find datasets again
+		for i := range datas3tsAfterReimport {
+			if datas3tsAfterReimport[i].Datas3tName == "import-test-dataset-1" {
+				// Datarange count should be the same (no duplicates)
+				// Note: might be +1 due to the manual upload in step 8
+				Expect(datas3tsAfterReimport[i].DatarangeCount).To(BeNumerically("<=", 4))
+			} else if datas3tsAfterReimport[i].Datas3tName == "import-test-dataset-2" {
+				// Should be exactly the same
+				Expect(datas3tsAfterReimport[i].DatarangeCount).To(Equal(int64(2)))
+				Expect(datas3tsAfterReimport[i].TotalDatapoints).To(Equal(int64(4000)))
+			}
+		}
+
+		logger.Info("Re-import verification passed - no duplicates created")
+
+		// Step 13: Test import with JSON output
+		logger.Info("Step 13: Testing import with JSON output")
+
+		err = runCLICommand(cliPath, "datas3t", "import",
+			"--bucket", testBucketConfigName,
+			"--json",
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		logger.Info("Import workflow completed successfully",
+			"imported_datasets", 2,
+			"total_datapoints_dataset1", dataset1.TotalDatapoints,
+			"total_datapoints_dataset2", dataset2.TotalDatapoints,
+			"upload_counter_updates_verified", true,
+			"data_integrity_verified", true,
+			"duplicate_prevention_verified", true)
+	})
+
 })
