@@ -301,7 +301,7 @@ datas3ts, err := c.ListDatas3ts(context.Background())
 
 ## CLI Usage
 
-The datas3t CLI provides a comprehensive command-line interface for managing buckets, datas3ts, and datarange operations.
+The datas3t CLI provides a comprehensive command-line interface for managing buckets, datas3ts, datarange operations, and aggregation.
 
 ### Building the CLI
 
@@ -445,6 +445,55 @@ export ENCRYPTION_KEY="your-encryption-key"
 - `--max-retries` - Maximum retry attempts per chunk (default: 3)
 - `--chunk-size` - Download chunk size in bytes (default: 5MB)
 
+### Aggregation Operations
+
+#### Aggregate Multiple Dataranges
+```bash
+./datas3t aggregate \
+  --datas3t my-dataset \
+  --first-datapoint 1 \
+  --last-datapoint 5000 \
+  --max-parallelism 4 \
+  --max-retries 3
+```
+
+**Options:**
+- `--datas3t` - Datas3t name (required)
+- `--first-datapoint` - First datapoint index to include in aggregate (required)
+- `--last-datapoint` - Last datapoint index to include in aggregate (required)
+- `--max-parallelism` - Maximum number of concurrent operations (default: 4)
+- `--max-retries` - Maximum number of retry attempts per operation (default: 3)
+
+**What it does:**
+- Downloads all source dataranges in the specified range
+- Merges them into a single TAR archive with continuous datapoint numbering
+- Uploads the merged archive to S3
+- Atomically replaces the original dataranges with the new aggregate
+- Validates that the datapoint range is fully covered by existing dataranges with no gaps
+
+**Example Usage:**
+```bash
+# Example: You have uploaded multiple small TAR files and want to consolidate them
+# First, check your current dataranges
+./datas3t datas3t list
+
+# Aggregate the first 10,000 datapoints into a single larger datarange
+./datas3t aggregate \
+  --datas3t my-dataset \
+  --first-datapoint 1 \
+  --last-datapoint 10000 \
+  --max-parallelism 6
+
+# Check the result - you should see fewer, larger dataranges
+./datas3t datas3t list
+```
+
+**Benefits:**
+- Reduces the number of S3 objects (lower storage costs)
+- Improves download performance for large ranges
+- Maintains all data integrity and accessibility
+- Can be run multiple times to further consolidate data
+
 ### Complete Workflow Example
 
 ```bash
@@ -488,8 +537,13 @@ export ENCRYPTION_KEY="generated-key-here"
   --output ./images-100-200.tar
 
 # 9. Aggregate small dataranges for better efficiency
-# (using client library - no direct CLI command available)
-# This would combine multiple small dataranges into larger ones
+./datas3t aggregate \
+  --datas3t image-dataset \
+  --first-datapoint 1 \
+  --last-datapoint 10000
+
+# 10. Check results after aggregation
+./datas3t datas3t list
 ```
 
 ### Environment Variables
