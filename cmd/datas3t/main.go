@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 
-	"github.com/draganm/datas3t/cmd/datas3t/aggregate"
 	"github.com/draganm/datas3t/cmd/datas3t/bucket"
 	"github.com/draganm/datas3t/cmd/datas3t/datarange"
 	"github.com/draganm/datas3t/cmd/datas3t/datas3t"
@@ -35,7 +34,6 @@ Keep this key secure and backed up - if you lose it, you won't be able to decryp
 			bucket.Command(),
 			datas3t.Command(),
 			datarange.Command(),
-			aggregate.Command(),
 		},
 	}
 

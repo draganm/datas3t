@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"sort"
 	"sync"
 
@@ -29,6 +30,7 @@ type AggregateOptions struct {
 	MaxParallelism   int              // Maximum number of concurrent downloads/uploads (default: 4)
 	MaxRetries       int              // Maximum number of retry attempts per operation (default: 3)
 	ProgressCallback ProgressCallback // Optional progress callback
+	TempDir          string           // Directory for temporary files (default: os.TempDir())
 }
 
 // DefaultAggregateOptions returns sensible default options for aggregation
@@ -36,6 +38,7 @@ func DefaultAggregateOptions() *AggregateOptions {
 	return &AggregateOptions{
 		MaxParallelism: 4,
 		MaxRetries:     3,
+		TempDir:        os.TempDir(),
 	}
 }
 
@@ -43,6 +46,11 @@ func DefaultAggregateOptions() *AggregateOptions {
 func (c *Client) AggregateDataRanges(ctx context.Context, datas3tName string, firstDatapointIndex, lastDatapointIndex uint64, opts *AggregateOptions) error {
 	if opts == nil {
 		opts = DefaultAggregateOptions()
+	}
+	
+	// Set default temp directory if not specified
+	if opts.TempDir == "" {
+		opts.TempDir = os.TempDir()
 	}
 
 	// Phase 1: Start aggregate operation
@@ -90,10 +98,12 @@ func (c *Client) AggregateDataRanges(ctx context.Context, datas3tName string, fi
 
 	// Phase 3: Merge TAR files and create aggregate index
 	tracker.reportProgress(PhaseMergingTars, "Merging TAR files", 0)
-	aggregatedTar, aggregatedIndex, err := c.mergeTarFiles(sourceData, tracker)
+	aggregatedTarFile, aggregatedIndex, err := c.mergeTarFiles(sourceData, opts.TempDir, tracker)
 	if err != nil {
 		return fmt.Errorf("failed to merge TAR files: %w", err)
 	}
+	defer os.Remove(aggregatedTarFile.Name()) // Clean up temporary file
+	defer aggregatedTarFile.Close()
 	tracker.nextStep()
 
 	// Phase 4: Upload aggregated data
@@ -101,13 +111,13 @@ func (c *Client) AggregateDataRanges(ctx context.Context, datas3tName string, fi
 	var uploadIDs []string
 	if aggregateResp.UseDirectPut {
 		// Direct PUT for small aggregates
-		err = c.uploadAggregateDataDirectPut(ctx, aggregateResp.PresignedDataPutURL, aggregatedTar, opts.MaxRetries, tracker)
+		err = c.uploadAggregateDataDirectPutFromFile(ctx, aggregateResp.PresignedDataPutURL, aggregatedTarFile, opts.MaxRetries, tracker)
 		if err != nil {
 			return fmt.Errorf("failed to upload aggregate data: %w", err)
 		}
 	} else {
 		// Multipart upload for large aggregates
-		uploadIDs, err = c.uploadAggregateDataMultipart(ctx, aggregateResp.PresignedMultipartUploadPutURLs, aggregatedTar, opts, tracker)
+		uploadIDs, err = c.uploadAggregateDataMultipartFromFile(ctx, aggregateResp.PresignedMultipartUploadPutURLs, aggregatedTarFile, opts, tracker)
 		if err != nil {
 			return fmt.Errorf("failed to upload aggregate data: %w", err)
 		}
@@ -240,9 +250,14 @@ func (c *Client) downloadWithRetry(ctx context.Context, url string, maxRetries i
 }
 
 // mergeTarFiles combines multiple TAR files into a single TAR with continuous datapoint indices
-func (c *Client) mergeTarFiles(sources []sourceDataInfo, tracker *progressTracker) ([]byte, []byte, error) {
-	var aggregatedTar bytes.Buffer
-	tw := tar.NewWriter(&aggregatedTar)
+func (c *Client) mergeTarFiles(sources []sourceDataInfo, tempDir string, tracker *progressTracker) (*os.File, []byte, error) {
+	// Create temporary file for aggregated tar
+	tempFile, err := os.CreateTemp(tempDir, "aggregate-*.tar")
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create temporary file: %w", err)
+	}
+	
+	tw := tar.NewWriter(tempFile)
 
 	currentDatapoint := sources[0].MinDatapoint
 
@@ -292,31 +307,62 @@ func (c *Client) mergeTarFiles(sources []sourceDataInfo, tracker *progressTracke
 	}
 
 	// Close the TAR writer
-	err := tw.Close()
+	err = tw.Close()
 	if err != nil {
+		tempFile.Close()
+		os.Remove(tempFile.Name())
 		return nil, nil, fmt.Errorf("failed to close tar writer: %w", err)
 	}
 
-	// Generate index for the aggregated TAR
-	aggregatedData := aggregatedTar.Bytes()
-	reader := bytes.NewReader(aggregatedData)
-	indexData, err := tarindex.IndexTar(reader)
+	// Seek to beginning for index generation
+	_, err = tempFile.Seek(0, 0)
 	if err != nil {
+		tempFile.Close()
+		os.Remove(tempFile.Name())
+		return nil, nil, fmt.Errorf("failed to seek to beginning of file: %w", err)
+	}
+
+	// Generate index for the aggregated TAR
+	indexData, err := tarindex.IndexTar(tempFile)
+	if err != nil {
+		tempFile.Close()
+		os.Remove(tempFile.Name())
 		return nil, nil, fmt.Errorf("failed to create aggregate index: %w", err)
 	}
 
+	// Seek back to beginning for upload
+	_, err = tempFile.Seek(0, 0)
+	if err != nil {
+		tempFile.Close()
+		os.Remove(tempFile.Name())
+		return nil, nil, fmt.Errorf("failed to seek to beginning of file: %w", err)
+	}
+
 	tracker.reportProgress(PhaseMergingTars, "TAR merging completed", 0)
-	return aggregatedData, indexData, nil
+	return tempFile, indexData, nil
 }
 
-// uploadAggregateDataDirectPut uploads aggregate data using direct PUT
-func (c *Client) uploadAggregateDataDirectPut(ctx context.Context, url string, data []byte, maxRetries int, tracker *progressTracker) error {
+
+// uploadAggregateDataDirectPutFromFile uploads aggregate data from a file using direct PUT
+func (c *Client) uploadAggregateDataDirectPutFromFile(ctx context.Context, url string, file *os.File, maxRetries int, tracker *progressTracker) error {
 	operation := func() error {
-		req, err := http.NewRequestWithContext(ctx, "PUT", url, bytes.NewReader(data))
+		// Get file size for content length
+		fileInfo, err := file.Stat()
 		if err != nil {
 			return err
 		}
-		req.ContentLength = int64(len(data))
+		
+		// Seek to beginning
+		_, err = file.Seek(0, 0)
+		if err != nil {
+			return err
+		}
+
+		req, err := http.NewRequestWithContext(ctx, "PUT", url, file)
+		if err != nil {
+			return err
+		}
+		req.ContentLength = fileInfo.Size()
 
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
@@ -325,7 +371,7 @@ func (c *Client) uploadAggregateDataDirectPut(ctx context.Context, url string, d
 		defer resp.Body.Close()
 
 		if resp.StatusCode == http.StatusOK {
-			tracker.reportProgress(PhaseUploadingAggregate, "Direct upload completed", int64(len(data)))
+			tracker.reportProgress(PhaseUploadingAggregate, "Direct upload completed", fileInfo.Size())
 			return nil
 		}
 
@@ -341,12 +387,20 @@ func (c *Client) uploadAggregateDataDirectPut(ctx context.Context, url string, d
 	return backoff.Retry(operation, backoff.WithContext(b, ctx))
 }
 
-// uploadAggregateDataMultipart uploads aggregate data using multipart upload
-func (c *Client) uploadAggregateDataMultipart(ctx context.Context, urls []string, data []byte, opts *AggregateOptions, tracker *progressTracker) ([]string, error) {
+
+// uploadAggregateDataMultipartFromFile uploads aggregate data from a file using multipart upload
+func (c *Client) uploadAggregateDataMultipartFromFile(ctx context.Context, urls []string, file *os.File, opts *AggregateOptions, tracker *progressTracker) ([]string, error) {
 	numParts := len(urls)
 	if numParts == 0 {
 		return nil, fmt.Errorf("no upload URLs provided")
 	}
+
+	// Get file size
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get file info: %w", err)
+	}
+	fileSize := fileInfo.Size()
 
 	// Calculate part sizes (minimum 5MB except for last part)
 	const minPartSize = 5 * 1024 * 1024
@@ -366,19 +420,16 @@ func (c *Client) uploadAggregateDataMultipart(ctx context.Context, urls []string
 
 			// Handle the last part - it gets all remaining data
 			if i == numParts-1 {
-				partSize = int64(len(data)) - offset
+				partSize = fileSize - offset
 			}
 
 			// Safety check
-			if offset+partSize > int64(len(data)) {
-				partSize = int64(len(data)) - offset
+			if offset+partSize > fileSize {
+				partSize = fileSize - offset
 			}
 
-			// Extract chunk data
-			chunkData := data[offset : offset+partSize]
-
 			// Upload chunk with retry
-			etag, err := c.uploadChunkWithRetry(ctx, url, chunkData, opts.MaxRetries, tracker, i+1, numParts)
+			etag, err := c.uploadChunkFromFileWithRetry(ctx, url, file, offset, partSize, opts.MaxRetries, tracker, i+1, numParts)
 			if err != nil {
 				return fmt.Errorf("failed to upload part %d: %w", i+1, err)
 			}
@@ -387,7 +438,7 @@ func (c *Client) uploadAggregateDataMultipart(ctx context.Context, urls []string
 		})
 	}
 
-	err := g.Wait()
+	err = g.Wait()
 	if err != nil {
 		return nil, fmt.Errorf("multipart upload failed: %w", err)
 	}
@@ -395,16 +446,20 @@ func (c *Client) uploadAggregateDataMultipart(ctx context.Context, urls []string
 	return etags, nil
 }
 
-// uploadChunkWithRetry uploads a single chunk with retry logic for aggregate data
-func (c *Client) uploadChunkWithRetry(ctx context.Context, url string, data []byte, maxRetries int, tracker *progressTracker, partNum, totalParts int) (string, error) {
+
+// uploadChunkFromFileWithRetry uploads a single chunk from a file with retry logic for aggregate data
+func (c *Client) uploadChunkFromFileWithRetry(ctx context.Context, url string, file *os.File, offset, size int64, maxRetries int, tracker *progressTracker, partNum, totalParts int) (string, error) {
 	var etag string
 
 	operation := func() error {
-		req, err := http.NewRequestWithContext(ctx, "PUT", url, bytes.NewReader(data))
+		// Create a section reader for this chunk
+		sectionReader := io.NewSectionReader(file, offset, size)
+		
+		req, err := http.NewRequestWithContext(ctx, "PUT", url, sectionReader)
 		if err != nil {
 			return err
 		}
-		req.ContentLength = int64(len(data))
+		req.ContentLength = size
 
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
@@ -415,7 +470,7 @@ func (c *Client) uploadChunkWithRetry(ctx context.Context, url string, data []by
 		if resp.StatusCode == http.StatusOK {
 			etag = resp.Header.Get("ETag")
 			stepInfo := fmt.Sprintf("Uploading aggregate part %d of %d", partNum, totalParts)
-			tracker.reportProgress(PhaseUploadingAggregate, stepInfo, int64(len(data)))
+			tracker.reportProgress(PhaseUploadingAggregate, stepInfo, size)
 			return nil
 		}
 
