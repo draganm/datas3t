@@ -11,7 +11,6 @@ import (
 	"sync"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/draganm/datas3t/server/dataranges"
 	"github.com/draganm/datas3t/tarindex"
 	"golang.org/x/sync/errgroup"
 )
@@ -47,7 +46,7 @@ func (c *Client) AggregateDataRanges(ctx context.Context, datas3tName string, fi
 	}
 
 	// Phase 1: Start aggregate operation
-	startReq := &dataranges.StartAggregateRequest{
+	startReq := &StartAggregateRequest{
 		Datas3tName:         datas3tName,
 		FirstDatapointIndex: firstDatapointIndex,
 		LastDatapointIndex:  lastDatapointIndex,
@@ -66,7 +65,7 @@ func (c *Client) AggregateDataRanges(ctx context.Context, datas3tName string, fi
 	defer func() {
 		if err != nil {
 			// Best effort cleanup - cancel the aggregate if it was started
-			cancelReq := &dataranges.CancelAggregateRequest{
+			cancelReq := &CancelAggregateRequest{
 				AggregateUploadID: aggregateResp.AggregateUploadID,
 			}
 			c.CancelAggregate(context.Background(), cancelReq) // Use background context for cleanup
@@ -123,7 +122,7 @@ func (c *Client) AggregateDataRanges(ctx context.Context, datas3tName string, fi
 
 	// Phase 5: Complete aggregate
 	tracker.reportProgress(PhaseCompletingAggregate, "Completing aggregate", 0)
-	completeReq := &dataranges.CompleteAggregateRequest{
+	completeReq := &CompleteAggregateRequest{
 		AggregateUploadID: aggregateResp.AggregateUploadID,
 		UploadIDs:         uploadIDs,
 	}
@@ -149,7 +148,7 @@ type sourceDataInfo struct {
 }
 
 // downloadSourceDataranges downloads all source dataranges in parallel
-func (c *Client) downloadSourceDataranges(ctx context.Context, sources []dataranges.DatarangeDownloadURL, opts *AggregateOptions, tracker *progressTracker) ([]sourceDataInfo, error) {
+func (c *Client) downloadSourceDataranges(ctx context.Context, sources []DatarangeDownloadURL, opts *AggregateOptions, tracker *progressTracker) ([]sourceDataInfo, error) {
 	results := make([]sourceDataInfo, len(sources))
 	
 	// Use errgroup with parallelism limit

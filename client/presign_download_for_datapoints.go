@@ -8,11 +8,9 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-
-	"github.com/draganm/datas3t/server/download"
 )
 
-func (c *Client) PreSignDownloadForDatapoints(ctx context.Context, r *download.PreSignDownloadForDatapointsRequest) (*download.PreSignDownloadForDatapointsResponse, error) {
+func (c *Client) PreSignDownloadForDatapoints(ctx context.Context, r *PreSignDownloadForDatapointsRequest) (*PreSignDownloadForDatapointsResponse, error) {
 	ur, err := url.JoinPath(c.baseURL, "api", "v1", "download")
 	if err != nil {
 		return nil, fmt.Errorf("failed to join path: %w", err)
@@ -42,7 +40,7 @@ func (c *Client) PreSignDownloadForDatapoints(ctx context.Context, r *download.P
 		return nil, fmt.Errorf("failed to presign download for datapoints: %s: %s", resp.Status, string(body))
 	}
 
-	var respBody download.PreSignDownloadForDatapointsResponse
+	var respBody PreSignDownloadForDatapointsResponse
 	err = json.NewDecoder(resp.Body).Decode(&respBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)

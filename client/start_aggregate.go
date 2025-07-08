@@ -8,11 +8,9 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-
-	"github.com/draganm/datas3t/server/dataranges"
 )
 
-func (c *Client) StartAggregate(ctx context.Context, r *dataranges.StartAggregateRequest) (*dataranges.StartAggregateResponse, error) {
+func (c *Client) StartAggregate(ctx context.Context, r *StartAggregateRequest) (*StartAggregateResponse, error) {
 	ur, err := url.JoinPath(c.baseURL, "api", "v1", "aggregate")
 	if err != nil {
 		return nil, fmt.Errorf("failed to join path: %w", err)
@@ -42,7 +40,7 @@ func (c *Client) StartAggregate(ctx context.Context, r *dataranges.StartAggregat
 		return nil, fmt.Errorf("failed to start aggregate: %s: %s", resp.Status, string(body))
 	}
 
-	var respBody dataranges.StartAggregateResponse
+	var respBody StartAggregateResponse
 	err = json.NewDecoder(resp.Body).Decode(&respBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)

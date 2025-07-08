@@ -7,11 +7,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-
-	"github.com/draganm/datas3t/server/bucket"
 )
 
-func (c *Client) AddBucket(ctx context.Context, bucket *bucket.BucketInfo) error {
+func (c *Client) AddBucket(ctx context.Context, bucket *BucketInfo) error {
 	ur, err := url.JoinPath(c.baseURL, "api", "v1", "buckets")
 	if err != nil {
 		return fmt.Errorf("failed to join path: %w", err)

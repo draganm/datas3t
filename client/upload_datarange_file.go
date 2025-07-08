@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/draganm/datas3t/server/dataranges"
 	"github.com/draganm/datas3t/tarindex"
 	"golang.org/x/sync/errgroup"
 )
@@ -165,7 +164,7 @@ func (c *Client) UploadDataRangeFile(ctx context.Context, datas3tName string, fi
 
 	// Phase 3: Start upload
 	tracker.reportProgress(PhaseStarting, "Starting upload session", 0)
-	uploadReq := &dataranges.UploadDatarangeRequest{
+	uploadReq := &UploadDatarangeRequest{
 		Datas3tName:         datas3tName,
 		DataSize:            uint64(size),
 		NumberOfDatapoints:  uint64(tarInfo.NumDatapoints),
@@ -186,7 +185,7 @@ func (c *Client) UploadDataRangeFile(ctx context.Context, datas3tName string, fi
 		err = uploadDataDirectPut(ctx, uploadResp.PresignedDataPutURL, file, size, opts.MaxRetries, tracker)
 		if err != nil {
 			// Cancel upload on failure
-			cancelReq := &dataranges.CancelUploadRequest{
+			cancelReq := &CancelUploadRequest{
 				DatarangeUploadID: uploadResp.DatarangeID,
 			}
 			c.CancelDatarangeUpload(ctx, cancelReq) // Best effort, ignore error
@@ -197,7 +196,7 @@ func (c *Client) UploadDataRangeFile(ctx context.Context, datas3tName string, fi
 		uploadIDs, err = uploadDataMultipart(ctx, uploadResp.PresignedMultipartUploadPutURLs, file, size, opts, tracker)
 		if err != nil {
 			// Cancel upload on failure
-			cancelReq := &dataranges.CancelUploadRequest{
+			cancelReq := &CancelUploadRequest{
 				DatarangeUploadID: uploadResp.DatarangeID,
 			}
 			c.CancelDatarangeUpload(ctx, cancelReq) // Best effort, ignore error
@@ -211,7 +210,7 @@ func (c *Client) UploadDataRangeFile(ctx context.Context, datas3tName string, fi
 	err = uploadIndexWithRetry(ctx, uploadResp.PresignedIndexPutURL, indexData, opts.MaxRetries, tracker)
 	if err != nil {
 		// Cancel upload on failure
-		cancelReq := &dataranges.CancelUploadRequest{
+		cancelReq := &CancelUploadRequest{
 			DatarangeUploadID: uploadResp.DatarangeID,
 		}
 		c.CancelDatarangeUpload(ctx, cancelReq) // Best effort, ignore error
@@ -221,7 +220,7 @@ func (c *Client) UploadDataRangeFile(ctx context.Context, datas3tName string, fi
 
 	// Phase 6: Complete upload
 	tracker.reportProgress(PhaseCompleting, "Completing upload", 0)
-	completeReq := &dataranges.CompleteUploadRequest{
+	completeReq := &CompleteUploadRequest{
 		DatarangeUploadID: uploadResp.DatarangeID,
 		UploadIDs:         uploadIDs, // ETags for multipart, empty for direct PUT
 	}

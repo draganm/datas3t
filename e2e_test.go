@@ -20,7 +20,6 @@ import (
 	"github.com/RoaringBitmap/roaring/roaring64"
 	"github.com/draganm/datas3t"
 	datas3tclient "github.com/draganm/datas3t/client"
-	datas3tserver "github.com/draganm/datas3t/server/datas3t"
 	"github.com/draganm/datas3t/tarindex"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -1484,7 +1483,7 @@ var _ = Describe("End-to-End Server Test", func() {
 		Expect(datas3ts).To(HaveLen(2))
 
 		// Sort datas3ts by name for consistent testing
-		var dataset1, dataset2 *datas3tserver.Datas3tInfo
+		var dataset1, dataset2 *datas3tclient.Datas3tInfo
 		for i := range datas3ts {
 			if datas3ts[i].Datas3tName == "import-test-dataset-1" {
 				dataset1 = &datas3ts[i]

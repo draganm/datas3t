@@ -6,11 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-
-	"github.com/draganm/datas3t/server/bucket"
 )
 
-func (c *Client) ListBuckets(ctx context.Context) ([]*bucket.BucketListInfo, error) {
+func (c *Client) ListBuckets(ctx context.Context) ([]*BucketListInfo, error) {
 	ur, err := url.JoinPath(c.baseURL, "api", "v1", "buckets")
 	if err != nil {
 		return nil, fmt.Errorf("failed to join path: %w", err)
@@ -32,7 +30,7 @@ func (c *Client) ListBuckets(ctx context.Context) ([]*bucket.BucketListInfo, err
 		return nil, fmt.Errorf("failed to list buckets: %s", resp.Status)
 	}
 
-	var buckets []*bucket.BucketListInfo
+	var buckets []*BucketListInfo
 	err = json.NewDecoder(resp.Body).Decode(&buckets)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)

@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"io"
 	"iter"
-
-	"github.com/draganm/datas3t/server/download"
 )
 
 const (
@@ -20,7 +18,7 @@ const (
 func (c *Client) DatapointIterator(ctx context.Context, datas3tName string, firstDatapoint, lastDatapoint uint64) iter.Seq2[[]byte, error] {
 	return func(yield func([]byte, error) bool) {
 		// Get presigned download URLs for the datapoints
-		req := &download.PreSignDownloadForDatapointsRequest{
+		req := &PreSignDownloadForDatapointsRequest{
 			Datas3tName:    datas3tName,
 			FirstDatapoint: firstDatapoint,
 			LastDatapoint:  lastDatapoint,

@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/draganm/datas3t/client"
-	"github.com/draganm/datas3t/server/datas3t"
 	"github.com/urfave/cli/v2"
 )
 
@@ -36,14 +35,14 @@ func Command() *cli.Command {
 }
 
 func addDatas3tAction(c *cli.Context) error {
-	client := client.NewClient(c.String("server-url"))
+	clientInstance := client.NewClient(c.String("server-url"))
 
-	req := &datas3t.AddDatas3tRequest{
+	req := &client.AddDatas3tRequest{
 		Name:   c.String("name"),
 		Bucket: c.String("bucket"),
 	}
 
-	err := client.AddDatas3t(context.Background(), req)
+	err := clientInstance.AddDatas3t(context.Background(), req)
 	if err != nil {
 		return fmt.Errorf("failed to add datas3t: %w", err)
 	}

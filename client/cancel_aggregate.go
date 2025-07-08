@@ -8,11 +8,9 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-
-	"github.com/draganm/datas3t/server/dataranges"
 )
 
-func (c *Client) CancelAggregate(ctx context.Context, r *dataranges.CancelAggregateRequest) error {
+func (c *Client) CancelAggregate(ctx context.Context, r *CancelAggregateRequest) error {
 	ur, err := url.JoinPath(c.baseURL, "api", "v1", "aggregate", "cancel")
 	if err != nil {
 		return fmt.Errorf("failed to join path: %w", err)

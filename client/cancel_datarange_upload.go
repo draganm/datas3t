@@ -7,11 +7,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-
-	"github.com/draganm/datas3t/server/dataranges"
 )
 
-func (c *Client) CancelDatarangeUpload(ctx context.Context, r *dataranges.CancelUploadRequest) error {
+func (c *Client) CancelDatarangeUpload(ctx context.Context, r *CancelUploadRequest) error {
 	body, err := json.Marshal(r)
 	if err != nil {
 		return err
