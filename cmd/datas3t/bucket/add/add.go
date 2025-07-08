@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/draganm/datas3t/client"
-	"github.com/draganm/datas3t/server/bucket"
 	"github.com/urfave/cli/v2"
 )
 
@@ -51,9 +50,9 @@ func Command() *cli.Command {
 }
 
 func addBucketAction(c *cli.Context) error {
-	client := client.NewClient(c.String("server-url"))
+	clientInstance := client.NewClient(c.String("server-url"))
 
-	bucketInfo := &bucket.BucketInfo{
+	bucketInfo := &client.BucketInfo{
 		Name:      c.String("name"),
 		Endpoint:  c.String("endpoint"),
 		Bucket:    c.String("bucket"),
@@ -61,7 +60,7 @@ func addBucketAction(c *cli.Context) error {
 		SecretKey: c.String("secret-key"),
 	}
 
-	err := client.AddBucket(context.Background(), bucketInfo)
+	err := clientInstance.AddBucket(context.Background(), bucketInfo)
 	if err != nil {
 		return fmt.Errorf("failed to add bucket: %w", err)
 	}

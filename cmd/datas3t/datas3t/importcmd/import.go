@@ -7,7 +7,6 @@ import (
 	"os"
 
 	"github.com/draganm/datas3t/client"
-	"github.com/draganm/datas3t/server/datas3t"
 	"github.com/urfave/cli/v2"
 )
 
@@ -47,13 +46,13 @@ This is useful for importing data that was uploaded directly to S3 or for disast
 }
 
 func importDatas3tAction(c *cli.Context) error {
-	client := client.NewClient(c.String("server-url"))
+	clientInstance := client.NewClient(c.String("server-url"))
 
-	req := &datas3t.ImportDatas3tRequest{
+	req := &client.ImportDatas3tRequest{
 		BucketName: c.String("bucket"),
 	}
 
-	response, err := client.ImportDatas3t(context.Background(), req)
+	response, err := clientInstance.ImportDatas3t(context.Background(), req)
 	if err != nil {
 		return fmt.Errorf("failed to import datas3ts: %w", err)
 	}

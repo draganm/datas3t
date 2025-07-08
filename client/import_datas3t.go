@@ -7,11 +7,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-
-	"github.com/draganm/datas3t/server/datas3t"
 )
 
-func (c *Client) ImportDatas3t(ctx context.Context, req *datas3t.ImportDatas3tRequest) (*datas3t.ImportDatas3tResponse, error) {
+func (c *Client) ImportDatas3t(ctx context.Context, req *ImportDatas3tRequest) (*ImportDatas3tResponse, error) {
 	ur, err := url.JoinPath(c.baseURL, "api", "v1", "datas3ts", "import")
 	if err != nil {
 		return nil, fmt.Errorf("failed to join path: %w", err)
@@ -40,7 +38,7 @@ func (c *Client) ImportDatas3t(ctx context.Context, req *datas3t.ImportDatas3tRe
 		return nil, fmt.Errorf("failed to import datas3t: %s", resp.Status)
 	}
 
-	var response datas3t.ImportDatas3tResponse
+	var response ImportDatas3tResponse
 	err = json.NewDecoder(resp.Body).Decode(&response)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode import response: %w", err)

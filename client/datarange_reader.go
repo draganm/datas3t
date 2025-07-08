@@ -8,8 +8,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-
-	"github.com/draganm/datas3t/server/download"
 )
 
 type datarangeReader func(p []byte) (n int, err error)
@@ -18,7 +16,7 @@ func (dr datarangeReader) Read(p []byte) (n int, err error) {
 	return dr(p)
 }
 
-func newDatarangeReader(ctx context.Context, chunkSize uint64, segments []download.DownloadSegment) io.Reader {
+func newDatarangeReader(ctx context.Context, chunkSize uint64, segments []DownloadSegment) io.Reader {
 	remainingSegments := slices.Clone(segments)
 	readAheadBuffer := []byte{}
 

@@ -7,11 +7,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-
-	"github.com/draganm/datas3t/server/dataranges"
 )
 
-func (c *Client) CompleteDatarangeUpload(ctx context.Context, r *dataranges.CompleteUploadRequest) error {
+func (c *Client) CompleteDatarangeUpload(ctx context.Context, r *CompleteUploadRequest) error {
 	ur, err := url.JoinPath(c.baseURL, "api", "v1", "upload-datarange", "complete")
 	if err != nil {
 		return fmt.Errorf("failed to join path: %w", err)

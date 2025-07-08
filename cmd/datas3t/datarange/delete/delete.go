@@ -6,7 +6,6 @@ import (
 	"strconv"
 
 	"github.com/draganm/datas3t/client"
-	"github.com/draganm/datas3t/server/dataranges"
 	"github.com/urfave/cli/v2"
 )
 
@@ -67,7 +66,7 @@ func deleteDatarangeAction(c *cli.Context) error {
 	fmt.Printf("Deleting datarange %d-%d from datas3t '%s'...\n", firstDatapoint, lastDatapoint, datas3tName)
 
 	// Create delete request
-	deleteReq := &dataranges.DeleteDatarangeRequest{
+	deleteReq := &client.DeleteDatarangeRequest{
 		Datas3tName:       datas3tName,
 		FirstDatapointKey: firstDatapoint,
 		LastDatapointKey:  lastDatapoint,

@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/draganm/datas3t/server/download"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -83,7 +82,7 @@ func (c *Client) parseSegmentSize(rangeHeader string) (int64, error) {
 }
 
 // createChunksForSegments splits all segments into smaller chunks for parallel download
-func (c *Client) createChunksForSegments(segments []download.DownloadSegment, chunkSize int64) ([]downloadChunk, error) {
+func (c *Client) createChunksForSegments(segments []DownloadSegment, chunkSize int64) ([]downloadChunk, error) {
 	var chunks []downloadChunk
 	var currentFileOffset int64
 
@@ -141,7 +140,7 @@ func (c *Client) DownloadDatapointsTarWithOptions(ctx context.Context, datas3tNa
 	}
 
 	// 1. Get presigned download URLs for the datapoints
-	req := &download.PreSignDownloadForDatapointsRequest{
+	req := &PreSignDownloadForDatapointsRequest{
 		Datas3tName:    datas3tName,
 		FirstDatapoint: firstDatapoint,
 		LastDatapoint:  lastDatapoint,

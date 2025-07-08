@@ -7,11 +7,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-
-	"github.com/draganm/datas3t/server/dataranges"
 )
 
-func (c *Client) DeleteDatarange(ctx context.Context, r *dataranges.DeleteDatarangeRequest) error {
+func (c *Client) DeleteDatarange(ctx context.Context, r *DeleteDatarangeRequest) error {
 	body, err := json.Marshal(r)
 	if err != nil {
 		return err
