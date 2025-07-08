@@ -471,7 +471,82 @@ export ENCRYPTION_KEY="your-encryption-key"
 - Atomically replaces the original dataranges with the new aggregate
 - Validates that the datapoint range is fully covered by existing dataranges with no gaps
 
+#### Optimize Datarange Storage
+```bash
+./datas3t datarange optimize \
+  --datas3t my-dataset \
+  --dry-run \
+  --min-score 2.0 \
+  --target-size 2GB
+```
+
+**Options:**
+- `--datas3t` - Datas3t name (required)
+- `--dry-run` - Show optimization recommendations without executing them
+- `--daemon` - Run continuously, monitoring for optimization opportunities
+- `--interval` - Interval between optimization checks in daemon mode (default: 5m)
+- `--min-score` - Minimum AVS score required to perform aggregation (default: 1.0)
+- `--target-size` - Target size for aggregated files (default: 1GB)
+- `--max-aggregate-size` - Maximum size for aggregated files (default: 5GB)
+- `--max-operations` - Maximum number of aggregation operations per run (default: 10)
+- `--max-parallelism` - Maximum number of concurrent operations for each aggregation (default: 4)
+- `--max-retries` - Maximum number of retry attempts per operation (default: 3)
+
+**What it does:**
+- Analyzes existing dataranges to identify optimization opportunities
+- Uses an Aggregation Value Score (AVS) algorithm to prioritize operations
+- Automatically performs beneficial aggregations using the existing aggregate functionality
+- Supports both one-time optimization and continuous monitoring modes
+
+**Optimization Strategies:**
+- **Small file aggregation**: Combines many small files into larger ones
+- **Adjacent ID range aggregation**: Merges consecutive datapoint ranges
+- **Size bucket aggregation**: Groups similarly sized files together
+
+**Scoring Algorithm:**
+Each potential aggregation is scored based on:
+- **Objects reduced**: Fewer files to manage (reduces S3 object count)
+- **Size efficiency**: How close the result is to the target size
+- **Consecutive bonus**: Bonus for adjacent datapoint ranges
+- **Operation cost**: Download/upload overhead consideration
+
 **Example Usage:**
+```bash
+# One-time optimization with dry-run to see recommendations
+./datas3t datarange optimize \
+  --datas3t my-dataset \
+  --dry-run
+
+# Execute optimization with custom thresholds
+./datas3t datarange optimize \
+  --datas3t my-dataset \
+  --min-score 2.0 \
+  --target-size 2GB \
+  --max-operations 5
+
+# Continuous monitoring mode
+./datas3t datarange optimize \
+  --datas3t my-dataset \
+  --daemon \
+  --interval 5m
+
+# Show all available optimization opportunities
+./datas3t datarange optimize \
+  --datas3t my-dataset \
+  --dry-run \
+  --min-score 0.5 \
+  --max-operations 20
+```
+
+**Benefits:**
+- **Intelligent optimization**: Automatically identifies the best aggregation opportunities
+- **Cost reduction**: Reduces S3 object count and storage costs
+- **Performance improvement**: Fewer, larger files improve download performance
+- **Hands-off operation**: Can run continuously to maintain optimal storage layout
+- **Safe operations**: Uses existing battle-tested aggregation system
+- **Flexible configuration**: Customizable thresholds and strategies
+
+#### Manual Aggregation Example
 ```bash
 # Example: You have uploaded multiple small TAR files and want to consolidate them
 # First, check your current dataranges
@@ -536,13 +611,23 @@ export ENCRYPTION_KEY="generated-key-here"
   --last-datapoint 200 \
   --output ./images-100-200.tar
 
-# 9. Aggregate small dataranges for better efficiency
+# 9. Optimize datarange storage automatically
+./datas3t datarange optimize \
+  --datas3t image-dataset \
+  --dry-run
+
+# 10. Execute optimization
+./datas3t datarange optimize \
+  --datas3t image-dataset \
+  --min-score 2.0
+
+# 11. Or aggregate specific ranges manually
 ./datas3t datarange aggregate \
   --datas3t image-dataset \
   --first-datapoint 1 \
   --last-datapoint 10000
 
-# 10. Check results after aggregation
+# 12. Check results after optimization/aggregation
 ./datas3t datas3t list
 ```
 

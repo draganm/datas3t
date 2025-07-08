@@ -1049,6 +1049,56 @@ func (q *Queries) ListAllBuckets(ctx context.Context) ([]ListAllBucketsRow, erro
 	return items, nil
 }
 
+const listDatarangesForDatas3t = `-- name: ListDatarangesForDatas3t :many
+SELECT 
+    dr.id,
+    dr.data_object_key,
+    dr.index_object_key,
+    dr.min_datapoint_key,
+    dr.max_datapoint_key,
+    dr.size_bytes
+FROM dataranges dr
+JOIN datas3ts d ON dr.datas3t_id = d.id
+WHERE d.name = $1
+ORDER BY dr.min_datapoint_key
+`
+
+type ListDatarangesForDatas3tRow struct {
+	ID              int64
+	DataObjectKey   string
+	IndexObjectKey  string
+	MinDatapointKey int64
+	MaxDatapointKey int64
+	SizeBytes       int64
+}
+
+func (q *Queries) ListDatarangesForDatas3t(ctx context.Context, name string) ([]ListDatarangesForDatas3tRow, error) {
+	rows, err := q.db.Query(ctx, listDatarangesForDatas3t, name)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDatarangesForDatas3tRow
+	for rows.Next() {
+		var i ListDatarangesForDatas3tRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DataObjectKey,
+			&i.IndexObjectKey,
+			&i.MinDatapointKey,
+			&i.MaxDatapointKey,
+			&i.SizeBytes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDatas3ts = `-- name: ListDatas3ts :many
 SELECT 
     d.name as datas3t_name,

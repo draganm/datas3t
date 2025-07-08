@@ -87,6 +87,15 @@ type DatarangeDownloadURL struct {
 	PresignedIndexURL string `json:"presigned_index_url"`
 }
 
+type DatarangeInfo struct {
+	DatarangeID     int64  `json:"datarange_id"`
+	DataObjectKey   string `json:"data_object_key"`
+	IndexObjectKey  string `json:"index_object_key"`
+	MinDatapointKey int64  `json:"min_datapoint_key"`
+	MaxDatapointKey int64  `json:"max_datapoint_key"`
+	SizeBytes       int64  `json:"size_bytes"`
+}
+
 type CompleteAggregateRequest struct {
 	AggregateUploadID int64    `json:"aggregate_upload_id"`
 	UploadIDs         []string `json:"upload_ids,omitempty"` // For multipart uploads
@@ -100,6 +109,14 @@ type DeleteDatarangeRequest struct {
 	Datas3tName       string `json:"datas3t_name"`
 	FirstDatapointKey uint64 `json:"first_datapoint_key"`
 	LastDatapointKey  uint64 `json:"last_datapoint_key"`
+}
+
+type ListDatarangesRequest struct {
+	Datas3tName string `json:"datas3t_name"`
+}
+
+type ListDatarangesResponse struct {
+	Dataranges []DatarangeInfo `json:"dataranges"`
 }
 
 // Datas3t-related types (from server/datas3t)
@@ -249,6 +266,15 @@ func (r *DeleteDatarangeRequest) Validate() error {
 
 	if r.FirstDatapointKey > r.LastDatapointKey {
 		return ValidationError(fmt.Errorf("first datapoint key (%d) cannot be greater than last datapoint key (%d)", r.FirstDatapointKey, r.LastDatapointKey))
+	}
+
+	return nil
+}
+
+// Validate validates the ListDatarangesRequest struct
+func (r *ListDatarangesRequest) Validate() error {
+	if r.Datas3tName == "" {
+		return ValidationError(fmt.Errorf("datas3t name is required"))
 	}
 
 	return nil
