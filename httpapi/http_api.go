@@ -28,6 +28,7 @@ func NewHTTPAPI(s *server.Server, log *slog.Logger) *http.ServeMux {
 	mux.HandleFunc("POST /api/v1/aggregate/complete", a.completeAggregate)
 	mux.HandleFunc("POST /api/v1/aggregate/cancel", a.cancelAggregate)
 	mux.HandleFunc("POST /api/v1/datarange/delete", a.deleteDatarange)
+	mux.HandleFunc("GET /api/v1/dataranges", a.listDataranges)
 	mux.HandleFunc("POST /api/v1/download", a.presignDownloadForDatapoints)
 	mux.HandleFunc("GET /api/v1/datapoints-bitmap", a.getDatapointsBitmap)
 	return mux

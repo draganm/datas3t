@@ -211,6 +211,19 @@ FROM dataranges dr
 JOIN datas3ts d ON dr.datas3t_id = d.id
 WHERE d.name = $1;
 
+-- name: ListDatarangesForDatas3t :many
+SELECT 
+    dr.id,
+    dr.data_object_key,
+    dr.index_object_key,
+    dr.min_datapoint_key,
+    dr.max_datapoint_key,
+    dr.size_bytes
+FROM dataranges dr
+JOIN datas3ts d ON dr.datas3t_id = d.id
+WHERE d.name = $1
+ORDER BY dr.min_datapoint_key;
+
 -- name: CheckFullDatarangeCoverage :one
 -- Check if a datapoint range is fully covered by existing dataranges with no gaps
 -- Returns true if the range is fully covered by at least two dataranges
