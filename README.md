@@ -449,7 +449,7 @@ export ENCRYPTION_KEY="your-encryption-key"
 
 #### Aggregate Multiple Dataranges
 ```bash
-./datas3t aggregate \
+./datas3t datarange aggregate \
   --datas3t my-dataset \
   --first-datapoint 1 \
   --last-datapoint 5000 \
@@ -478,7 +478,7 @@ export ENCRYPTION_KEY="your-encryption-key"
 ./datas3t datas3t list
 
 # Aggregate the first 10,000 datapoints into a single larger datarange
-./datas3t aggregate \
+./datas3t datarange aggregate \
   --datas3t my-dataset \
   --first-datapoint 1 \
   --last-datapoint 10000 \
@@ -537,7 +537,7 @@ export ENCRYPTION_KEY="generated-key-here"
   --output ./images-100-200.tar
 
 # 9. Aggregate small dataranges for better efficiency
-./datas3t aggregate \
+./datas3t datarange aggregate \
   --datas3t image-dataset \
   --first-datapoint 1 \
   --last-datapoint 10000

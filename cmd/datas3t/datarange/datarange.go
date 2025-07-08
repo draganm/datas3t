@@ -1,6 +1,7 @@
 package datarange
 
 import (
+	"github.com/draganm/datas3t/cmd/datas3t/datarange/aggregate"
 	"github.com/draganm/datas3t/cmd/datas3t/datarange/delete"
 	"github.com/draganm/datas3t/cmd/datas3t/datarange/downloadtar"
 	"github.com/draganm/datas3t/cmd/datas3t/datarange/uploadtar"
@@ -15,6 +16,7 @@ func Command() *cli.Command {
 			uploadtar.Command(),
 			downloadtar.Command(),
 			delete.Command(),
+			aggregate.Command(),
 		},
 	}
 }
