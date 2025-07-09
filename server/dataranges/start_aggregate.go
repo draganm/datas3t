@@ -159,6 +159,20 @@ func (s *UploadDatarangeServer) StartAggregate(ctx context.Context, log *slog.Lo
 	for _, dr := range sourceDataranges {
 		estimatedDataSize += dr.SizeBytes
 	}
+	
+	// Account for TAR trailer removal during aggregation
+	// Each TAR file has a 1KB trailer (two 512-byte zero blocks)
+	// When aggregating, all but the last trailer are removed
+	const TarTrailerSize = 1024 // 2 * 512 bytes
+	if len(sourceDataranges) > 1 {
+		trailersRemoved := len(sourceDataranges) - 1
+		estimatedDataSize -= int64(trailersRemoved * TarTrailerSize)
+		
+		// Ensure we don't go negative (shouldn't happen in practice)
+		if estimatedDataSize < 0 {
+			estimatedDataSize = 0
+		}
+	}
 
 	// Determine upload method based on estimated data size
 	useDirectPut := uint64(estimatedDataSize) < MinPartSize

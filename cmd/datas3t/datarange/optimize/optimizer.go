@@ -193,7 +193,18 @@ func (ao *AggregationOptimizer) calculateSizeFactor(totalSize int64) float64 {
 	if ratio <= 0 {
 		return 0.1
 	}
-	return math.Log2(ratio)
+	
+	// For small files (ratio < 1), we want to encourage aggregation
+	// For files approaching target size (ratio ~= 1), we want maximum benefit
+	// For files much larger than target (ratio > 1), we want to discourage
+	if ratio < 1.0 {
+		// Small files get progressively better scores as they approach target size
+		// This ensures small files are still attractive for aggregation
+		return 0.5 + (ratio * 0.5) // Range: 0.5 to 1.0
+	} else {
+		// Use log2 for files at or above target size
+		return math.Log2(ratio)
+	}
 }
 
 // calculateConsecutiveBonus calculates bonus for consecutive ID ranges
