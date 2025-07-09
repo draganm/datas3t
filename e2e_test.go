@@ -2008,4 +2008,195 @@ var _ = Describe("End-to-End Server Test", func() {
 			"duplicate_prevention_verified", true)
 	})
 
+	It("should complete full clear datas3t workflow using CLI", func(ctx SpecContext) {
+		// Step 1: Add bucket configuration using CLI
+		logger.Info("Step 1: Adding bucket configuration for clear test")
+		err := runCLICommand(cliPath, "bucket", "add",
+			"--name", testBucketConfigName,
+			"--endpoint", "http://"+minioEndpoint,
+			"--bucket", testBucketName,
+			"--access-key", minioAccessKey,
+			"--secret-key", minioSecretKey,
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Step 2: Add datas3t using CLI
+		logger.Info("Step 2: Adding datas3t for clear test")
+		err = runCLICommand(cliPath, "datas3t", "add",
+			"--name", testDatas3tName,
+			"--bucket", testBucketConfigName,
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Step 3: Upload multiple dataranges
+		logger.Info("Step 3: Uploading multiple dataranges for clear test")
+		
+		// Create 3 dataranges for testing
+		datarangeInfo := []struct {
+			startIndex int64
+			numFiles   int
+			filename   string
+		}{
+			{0, 1000, "clear_test1.tar"},      // 0-999
+			{1000, 1000, "clear_test2.tar"},  // 1000-1999
+			{2000, 1000, "clear_test3.tar"},  // 2000-2999
+		}
+
+		for i, info := range datarangeInfo {
+			logger.Info("Creating and uploading datarange for clear test", "index", i+1, "start", info.startIndex, "count", info.numFiles)
+
+			testData, _ := createTestTarWithIndex(info.numFiles, info.startIndex)
+			tarFile := filepath.Join(tempDir, info.filename)
+			err = os.WriteFile(tarFile, testData, 0644)
+			Expect(err).NotTo(HaveOccurred())
+
+			err = runCLICommand(cliPath, "datarange", "upload-tar",
+				"--datas3t", testDatas3tName,
+				"--file", tarFile,
+			)
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		// Step 4: Verify initial state before clear
+		logger.Info("Step 4: Verifying initial state before clear")
+		client := datas3tclient.NewClient(serverBaseURL)
+		
+		initialBitmap, err := client.GetDatapointsBitmap(ctx, testDatas3tName)
+		Expect(err).NotTo(HaveOccurred())
+		expectedDatapoints := uint64(3000) // 1000 * 3
+		Expect(initialBitmap.GetCardinality()).To(Equal(expectedDatapoints))
+
+		// Verify specific datapoints exist
+		for i := uint64(0); i < 100; i++ {
+			Expect(initialBitmap.Contains(i)).To(BeTrue(), "Datapoint %d should exist before clear", i)
+		}
+		for i := uint64(1000); i < 1100; i++ {
+			Expect(initialBitmap.Contains(i)).To(BeTrue(), "Datapoint %d should exist before clear", i)
+		}
+		for i := uint64(2000); i < 2100; i++ {
+			Expect(initialBitmap.Contains(i)).To(BeTrue(), "Datapoint %d should exist before clear", i)
+		}
+
+		// Step 5: Test clear operation using CLI with force flag
+		logger.Info("Step 5: Testing clear operation using CLI")
+		
+		err = runCLICommand(cliPath, "datas3t", "clear",
+			"--name", testDatas3tName,
+			"--force",
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Step 6: Verify datas3t still exists but has no dataranges
+		logger.Info("Step 6: Verifying datas3t state after clear")
+		
+		// Check that datas3t still exists
+		datas3ts, err := client.ListDatas3ts(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		
+		found := false
+		for _, d := range datas3ts {
+			if d.Datas3tName == testDatas3tName {
+				found = true
+				Expect(d.DatarangeCount).To(Equal(int64(0)), "Datas3t should have 0 dataranges after clear")
+				Expect(d.TotalDatapoints).To(Equal(int64(0)), "Datas3t should have 0 total datapoints after clear")
+				break
+			}
+		}
+		Expect(found).To(BeTrue(), "Datas3t should still exist after clear operation")
+
+		// Step 7: Verify bitmap is empty
+		logger.Info("Step 7: Verifying bitmap is empty after clear")
+		
+		clearedBitmap, err := client.GetDatapointsBitmap(ctx, testDatas3tName)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(clearedBitmap.GetCardinality()).To(Equal(uint64(0)), "Bitmap should be empty after clear")
+
+		// Verify previously existing datapoints are now gone
+		for i := uint64(0); i < 100; i++ {
+			Expect(clearedBitmap.Contains(i)).To(BeFalse(), "Datapoint %d should NOT exist after clear", i)
+		}
+
+		// Step 8: Test DatapointIterator returns no data
+		logger.Info("Step 8: Testing DatapointIterator returns no data after clear")
+		
+		datapointCount := 0
+		for content, err := range client.DatapointIterator(ctx, testDatas3tName, 0, 100) {
+			if err != nil {
+				logger.Error("DatapointIterator error after clear", "error", err)
+				Expect(err).NotTo(HaveOccurred())
+			}
+			datapointCount++
+			_ = content // Suppress unused variable warning
+		}
+		Expect(datapointCount).To(Equal(0), "DatapointIterator should return no datapoints after clear")
+
+		// Step 9: Test that new data can be uploaded after clear
+		logger.Info("Step 9: Testing new data upload after clear")
+		
+		newTestData, _ := createTestTarWithIndex(500, 5000) // 5000-5499
+		newTarFile := filepath.Join(tempDir, "after_clear.tar")
+		err = os.WriteFile(newTarFile, newTestData, 0644)
+		Expect(err).NotTo(HaveOccurred())
+
+		err = runCLICommand(cliPath, "datarange", "upload-tar",
+			"--datas3t", testDatas3tName,
+			"--file", newTarFile,
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Step 10: Verify new data is accessible
+		logger.Info("Step 10: Verifying new data is accessible after clear")
+		
+		newBitmap, err := client.GetDatapointsBitmap(ctx, testDatas3tName)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(newBitmap.GetCardinality()).To(Equal(uint64(500)), "Should have 500 datapoints after new upload")
+
+		// Verify specific new datapoints exist
+		for i := uint64(5000); i < 5100; i++ {
+			Expect(newBitmap.Contains(i)).To(BeTrue(), "New datapoint %d should exist after upload", i)
+		}
+
+		// Verify old datapoints still don't exist
+		for i := uint64(0); i < 100; i++ {
+			Expect(newBitmap.Contains(i)).To(BeFalse(), "Old datapoint %d should still NOT exist", i)
+		}
+
+		// Step 11: Test download of new data
+		logger.Info("Step 11: Testing download of new data after clear")
+		
+		newDownloadTarPath := filepath.Join(tempDir, "new_data_download.tar")
+		err = runCLICommand(cliPath, "datarange", "download-tar",
+			"--datas3t", testDatas3tName,
+			"--first-datapoint", "5000",
+			"--last-datapoint", "5099",
+			"--output", newDownloadTarPath,
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Validate downloaded data
+		newDownloadData, err := os.ReadFile(newDownloadTarPath)
+		Expect(err).NotTo(HaveOccurred())
+
+		err = validateTarArchive(newDownloadData)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Step 12: Test error cases
+		logger.Info("Step 12: Testing error cases for clear operation")
+		
+		// Test clearing non-existent datas3t
+		err = runCLICommand(cliPath, "datas3t", "clear",
+			"--name", "non-existent-datas3t",
+			"--force",
+		)
+		Expect(err).To(HaveOccurred())
+
+		logger.Info("Clear datas3t workflow completed successfully",
+			"initial_datapoints", expectedDatapoints,
+			"dataranges_cleared", 3,
+			"new_datapoints_uploaded", 500,
+			"datas3t_still_exists", true,
+			"clear_operation_verified", true,
+			"new_upload_after_clear_verified", true)
+	})
+
 })

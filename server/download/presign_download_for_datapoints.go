@@ -48,6 +48,39 @@ func (s *DownloadServer) PreSignDownloadForDatapoints(ctx context.Context, log *
 	}
 
 	if len(dataranges) == 0 {
+		// Check if the datas3t exists to provide a better error message
+		allDatas3ts, err := queries.AllDatas3ts(ctx)
+		if err != nil {
+			return PreSignDownloadForDatapointsResponse{}, fmt.Errorf("failed to check if datas3t exists: %w", err)
+		}
+		
+		// Check if the datas3t exists
+		datas3tExists := false
+		for _, name := range allDatas3ts {
+			if name == request.Datas3tName {
+				datas3tExists = true
+				break
+			}
+		}
+		
+		if !datas3tExists {
+			return PreSignDownloadForDatapointsResponse{}, fmt.Errorf("no dataranges found for datapoints %d-%d in datas3t %s", request.FirstDatapoint, request.LastDatapoint, request.Datas3tName)
+		}
+		
+		// Datas3t exists but no dataranges found - check if datas3t has ANY dataranges
+		allDataranges, err := queries.GetDatarangesForDatas3t(ctx, request.Datas3tName)
+		if err != nil {
+			return PreSignDownloadForDatapointsResponse{}, fmt.Errorf("failed to check datas3t dataranges: %w", err)
+		}
+		
+		if len(allDataranges) == 0 {
+			// Datas3t exists but is completely empty - return empty response for graceful handling
+			return PreSignDownloadForDatapointsResponse{
+				DownloadSegments: []DownloadSegment{},
+			}, nil
+		}
+		
+		// Datas3t has dataranges but none overlap with the requested range
 		return PreSignDownloadForDatapointsResponse{}, fmt.Errorf("no dataranges found for datapoints %d-%d in datas3t %s", request.FirstDatapoint, request.LastDatapoint, request.Datas3tName)
 	}
 

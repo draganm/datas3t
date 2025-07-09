@@ -135,6 +135,15 @@ type ImportDatas3tResponse struct {
 	ImportedCount    int      `json:"imported_count"`
 }
 
+type ClearDatas3tRequest struct {
+	Name string `json:"name"`
+}
+
+type ClearDatas3tResponse struct {
+	DatarangesDeleted int `json:"dataranges_deleted"`
+	ObjectsScheduled  int `json:"objects_scheduled"`
+}
+
 type Datas3tInfo struct {
 	Datas3tName      string `json:"datas3t_name"`
 	BucketName       string `json:"bucket_name"`
@@ -210,6 +219,19 @@ func (r *AddDatas3tRequest) Validate() error {
 func (r *ImportDatas3tRequest) Validate() error {
 	if r.BucketName == "" {
 		return ValidationError(fmt.Errorf("bucket name is required"))
+	}
+
+	return nil
+}
+
+// Validate validates the ClearDatas3tRequest struct
+func (r *ClearDatas3tRequest) Validate() error {
+	if r.Name == "" {
+		return ValidationError(fmt.Errorf("name is required"))
+	}
+
+	if !datas3tNameRegex.MatchString(r.Name) {
+		return ValidationError(fmt.Errorf("invalid datas3t name: %s", r.Name))
 	}
 
 	return nil

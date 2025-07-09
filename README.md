@@ -222,7 +222,18 @@ curl -X POST http://localhost:8765/api/v1/datas3ts/import \
   }'
 ```
 
-### 6. Aggregate Dataranges
+### 6. Clear Datas3t
+
+```bash
+# Clear all dataranges from a datas3t
+curl -X POST http://localhost:8765/api/v1/datas3ts/clear \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "my-datas3t"
+  }'
+```
+
+### 7. Aggregate Dataranges
 
 ```bash
 # Start aggregation
@@ -285,6 +296,16 @@ datas3ts, err := c.ListDatas3ts(context.Background())
         panic(err)
     }
     fmt.Printf("Imported %d datas3ts: %v\n", importResponse.ImportedCount, importResponse.ImportedDatas3ts)
+    
+    // Clear all dataranges from a datas3t
+    clearResponse, err := c.ClearDatas3t(context.Background(), &client.ClearDatas3tRequest{
+        Name: "my-datas3t",
+    })
+    if err != nil {
+        panic(err)
+    }
+    fmt.Printf("Cleared datas3t: deleted %d dataranges, scheduled %d objects for deletion\n", 
+        clearResponse.DatarangesDeleted, clearResponse.ObjectsScheduled)
     
     // Aggregate multiple dataranges into a single larger one
     err = c.AggregateDataRanges(context.Background(), "my-datas3t", 1, 5000, &client.AggregateOptions{
@@ -407,6 +428,29 @@ export ENCRYPTION_KEY="your-encryption-key"
 **Options:**
 - `--bucket` - Bucket configuration name to scan for existing datas3ts (required)
 - `--json` - Output results as JSON
+
+#### Clear Datas3t
+```bash
+# Clear all dataranges from a datas3t (with confirmation prompt)
+./datas3t datas3t clear \
+  --name my-dataset
+
+# Clear without confirmation prompt
+./datas3t datas3t clear \
+  --name my-dataset \
+  --force
+```
+
+**Options:**
+- `--name` - Datas3t name to clear (required)
+- `--force` - Skip confirmation prompt
+
+**What it does:**
+- Removes all dataranges from the specified datas3t
+- Schedules all associated S3 objects (TAR files and indices) for deletion
+- Keeps the datas3t record itself (allows future uploads)
+- The datas3t remains in the database with zero dataranges and datapoints
+- S3 objects are deleted by the background worker within 24 hours
 
 ### Datarange Operations
 
@@ -628,7 +672,12 @@ export ENCRYPTION_KEY="generated-key-here"
   --first-datapoint 1 \
   --last-datapoint 10000
 
-# 12. Check results after optimization/aggregation
+# 12. Clear all data from a datas3t (keeping the datas3t record)
+./datas3t datas3t clear \
+  --name image-dataset \
+  --force
+
+# 13. Check results after optimization/aggregation/clear
 ./datas3t datas3t list
 ```
 
