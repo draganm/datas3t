@@ -451,16 +451,16 @@ var _ = Describe("PresignDownloadForDatapoints", func() {
 	})
 
 	Context("when datas3t has no dataranges", func() {
-		It("should return error for empty datas3t", func(ctx SpecContext) {
+		It("should return empty segments for empty datas3t", func(ctx SpecContext) {
 			req := download.PreSignDownloadForDatapointsRequest{
 				Datas3tName:    testDatas3tName,
 				FirstDatapoint: 0,
 				LastDatapoint:  10,
 			}
 
-			_, err := downloadSrv.PreSignDownloadForDatapoints(ctx, logger, req)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("no dataranges found"))
+			resp, err := downloadSrv.PreSignDownloadForDatapoints(ctx, logger, req)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.DownloadSegments).To(HaveLen(0))
 		})
 	})
 

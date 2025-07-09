@@ -238,6 +238,60 @@ func (q *Queries) CheckFullDatarangeCoverage(ctx context.Context, arg CheckFullD
 	return is_fully_covered, err
 }
 
+const clearDatas3tDataranges = `-- name: ClearDatas3tDataranges :many
+SELECT 
+    dr.id,
+    dr.data_object_key,
+    dr.index_object_key,
+    s.endpoint,
+    s.bucket,
+    s.access_key,
+    s.secret_key
+FROM dataranges dr
+JOIN datas3ts d ON dr.datas3t_id = d.id
+JOIN s3_buckets s ON d.s3_bucket_id = s.id
+WHERE d.name = $1
+ORDER BY dr.min_datapoint_key
+`
+
+type ClearDatas3tDatarangesRow struct {
+	ID             int64
+	DataObjectKey  string
+	IndexObjectKey string
+	Endpoint       string
+	Bucket         string
+	AccessKey      string
+	SecretKey      string
+}
+
+func (q *Queries) ClearDatas3tDataranges(ctx context.Context, name string) ([]ClearDatas3tDatarangesRow, error) {
+	rows, err := q.db.Query(ctx, clearDatas3tDataranges, name)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ClearDatas3tDatarangesRow
+	for rows.Next() {
+		var i ClearDatas3tDatarangesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DataObjectKey,
+			&i.IndexObjectKey,
+			&i.Endpoint,
+			&i.Bucket,
+			&i.AccessKey,
+			&i.SecretKey,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const countDatarangeUploads = `-- name: CountDatarangeUploads :one
 SELECT count(*)
 FROM datarange_uploads

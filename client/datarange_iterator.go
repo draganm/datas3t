@@ -31,7 +31,7 @@ func (c *Client) DatapointIterator(ctx context.Context, datas3tName string, firs
 		}
 
 		if len(resp.DownloadSegments) == 0 {
-			yield(nil, fmt.Errorf("no download segments available for datapoints %d-%d in datas3t %s", firstDatapoint, lastDatapoint, datas3tName))
+			// No download segments means empty datas3t - complete normally without yielding anything
 			return
 		}
 
