@@ -60,7 +60,7 @@ func (s *UploadDatarangeServer) CompleteAggregate(ctx context.Context, log *slog
 	if err != nil {
 		return fmt.Errorf("failed to get actual uploaded size: %w", err)
 	}
-	
+
 	return s.handleAggregateSuccessInTransaction(ctx, queries, req.AggregateUploadID, actualSize)
 }
 
@@ -123,7 +123,7 @@ func (s *UploadDatarangeServer) performAggregateS3Operations(ctx context.Context
 	if headResp.ContentLength == nil {
 		return fmt.Errorf("uploaded object has no size information")
 	}
-	
+
 	actualUploadedSize := aws.ToInt64(headResp.ContentLength)
 	if actualUploadedSize <= 0 {
 		return fmt.Errorf("uploaded object has invalid size: %d", actualUploadedSize)
@@ -151,7 +151,7 @@ func (s *UploadDatarangeServer) getActualUploadedSize(ctx context.Context, s3Cli
 	if headResp.ContentLength == nil {
 		return 0, fmt.Errorf("uploaded object has no size information")
 	}
-	
+
 	actualUploadedSize := aws.ToInt64(headResp.ContentLength)
 	if actualUploadedSize <= 0 {
 		return 0, fmt.Errorf("uploaded object has invalid size: %d", actualUploadedSize)
@@ -178,6 +178,12 @@ func (s *UploadDatarangeServer) handleAggregateSuccessInTransaction(ctx context.
 		return fmt.Errorf("failed to get upload details: %w", err)
 	}
 
+	// Schedule the original dataranges for deletion
+	err = s.scheduleOriginalDatarangesForDeletion(ctx, txQueries, uploadDetails)
+	if err != nil {
+		return fmt.Errorf("failed to schedule original dataranges for deletion: %w", err)
+	}
+
 	// Create the new aggregate datarange record using actual uploaded size
 	_, err = txQueries.CreateDatarange(ctx, postgresstore.CreateDatarangeParams{
 		Datas3tID:       uploadDetails.Datas3tID,
@@ -189,12 +195,6 @@ func (s *UploadDatarangeServer) handleAggregateSuccessInTransaction(ctx context.
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create aggregate datarange: %w", err)
-	}
-
-	// Schedule the original dataranges for deletion
-	err = s.scheduleOriginalDatarangesForDeletion(ctx, txQueries, uploadDetails)
-	if err != nil {
-		return fmt.Errorf("failed to schedule original dataranges for deletion: %w", err)
 	}
 
 	// Delete the original dataranges from the database
@@ -238,7 +238,7 @@ func (s *UploadDatarangeServer) handleAggregateFailureInTransaction(ctx context.
 		Bucket: aws.String(uploadDetails.Bucket),
 		Key:    aws.String(uploadDetails.DataObjectKey),
 	}, func(opts *s3.PresignOptions) {
-		opts.Expires = 24 * time.Hour
+		opts.Expires = 7 * 24 * time.Hour
 	})
 	if err != nil {
 		return fmt.Errorf("failed to presign data object delete: %w", err)
@@ -249,7 +249,7 @@ func (s *UploadDatarangeServer) handleAggregateFailureInTransaction(ctx context.
 		Bucket: aws.String(uploadDetails.Bucket),
 		Key:    aws.String(uploadDetails.IndexObjectKey),
 	}, func(opts *s3.PresignOptions) {
-		opts.Expires = 24 * time.Hour
+		opts.Expires = 7 * 24 * time.Hour
 	})
 	if err != nil {
 		return fmt.Errorf("failed to presign index object delete: %w", err)
