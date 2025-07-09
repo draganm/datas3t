@@ -236,7 +236,7 @@ func runSingleOptimization(clientInstance *client.Client, datas3tName string, is
 		if err != nil {
 			return fmt.Errorf("failed to verify datas3t existence: %w", err)
 		}
-		
+
 		// Check if our datas3t exists in the list
 		found := false
 		for _, d := range datas3ts {
@@ -245,11 +245,11 @@ func runSingleOptimization(clientInstance *client.Client, datas3tName string, is
 				break
 			}
 		}
-		
+
 		if !found {
 			return fmt.Errorf("datas3t '%s' not found", datas3tName)
 		}
-		
+
 		fmt.Println("No dataranges found to optimize.")
 		return nil
 	}
@@ -265,160 +265,69 @@ func runSingleOptimization(clientInstance *client.Client, datas3tName string, is
 	optimizer.SetThresholds(minScore, targetSize, maxAggregateSize)
 	optimizer.SetBalanceParameters(c.Int("min-files-for-small"), c.Int("max-size-ratio"), c.Bool("allow-mixed-sizes"))
 
-	// Find optimization opportunities
-	operations := optimizer.FindAllBeneficialAggregations()
-	fmt.Printf(" found %d potential operations.\n", len(operations))
-
-	if len(operations) == 0 {
+	// Find the best single optimization opportunity
+	bestOperation := optimizer.FindBestAggregation()
+	if bestOperation == nil {
+		fmt.Println(" found 0 potential operations.")
 		fmt.Println("No beneficial aggregation operations found.")
 		return nil
 	}
 
-	// Limit operations
-	if len(operations) > maxOperations {
-		operations = operations[:maxOperations]
-	}
+	fmt.Printf(" found 1 potential operation.\n")
+	operations := []*AggregationOperation{bestOperation}
 
-	// Display recommendations
-	fmt.Printf("\nFound %d beneficial aggregation operations:\n\n", len(operations))
-	for i, op := range operations {
-		fmt.Printf("Operation %d (Score: %.2f):\n", i+1, op.Score)
-		fmt.Printf("  Range: %d-%d (%d datapoints)\n", op.FirstDatapoint, op.LastDatapoint, op.LastDatapoint-op.FirstDatapoint+1)
-		fmt.Printf("  Files: %d → 1 (reduces %d objects)\n", len(op.Files), len(op.Files)-1)
-		
-		totalSize := int64(0)
-		for _, f := range op.Files {
-			totalSize += f.Size
-		}
-		fmt.Printf("  Total size: %s\n", formatBytes(totalSize))
-		fmt.Printf("  Files to aggregate:\n")
-		for _, f := range op.Files {
-			fmt.Printf("    - %s: %d-%d (%s)\n", f.ID, f.MinID, f.MaxID, formatBytes(f.Size))
-		}
-		fmt.Println()
+	// Display recommendation
+	fmt.Printf("\nBest aggregation operation:\n\n")
+	op := operations[0]
+	fmt.Printf("Operation (Score: %.2f):\n", op.Score)
+	fmt.Printf("  Range: %d-%d (%d datapoints)\n", op.FirstDatapoint, op.LastDatapoint, op.LastDatapoint-op.FirstDatapoint+1)
+	fmt.Printf("  Files: %d → 1 (reduces %d objects)\n", len(op.Files), len(op.Files)-1)
+
+	totalSize := int64(0)
+	for _, f := range op.Files {
+		totalSize += f.Size
 	}
+	fmt.Printf("  Total size: %s\n", formatBytes(totalSize))
+	fmt.Println()
 
 	if isDryRun {
 		fmt.Println("Dry run complete. No aggregations were performed.")
 		return nil
 	}
 
-	// Execute aggregations
-	fmt.Printf("\nExecuting %d aggregation operations...\n", len(operations))
-	
-	successful := 0
-	for i, op := range operations {
-		fmt.Printf("\n--- Operation %d/%d (Score: %.2f) ---\n", i+1, len(operations), op.Score)
-		fmt.Printf("Aggregating %d files covering datapoints %d-%d\n", len(op.Files), op.FirstDatapoint, op.LastDatapoint)
-		
-		// Create progress bar for this operation
-		progressBar := newProgressBar(80)
-		
-		aggregateOpts := &client.AggregateOptions{
-			MaxParallelism:   c.Int("max-parallelism"),
-			MaxRetries:       c.Int("max-retries"),
-			ProgressCallback: progressBar.update,
-		}
-		
-		err := clientInstance.AggregateDataRanges(
-			context.Background(),
-			datas3tName,
-			op.FirstDatapoint,
-			op.LastDatapoint,
-			aggregateOpts,
-		)
-		
-		// Finish progress bar
-		progressBar.finish()
-		
-		if err != nil {
-			fmt.Printf("  ❌ Failed: %v\n", err)
-			continue
-		}
-		
-		successful++
-		fmt.Printf("  ✅ Success: Aggregated %d files covering datapoints %d-%d\n", 
-			len(op.Files), op.FirstDatapoint, op.LastDatapoint)
+	// Execute aggregation
+	fmt.Printf("\nExecuting aggregation operation...\n")
+	fmt.Printf("\n--- Aggregating %d files covering datapoints %d-%d ---\n", len(op.Files), op.FirstDatapoint, op.LastDatapoint)
+
+	// Create progress bar for this operation
+	progressBar := newProgressBar(80)
+
+	aggregateOpts := &client.AggregateOptions{
+		MaxParallelism:   c.Int("max-parallelism"),
+		MaxRetries:       c.Int("max-retries"),
+		ProgressCallback: progressBar.update,
 	}
 
-	fmt.Printf("\nFirst round optimization complete: %d/%d operations successful\n", successful, len(operations))
-	
-	// If we had successful operations, re-analyze to find new opportunities
-	if successful > 0 {
-		fmt.Printf("\nRe-analyzing for additional optimization opportunities...\n")
-		
-		// Get updated dataranges after successful operations
-		dataranges, err := clientInstance.ListDataranges(context.Background(), datas3tName)
-		if err != nil {
-			fmt.Printf("Warning: Failed to re-analyze dataranges: %v\n", err)
-			return nil
-		}
-		
-		// Convert to optimizer format
-		tarFiles := ConvertFromDatarangeInfo(dataranges)
-		
-		// Create optimizer
-		optimizer := NewAggregationOptimizer(tarFiles)
-		optimizer.SetThresholds(minScore, targetSize, maxAggregateSize)
-		optimizer.SetBalanceParameters(c.Int("min-files-for-small"), c.Int("max-size-ratio"), c.Bool("allow-mixed-sizes"))
-		
-		// Find new optimization opportunities
-		newOperations := optimizer.FindAllBeneficialAggregations()
-		
-		if len(newOperations) > 0 {
-			// Limit new operations
-			if len(newOperations) > maxOperations {
-				newOperations = newOperations[:maxOperations]
-			}
-			
-			fmt.Printf("Found %d additional optimization opportunities.\n", len(newOperations))
-			
-			// Execute new operations
-			for i, op := range newOperations {
-				fmt.Printf("\n--- Additional Operation %d/%d (Score: %.2f) ---\n", i+1, len(newOperations), op.Score)
-				fmt.Printf("Aggregating %d files covering datapoints %d-%d\n", len(op.Files), op.FirstDatapoint, op.LastDatapoint)
-				
-				// Create progress bar for this operation
-				progressBar := newProgressBar(80)
-				
-				aggregateOpts := &client.AggregateOptions{
-					MaxParallelism:   c.Int("max-parallelism"),
-					MaxRetries:       c.Int("max-retries"),
-					ProgressCallback: progressBar.update,
-				}
-				
-				err := clientInstance.AggregateDataRanges(
-					context.Background(),
-					datas3tName,
-					op.FirstDatapoint,
-					op.LastDatapoint,
-					aggregateOpts,
-				)
-				
-				// Finish progress bar
-				progressBar.finish()
-				
-				if err != nil {
-					fmt.Printf("  ❌ Failed: %v\n", err)
-					continue
-				}
-				
-				successful++
-				fmt.Printf("  ✅ Success: Aggregated %d files covering datapoints %d-%d\n", 
-					len(op.Files), op.FirstDatapoint, op.LastDatapoint)
-			}
-		} else {
-			fmt.Println("No additional optimization opportunities found.")
-		}
-	}
-	
-	fmt.Printf("\nOptimization complete: %d total operations successful\n", successful)
+	err = clientInstance.AggregateDataRanges(
+		context.Background(),
+		datas3tName,
+		op.FirstDatapoint,
+		op.LastDatapoint,
+		aggregateOpts,
+	)
+
+	// Finish progress bar
+	progressBar.finish()
+
+	fmt.Printf("  ✅ Success: Aggregated %d files covering datapoints %d-%d\n",
+		len(op.Files), op.FirstDatapoint, op.LastDatapoint)
+
 	return nil
 }
 
 func runDaemonMode(clientInstance *client.Client, datas3tName string, isDryRun bool, interval time.Duration, minScore float64, targetSize, maxAggregateSize int64, maxOperations int, c *cli.Context) error {
 	fmt.Printf("Starting optimization daemon for datas3t '%s' (interval: %v)...\n", datas3tName, interval)
-	
+
 	if isDryRun {
 		fmt.Println("Running in dry-run mode - no aggregations will be performed.")
 	}

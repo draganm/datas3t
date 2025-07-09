@@ -191,6 +191,12 @@ func (ao *AggregationOptimizer) removeConflictingOperations(operations []*Aggreg
 	var nonConflictingOps []*AggregationOperation
 	usedFileIDs := make(map[string]bool)
 	
+	// Track used datapoint ranges to prevent overlapping operations
+	type datapointRange struct {
+		start, end uint64
+	}
+	var usedRanges []datapointRange
+	
 	for _, op := range operations {
 		hasConflict := false
 		
@@ -202,7 +208,18 @@ func (ao *AggregationOptimizer) removeConflictingOperations(operations []*Aggreg
 			}
 		}
 		
-		// If no conflict, add this operation and mark its files as used
+		// Check if this operation's datapoint range overlaps with any already used range
+		if !hasConflict {
+			for _, usedRange := range usedRanges {
+				// Check for overlap: two ranges overlap if start1 <= end2 && start2 <= end1
+				if op.FirstDatapoint <= usedRange.end && usedRange.start <= op.LastDatapoint {
+					hasConflict = true
+					break
+				}
+			}
+		}
+		
+		// If no conflict, add this operation and mark its files and range as used
 		if !hasConflict {
 			nonConflictingOps = append(nonConflictingOps, op)
 			
@@ -210,6 +227,12 @@ func (ao *AggregationOptimizer) removeConflictingOperations(operations []*Aggreg
 			for _, file := range op.Files {
 				usedFileIDs[file.ID] = true
 			}
+			
+			// Mark the datapoint range as used
+			usedRanges = append(usedRanges, datapointRange{
+				start: op.FirstDatapoint,
+				end:   op.LastDatapoint,
+			})
 		}
 	}
 	

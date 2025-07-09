@@ -1218,14 +1218,14 @@ var _ = Describe("End-to-End Server Test", func() {
 			numFiles   int
 			filename   string
 		}{
-			{0, 500, "opt_small1.tar"},      // Small file: 500 files
-			{500, 500, "opt_small2.tar"},    // Small file: 500 files (adjacent to first)
-			{1000, 300, "opt_small3.tar"},   // Small file: 300 files (adjacent to second)
-			{1300, 200, "opt_small4.tar"},   // Small file: 200 files (adjacent to third)
-			{2000, 1000, "opt_medium1.tar"}, // Medium file: 1000 files (gap, then this)
-			{3000, 800, "opt_medium2.tar"},  // Medium file: 800 files (adjacent to medium1)
-			{4000, 600, "opt_small5.tar"},   // Small file: 600 files (adjacent to medium2)
-			{5000, 400, "opt_small6.tar"},   // Small file: 400 files (adjacent to small5)
+			{0, 500, "opt_small1.tar"},      // Small file: 500 files (0-499)
+			{500, 500, "opt_small2.tar"},    // Small file: 500 files (500-999)
+			{1000, 300, "opt_small3.tar"},   // Small file: 300 files (1000-1299)
+			{1300, 200, "opt_small4.tar"},   // Small file: 200 files (1300-1499)
+			{1500, 1000, "opt_medium1.tar"}, // Medium file: 1000 files (1500-2499) - NO GAP
+			{2500, 800, "opt_medium2.tar"},  // Medium file: 800 files (2500-3299)
+			{3300, 600, "opt_small5.tar"},   // Small file: 600 files (3300-3899)
+			{3900, 500, "opt_small6.tar"},   // Small file: 500 files (3900-4399)
 		}
 
 		for i, info := range datarangeInfo {
@@ -1272,8 +1272,8 @@ var _ = Describe("End-to-End Server Test", func() {
 		bitmap, err := client.GetDatapointsBitmap(ctx, testDatas3tName)
 		Expect(err).NotTo(HaveOccurred())
 
-		// Should still have all original datapoints (4300 total)
-		expectedTotalDatapoints := uint64(500 + 500 + 300 + 200 + 1000 + 800 + 600 + 400)
+		// Should still have all original datapoints (4400 total)
+		expectedTotalDatapoints := uint64(500 + 500 + 300 + 200 + 1000 + 800 + 600 + 500)
 		Expect(bitmap.GetCardinality()).To(Equal(expectedTotalDatapoints))
 
 		// Verify specific ranges still exist
@@ -1283,7 +1283,7 @@ var _ = Describe("End-to-End Server Test", func() {
 		for i := uint64(1000); i < 1100; i++ {
 			Expect(bitmap.Contains(i)).To(BeTrue(), "Datapoint %d should exist after optimization", i)
 		}
-		for i := uint64(5000); i < 5100; i++ {
+		for i := uint64(3900); i < 4000; i++ {
 			Expect(bitmap.Contains(i)).To(BeTrue(), "Datapoint %d should exist after optimization", i)
 		}
 
@@ -1423,6 +1423,220 @@ var _ = Describe("End-to-End Server Test", func() {
 			"total_datapoints", expectedTotalDatapoints,
 			"final_tar_size_mb", len(finalTarData)/(1024*1024),
 			"optimization_integrity_verified", true)
+	})
+
+	It("should optimize dataranges and download data successfully", func(ctx SpecContext) {
+		// Step 1: Add bucket configuration using CLI
+		logger.Info("Step 1: Adding bucket configuration for optimization download test")
+		err := runCLICommand(cliPath, "bucket", "add",
+			"--name", testBucketConfigName,
+			"--endpoint", "http://"+minioEndpoint,
+			"--bucket", testBucketName,
+			"--access-key", minioAccessKey,
+			"--secret-key", minioSecretKey,
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Step 2: Add datas3t using CLI
+		logger.Info("Step 2: Adding datas3t for optimization download test")
+		err = runCLICommand(cliPath, "datas3t", "add",
+			"--name", testDatas3tName,
+			"--bucket", testBucketConfigName,
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Step 3: Upload multiple small dataranges that will be optimized
+		logger.Info("Step 3: Uploading small dataranges for optimization")
+
+		// Create 5 small consecutive dataranges (each 50 files for smaller size)
+		datarangeInfo := []struct {
+			startIndex int64
+			numFiles   int
+			filename   string
+		}{
+			{0, 50, "opt_test1.tar"},    // 0-49
+			{50, 50, "opt_test2.tar"},   // 50-99 (adjacent)
+			{100, 50, "opt_test3.tar"}, // 100-149 (adjacent)
+			{150, 50, "opt_test4.tar"}, // 150-199 (adjacent)
+			{200, 50, "opt_test5.tar"}, // 200-249 (adjacent)
+		}
+
+		for i, info := range datarangeInfo {
+			logger.Info("Creating and uploading datarange", "index", i+1, "start", info.startIndex, "count", info.numFiles)
+
+			testData, _ := createTestTarWithIndex(info.numFiles, info.startIndex)
+			tarFile := filepath.Join(tempDir, info.filename)
+			err = os.WriteFile(tarFile, testData, 0644)
+			Expect(err).NotTo(HaveOccurred())
+
+			err = runCLICommand(cliPath, "datarange", "upload-tar",
+				"--datas3t", testDatas3tName,
+				"--file", tarFile,
+			)
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		// Step 4: Verify initial state before optimization
+		logger.Info("Step 4: Verifying initial state before optimization")
+		client := datas3tclient.NewClient(serverBaseURL)
+		
+		initialDataranges, err := client.ListDataranges(ctx, testDatas3tName)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(len(initialDataranges)).To(Equal(5), "Should have 5 initial dataranges")
+
+		initialBitmap, err := client.GetDatapointsBitmap(ctx, testDatas3tName)
+		Expect(err).NotTo(HaveOccurred())
+		expectedDatapoints := uint64(250) // 50 * 5
+		Expect(initialBitmap.GetCardinality()).To(Equal(expectedDatapoints))
+
+		// Step 5: Run optimization multiple times (since it now only does one operation per call)
+		logger.Info("Step 5: Running optimization multiple times")
+		
+		optimizationRounds := 0
+		maxRounds := 10 // Safety limit
+		
+		for optimizationRounds < maxRounds {
+			logger.Info("Running optimization round", "round", optimizationRounds+1)
+			
+			err = runCLICommand(cliPath, "datarange", "optimize",
+				"--datas3t", testDatas3tName,
+				"--min-score", "0.5",
+				"--target-size", "10MB",
+				"--max-aggregate-size", "50MB",
+			)
+			
+			if err != nil {
+				// If optimization fails, it might mean no more beneficial operations
+				logger.Info("Optimization returned error, stopping", "error", err.Error())
+				break
+			}
+			
+			optimizationRounds++
+			
+			// Check if we still have multiple dataranges to optimize
+			currentDataranges, err := client.ListDataranges(ctx, testDatas3tName)
+			Expect(err).NotTo(HaveOccurred())
+			
+			if len(currentDataranges) <= 1 {
+				logger.Info("Optimization complete - only one datarange remaining")
+				break
+			}
+		}
+
+		logger.Info("Optimization completed", "rounds", optimizationRounds)
+
+		// Step 6: Verify optimization results
+		logger.Info("Step 6: Verifying optimization results")
+		
+		optimizedDataranges, err := client.ListDataranges(ctx, testDatas3tName)
+		Expect(err).NotTo(HaveOccurred())
+		
+		// Should have fewer dataranges after optimization
+		Expect(len(optimizedDataranges)).To(BeNumerically("<", 5), "Should have fewer dataranges after optimization")
+		
+		// Verify all datapoints are still present
+		optimizedBitmap, err := client.GetDatapointsBitmap(ctx, testDatas3tName)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(optimizedBitmap.GetCardinality()).To(Equal(expectedDatapoints), "All datapoints should still be present after optimization")
+
+		// Step 7: Download data from optimized dataranges
+		logger.Info("Step 7: Downloading data from optimized dataranges")
+		
+		// Download a range that spans the original datarange boundaries
+		downloadTarPath := filepath.Join(tempDir, "optimized_download.tar")
+		err = runCLICommand(cliPath, "datarange", "download-tar",
+			"--datas3t", testDatas3tName,
+			"--first-datapoint", "40",
+			"--last-datapoint", "160", // Spans original boundaries: 40-49, 50-99, 100-149, 150-160
+			"--output", downloadTarPath,
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Step 8: Validate downloaded data
+		logger.Info("Step 8: Validating downloaded data from optimized dataranges")
+		
+		downloadedData, err := os.ReadFile(downloadTarPath)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Validate TAR structure
+		err = validateTarArchive(downloadedData)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Extract files and verify content
+		downloadedFiles := make(map[string][]byte)
+		err = extractFilesFromTar(downloadedData, downloadedFiles)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Should have 121 files (40-160 inclusive)
+		expectedFileCount := 121
+		Expect(len(downloadedFiles)).To(Equal(expectedFileCount))
+
+		// Verify specific files exist and have correct content
+		for i := 40; i <= 160; i++ {
+			filename := fmt.Sprintf("%020d.txt", i)
+			content, exists := downloadedFiles[filename]
+			Expect(exists).To(BeTrue(), "File %s should exist after optimization", filename)
+
+			expectedPrefix := fmt.Sprintf("Content of file %d - ", i)
+			Expect(string(content)).To(HavePrefix(expectedPrefix),
+				"File %s should have correct content after optimization", filename)
+		}
+
+		logger.Info("Download validation passed")
+
+		// Step 9: Test DatapointIterator on optimized data
+		logger.Info("Step 9: Testing DatapointIterator on optimized data")
+		
+		datapointCount := 0
+		for content, err := range client.DatapointIterator(ctx, testDatas3tName, 10, 59) {
+			Expect(err).NotTo(HaveOccurred())
+			Expect(content).NotTo(BeEmpty())
+
+			// Verify content pattern
+			expectedPrefix := fmt.Sprintf("Content of file %d - ", 10+datapointCount)
+			Expect(string(content)).To(HavePrefix(expectedPrefix))
+
+			datapointCount++
+		}
+
+		Expect(datapointCount).To(Equal(50), "Should iterate over 50 datapoints")
+
+		logger.Info("DatapointIterator validation passed")
+
+		// Step 10: Download complete optimized dataset
+		logger.Info("Step 10: Downloading complete optimized dataset")
+		
+		completeTarPath := filepath.Join(tempDir, "complete_optimized.tar")
+		err = runCLICommand(cliPath, "datarange", "download-tar",
+			"--datas3t", testDatas3tName,
+			"--first-datapoint", "0",
+			"--last-datapoint", "249",
+			"--output", completeTarPath,
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Validate complete download
+		completeData, err := os.ReadFile(completeTarPath)
+		Expect(err).NotTo(HaveOccurred())
+
+		err = validateTarArchive(completeData)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Extract and verify we have all files
+		completeFiles := make(map[string][]byte)
+		err = extractFilesFromTar(completeData, completeFiles)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(len(completeFiles)).To(Equal(250), "Should have all 250 files")
+
+		logger.Info("Optimization and download test completed successfully",
+			"initial_dataranges", 5,
+			"optimized_dataranges", len(optimizedDataranges),
+			"optimization_rounds", optimizationRounds,
+			"total_datapoints", expectedDatapoints,
+			"partial_download_files", expectedFileCount,
+			"complete_download_files", 250,
+			"data_integrity_verified", true)
 	})
 
 	It("should complete full datas3t import workflow using CLI", func(ctx SpecContext) {
