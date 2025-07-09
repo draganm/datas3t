@@ -1,0 +1,1 @@
+ALTER TABLE keys_to_delete DROP COLUMN delete_after;

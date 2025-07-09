@@ -10,7 +10,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	awsutil "github.com/draganm/datas3t/aws"
 	"github.com/draganm/datas3t/postgresstore"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type DeleteDatarangeRequest struct {
@@ -156,23 +155,13 @@ func (s *UploadDatarangeServer) scheduleDatarangeObjectsForDeletion(ctx context.
 	}
 
 	// Schedule both objects for deletion
-	deleteAfter := pgtype.Timestamp{
-		Time:  time.Now().Add(time.Hour), // Delete after 1 hour
-		Valid: true,
-	}
 
-	err = queries.ScheduleKeyForDeletion(ctx, postgresstore.ScheduleKeyForDeletionParams{
-		PresignedDeleteUrl: dataDeleteReq.URL,
-		DeleteAfter:        deleteAfter,
-	})
+	err = queries.ScheduleKeyForDeletion(ctx, dataDeleteReq.URL)
 	if err != nil {
 		return fmt.Errorf("failed to schedule data object deletion: %w", err)
 	}
 
-	err = queries.ScheduleKeyForDeletion(ctx, postgresstore.ScheduleKeyForDeletionParams{
-		PresignedDeleteUrl: indexDeleteReq.URL,
-		DeleteAfter:        deleteAfter,
-	})
+	err = queries.ScheduleKeyForDeletion(ctx, indexDeleteReq.URL)
 	if err != nil {
 		return fmt.Errorf("failed to schedule index object deletion: %w", err)
 	}

@@ -96,8 +96,17 @@ JOIN s3_buckets s ON d.s3_bucket_id = s.id
 WHERE du.id = $1;
 
 -- name: ScheduleKeyForDeletion :exec
-INSERT INTO keys_to_delete (presigned_delete_url, delete_after)
-VALUES ($1, $2);
+INSERT INTO keys_to_delete (presigned_delete_url)
+VALUES ($1);
+
+-- name: GetKeysToDelete :many
+SELECT id, presigned_delete_url
+FROM keys_to_delete
+ORDER BY created_at
+LIMIT $1;
+
+-- name: DeleteKeysToDelete :exec
+DELETE FROM keys_to_delete WHERE id = ANY($1::BIGINT[]);
 
 -- name: DeleteDatarangeUpload :exec
 DELETE FROM datarange_uploads WHERE id = $1;

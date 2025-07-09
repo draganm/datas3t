@@ -18,7 +18,6 @@ import (
 	awsutil "github.com/draganm/datas3t/aws"
 	"github.com/draganm/datas3t/postgresstore"
 	"github.com/draganm/datas3t/tarindex"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type CompleteUploadRequest struct {
@@ -217,23 +216,13 @@ func (s *UploadDatarangeServer) handleFailureInTransaction(ctx context.Context, 
 	}
 
 	// Schedule both objects for deletion
-	deleteAfter := pgtype.Timestamp{
-		Time:  time.Now().Add(time.Hour), // Delete after 1 hour
-		Valid: true,
-	}
 
-	err = txQueries.ScheduleKeyForDeletion(ctx, postgresstore.ScheduleKeyForDeletionParams{
-		PresignedDeleteUrl: dataDeleteReq.URL,
-		DeleteAfter:        deleteAfter,
-	})
+	err = txQueries.ScheduleKeyForDeletion(ctx, dataDeleteReq.URL)
 	if err != nil {
 		return fmt.Errorf("failed to schedule data object deletion: %w", err)
 	}
 
-	err = txQueries.ScheduleKeyForDeletion(ctx, postgresstore.ScheduleKeyForDeletionParams{
-		PresignedDeleteUrl: indexDeleteReq.URL,
-		DeleteAfter:        deleteAfter,
-	})
+	err = txQueries.ScheduleKeyForDeletion(ctx, indexDeleteReq.URL)
 	if err != nil {
 		return fmt.Errorf("failed to schedule index object deletion: %w", err)
 	}

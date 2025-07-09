@@ -75,6 +75,7 @@ datas3t is designed for efficiently managing datas3ts containing millions of ind
 - **S3-Compatible Storage**: Stores TAR archives and indices
 - **TAR Indexing Engine**: Creates fast-access indices
 - **Disk Cache**: Local caching for performance
+- **Key Deletion Service**: Background worker for automatic S3 object cleanup
 
 ## Core Concepts
 
@@ -677,7 +678,7 @@ Currently we are not accepting contributions to this project.
 - **dataranges**: TAR archive metadata and byte ranges
 - **datarange_uploads**: Temporary upload state management
 - **aggregate_uploads**: Aggregation operation tracking and state management
-- **keys_to_delete**: Scheduled deletion of S3 objects
+- **keys_to_delete**: Immediate deletion queue for obsolete S3 objects
 
 ### TAR Index Format
 Binary format with 16-byte entries per file:
@@ -690,6 +691,14 @@ Binary format with 16-byte entries per file:
 - **Disk**: Persistent cache for TAR indices
 - **LRU Eviction**: Automatic cleanup based on access patterns
 - **Cache Keys**: SHA-256 hash of datarange metadata
+
+### Key Deletion Service
+- **Background Worker**: Automatic cleanup of obsolete S3 objects
+- **Batch Processing**: Processes 5 deletion requests at a time
+- **Immediate Processing**: No delay between queuing and deletion
+- **Error Handling**: Retries failed deletions, logs errors without blocking
+- **Database Consistency**: Atomic removal from deletion queue after successful S3 deletion
+- **Graceful Shutdown**: Respects context cancellation for clean server shutdown
 
 ## License
 
