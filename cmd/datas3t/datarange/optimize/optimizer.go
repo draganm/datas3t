@@ -41,6 +41,11 @@ type AggregationOptimizer struct {
 	targetSize int64
 	maxAggregateSize int64
 	operationCostBase float64
+	
+	// Balance control parameters
+	minFilesForSmall int
+	maxSizeRatio     int
+	allowMixedSizes  bool
 }
 
 // NewAggregationOptimizer creates a new optimizer
@@ -51,6 +56,11 @@ func NewAggregationOptimizer(files []TarFile) *AggregationOptimizer {
 		targetSize: TargetSize,
 		maxAggregateSize: MaxAggregateSize,
 		operationCostBase: OperationCostBase,
+		
+		// Default balance parameters
+		minFilesForSmall: 5,
+		maxSizeRatio:     100,
+		allowMixedSizes:  false,
 	}
 }
 
@@ -59,6 +69,13 @@ func (ao *AggregationOptimizer) SetThresholds(minScore float64, targetSize int64
 	ao.minScore = minScore
 	ao.targetSize = targetSize
 	ao.maxAggregateSize = maxAggregateSize
+}
+
+// SetBalanceParameters allows customizing balance validation parameters
+func (ao *AggregationOptimizer) SetBalanceParameters(minFilesForSmall int, maxSizeRatio int, allowMixedSizes bool) {
+	ao.minFilesForSmall = minFilesForSmall
+	ao.maxSizeRatio = maxSizeRatio
+	ao.allowMixedSizes = allowMixedSizes
 }
 
 // ConvertFromDatarangeInfo converts client.DatarangeInfo to TarFile
@@ -160,7 +177,43 @@ func (ao *AggregationOptimizer) FindAllBeneficialAggregations() []*AggregationOp
 		return operations[i].Score > operations[j].Score
 	})
 
-	return operations
+	// Remove conflicting operations to ensure no overlaps
+	return ao.removeConflictingOperations(operations)
+}
+
+// removeConflictingOperations filters out operations that would conflict with each other
+// Operations conflict if they share any files (TarFile IDs) or have overlapping datapoint ranges
+func (ao *AggregationOptimizer) removeConflictingOperations(operations []*AggregationOperation) []*AggregationOperation {
+	if len(operations) == 0 {
+		return operations
+	}
+
+	var nonConflictingOps []*AggregationOperation
+	usedFileIDs := make(map[string]bool)
+	
+	for _, op := range operations {
+		hasConflict := false
+		
+		// Check if any file in this operation is already used
+		for _, file := range op.Files {
+			if usedFileIDs[file.ID] {
+				hasConflict = true
+				break
+			}
+		}
+		
+		// If no conflict, add this operation and mark its files as used
+		if !hasConflict {
+			nonConflictingOps = append(nonConflictingOps, op)
+			
+			// Mark all files in this operation as used
+			for _, file := range op.Files {
+				usedFileIDs[file.ID] = true
+			}
+		}
+	}
+	
+	return nonConflictingOps
 }
 
 // calculateAVS calculates the Aggregation Value Score
@@ -180,11 +233,77 @@ func (ao *AggregationOptimizer) calculateAVS(files []TarFile) float64 {
 		return 0
 	}
 
+	// Don't aggregate if the group is too unbalanced
+	if !ao.isBalancedGroup(files) {
+		return 0
+	}
+
 	sizeFactor := ao.calculateSizeFactor(totalSize)
 	consecutiveBonus := ao.calculateConsecutiveBonus(files)
 	operationCost := ao.estimateOperationCost(files)
 
 	return (objectsReduced * sizeFactor * consecutiveBonus) - operationCost
+}
+
+// isBalancedGroup checks if a group of files is balanced enough for aggregation
+func (ao *AggregationOptimizer) isBalancedGroup(files []TarFile) bool {
+	if len(files) < 2 {
+		return true
+	}
+
+	// Calculate size statistics
+	var sizes []int64
+	totalSize := int64(0)
+	for _, f := range files {
+		sizes = append(sizes, f.Size)
+		totalSize += f.Size
+	}
+
+	// Sort sizes to find min and max
+	sort.Slice(sizes, func(i, j int) bool {
+		return sizes[i] < sizes[j]
+	})
+
+	minSize := sizes[0]
+	maxSize := sizes[len(sizes)-1]
+
+	// Rule 1: Reject if largest file is more than configured ratio bigger than smallest
+	if maxSize > minSize*int64(ao.maxSizeRatio) {
+		return false
+	}
+
+	// Rule 2: If we have very small files (< 1MB), only aggregate with other small files
+	const smallFileThreshold = 1024 * 1024 // 1MB
+	const mediumFileThreshold = 50 * 1024 * 1024 // 50MB
+	
+	hasSmallFiles := false
+	hasLargeFiles := false
+	for _, size := range sizes {
+		if size < smallFileThreshold {
+			hasSmallFiles = true
+		}
+		if size > mediumFileThreshold {
+			hasLargeFiles = true
+		}
+	}
+
+	// Don't mix very small files with large files (unless explicitly allowed)
+	if hasSmallFiles && hasLargeFiles && !ao.allowMixedSizes {
+		return false
+	}
+
+	// Rule 3: For small files, require at least configured minimum files to make aggregation worthwhile
+	if maxSize < smallFileThreshold && len(files) < ao.minFilesForSmall {
+		return false
+	}
+
+	// Rule 4: Size ratio check - largest should not be more than 10x the average
+	avgSize := totalSize / int64(len(files))
+	if maxSize > avgSize*10 {
+		return false
+	}
+
+	return true
 }
 
 // calculateSizeFactor calculates the size-based factor
