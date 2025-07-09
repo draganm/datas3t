@@ -23,9 +23,6 @@ func (s *KeyDeletionServer) Start(ctx context.Context, log *slog.Logger) {
 }
 
 func (s *KeyDeletionServer) deletionWorker(ctx context.Context, log *slog.Logger) {
-	ticker := time.NewTicker(60 * time.Second)
-	defer ticker.Stop()
-
 	log.Info("Key deletion worker started")
 
 	for {
@@ -33,11 +30,23 @@ func (s *KeyDeletionServer) deletionWorker(ctx context.Context, log *slog.Logger
 		case <-ctx.Done():
 			log.Info("Key deletion worker shutting down")
 			return
-		case <-ticker.C:
-			err := s.DeleteKeys(ctx, log)
+		default:
+			keysProcessed, err := s.DeleteKeys(ctx, log)
 			if err != nil {
 				log.Error("Error deleting keys", "error", err)
 			}
+
+			// If no keys were processed, wait 1 minute before checking again
+			if keysProcessed == 0 {
+				select {
+				case <-ctx.Done():
+					log.Info("Key deletion worker shutting down")
+					return
+				case <-time.After(60 * time.Second):
+					continue
+				}
+			}
+			// If keys were processed, continue immediately to check for more
 		}
 	}
 }

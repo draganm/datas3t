@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func (s *KeyDeletionServer) DeleteKeys(ctx context.Context, log *slog.Logger) error {
+func (s *KeyDeletionServer) DeleteKeys(ctx context.Context, log *slog.Logger) (int, error) {
 	// Get up to 20 keys to delete
 	keys, err := s.db.Query(ctx, `
 		SELECT id, presigned_delete_url
@@ -16,7 +16,7 @@ func (s *KeyDeletionServer) DeleteKeys(ctx context.Context, log *slog.Logger) er
 		LIMIT 20
 	`)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer keys.Close()
 
@@ -32,17 +32,17 @@ func (s *KeyDeletionServer) DeleteKeys(ctx context.Context, log *slog.Logger) er
 		}
 		err := keys.Scan(&key.ID, &key.URL)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		keysToDelete = append(keysToDelete, key)
 	}
 
 	if err := keys.Err(); err != nil {
-		return err
+		return 0, err
 	}
 
 	if len(keysToDelete) == 0 {
-		return nil
+		return 0, nil
 	}
 
 	log.Info("Processing keys for deletion", "count", len(keysToDelete))
@@ -80,22 +80,22 @@ func (s *KeyDeletionServer) DeleteKeys(ctx context.Context, log *slog.Logger) er
 	if len(successfulDeletions) > 0 {
 		tx, err := s.db.Begin(ctx)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		defer tx.Rollback(ctx)
 
 		_, err = tx.Exec(ctx, `DELETE FROM keys_to_delete WHERE id = ANY($1)`, successfulDeletions)
 		if err != nil {
-			return err
+			return 0, err
 		}
 
 		err = tx.Commit(ctx)
 		if err != nil {
-			return err
+			return 0, err
 		}
 
 		log.Info("Removed keys from database", "count", len(successfulDeletions))
 	}
 
-	return nil
+	return len(keysToDelete), nil
 }
