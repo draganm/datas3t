@@ -8,7 +8,7 @@ import (
 )
 
 func (s *KeyDeletionServer) DeleteKeys(ctx context.Context, log *slog.Logger) error {
-	// Get up to 5 keys to delete
+	// Get up to 20 keys to delete
 	keys, err := s.db.Query(ctx, `
 		SELECT id, presigned_delete_url
 		FROM keys_to_delete

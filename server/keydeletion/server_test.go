@@ -169,7 +169,7 @@ var _ = Describe("KeyDeletionServer", func() {
 			Expect(count).To(Equal(1))
 		})
 
-		It("should process up to 5 keys at a time", func(ctx SpecContext) {
+		It("should process up to 20 keys at a time", func(ctx SpecContext) {
 			// Create a test HTTP server that returns 200 for DELETE requests
 			testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				Expect(r.Method).To(Equal("DELETE"))
@@ -177,7 +177,34 @@ var _ = Describe("KeyDeletionServer", func() {
 			}))
 			defer testServer.Close()
 
-			// Insert 7 test keys
+			// Insert 25 test keys (more than the limit of 20)
+			for i := 0; i < 25; i++ {
+				_, err := db.Exec(ctx, 
+					"INSERT INTO keys_to_delete (presigned_delete_url) VALUES ($1)",
+					testServer.URL+"/test-key")
+				Expect(err).ToNot(HaveOccurred())
+			}
+
+			// Run deletion once
+			err := server.DeleteKeys(ctx, logger)
+			Expect(err).ToNot(HaveOccurred())
+
+			// Verify only 20 keys were deleted, 5 remain
+			var count int
+			err = db.QueryRow(ctx, "SELECT COUNT(*) FROM keys_to_delete").Scan(&count)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(count).To(Equal(5))
+		})
+
+		It("should process all keys when fewer than limit", func(ctx SpecContext) {
+			// Create a test HTTP server that returns 200 for DELETE requests
+			testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				Expect(r.Method).To(Equal("DELETE"))
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer testServer.Close()
+
+			// Insert 7 test keys (fewer than the limit of 20)
 			for i := 0; i < 7; i++ {
 				_, err := db.Exec(ctx, 
 					"INSERT INTO keys_to_delete (presigned_delete_url) VALUES ($1)",
@@ -189,11 +216,11 @@ var _ = Describe("KeyDeletionServer", func() {
 			err := server.DeleteKeys(ctx, logger)
 			Expect(err).ToNot(HaveOccurred())
 
-			// Verify only 5 keys were deleted, 2 remain
+			// Verify all 7 keys were deleted, 0 remain
 			var count int
 			err = db.QueryRow(ctx, "SELECT COUNT(*) FROM keys_to_delete").Scan(&count)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(count).To(Equal(2))
+			Expect(count).To(Equal(0))
 		})
 	})
 })
