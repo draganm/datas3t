@@ -119,6 +119,9 @@ func serverAction(c *cli.Context) error {
 		return fmt.Errorf("failed to create server: %w", err)
 	}
 
+	// Start the key deletion worker
+	s.StartKeyDeletionWorker(ctx, logger)
+
 	mux := httpapi.NewHTTPAPI(s, logger)
 
 	srv := &http.Server{

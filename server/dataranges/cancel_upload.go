@@ -9,7 +9,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/draganm/datas3t/postgresstore"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type CancelUploadRequest struct {
@@ -263,10 +262,6 @@ func (s *UploadDatarangeServer) scheduleObjectForDeletion(
 		return fmt.Errorf("failed to presign delete object: %w", err)
 	}
 
-	deleteAfter := pgtype.Timestamp{
-		Time:  time.Now().Add(time.Hour), // Delete after 1 hour
-		Valid: true,
-	}
 
 	// Use the original context for database operations
 	originalCtx := context.Background()
@@ -276,10 +271,7 @@ func (s *UploadDatarangeServer) scheduleObjectForDeletion(
 		originalCtx = dbCtx
 	}
 
-	err = queries.ScheduleKeyForDeletion(originalCtx, postgresstore.ScheduleKeyForDeletionParams{
-		PresignedDeleteUrl: deleteReq.URL,
-		DeleteAfter:        deleteAfter,
-	})
+	err = queries.ScheduleKeyForDeletion(originalCtx, deleteReq.URL)
 	if err != nil {
 		return fmt.Errorf("failed to schedule object deletion: %w", err)
 	}

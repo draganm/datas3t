@@ -61,7 +61,6 @@ type KeysToDelete struct {
 	PresignedDeleteUrl string
 	CreatedAt          pgtype.Timestamp
 	UpdatedAt          pgtype.Timestamp
-	DeleteAfter        pgtype.Timestamp
 }
 
 type S3Bucket struct {

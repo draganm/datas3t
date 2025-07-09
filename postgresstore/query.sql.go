@@ -7,8 +7,6 @@ package postgresstore
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const addBucket = `-- name: AddBucket :exec
@@ -431,6 +429,15 @@ DELETE FROM dataranges WHERE id = ANY($1::BIGINT[])
 
 func (q *Queries) DeleteDatarangesByIDs(ctx context.Context, dollar_1 []int64) error {
 	_, err := q.db.Exec(ctx, deleteDatarangesByIDs, dollar_1)
+	return err
+}
+
+const deleteKeysToDelete = `-- name: DeleteKeysToDelete :exec
+DELETE FROM keys_to_delete WHERE id = ANY($1::BIGINT[])
+`
+
+func (q *Queries) DeleteKeysToDelete(ctx context.Context, dollar_1 []int64) error {
+	_, err := q.db.Exec(ctx, deleteKeysToDelete, dollar_1)
 	return err
 }
 
@@ -1002,6 +1009,38 @@ func (q *Queries) GetDatas3tWithBucket(ctx context.Context, name string) (GetDat
 	return i, err
 }
 
+const getKeysToDelete = `-- name: GetKeysToDelete :many
+SELECT id, presigned_delete_url
+FROM keys_to_delete
+ORDER BY created_at
+LIMIT $1
+`
+
+type GetKeysToDeleteRow struct {
+	ID                 int64
+	PresignedDeleteUrl string
+}
+
+func (q *Queries) GetKeysToDelete(ctx context.Context, limit int32) ([]GetKeysToDeleteRow, error) {
+	rows, err := q.db.Query(ctx, getKeysToDelete, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetKeysToDeleteRow
+	for rows.Next() {
+		var i GetKeysToDeleteRow
+		if err := rows.Scan(&i.ID, &i.PresignedDeleteUrl); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const incrementUploadCounter = `-- name: IncrementUploadCounter :one
 UPDATE datas3ts 
 SET upload_counter = upload_counter + 1,
@@ -1154,17 +1193,12 @@ func (q *Queries) ListDatas3ts(ctx context.Context) ([]ListDatas3tsRow, error) {
 }
 
 const scheduleKeyForDeletion = `-- name: ScheduleKeyForDeletion :exec
-INSERT INTO keys_to_delete (presigned_delete_url, delete_after)
-VALUES ($1, $2)
+INSERT INTO keys_to_delete (presigned_delete_url)
+VALUES ($1)
 `
 
-type ScheduleKeyForDeletionParams struct {
-	PresignedDeleteUrl string
-	DeleteAfter        pgtype.Timestamp
-}
-
-func (q *Queries) ScheduleKeyForDeletion(ctx context.Context, arg ScheduleKeyForDeletionParams) error {
-	_, err := q.db.Exec(ctx, scheduleKeyForDeletion, arg.PresignedDeleteUrl, arg.DeleteAfter)
+func (q *Queries) ScheduleKeyForDeletion(ctx context.Context, presignedDeleteUrl string) error {
+	_, err := q.db.Exec(ctx, scheduleKeyForDeletion, presignedDeleteUrl)
 	return err
 }
 
