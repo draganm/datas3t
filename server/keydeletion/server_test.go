@@ -110,8 +110,9 @@ var _ = Describe("KeyDeletionServer", func() {
 			Expect(count).To(Equal(1))
 
 			// Run deletion once
-			err = server.DeleteKeys(ctx, logger)
+			keysProcessed, err := server.DeleteKeys(ctx, logger)
 			Expect(err).ToNot(HaveOccurred())
+			Expect(keysProcessed).To(Equal(1))
 
 			// Verify key was deleted from database
 			err = db.QueryRow(ctx, "SELECT COUNT(*) FROM keys_to_delete").Scan(&count)
@@ -134,8 +135,9 @@ var _ = Describe("KeyDeletionServer", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// Run deletion once
-			err = server.DeleteKeys(ctx, logger)
+			keysProcessed, err := server.DeleteKeys(ctx, logger)
 			Expect(err).ToNot(HaveOccurred())
+			Expect(keysProcessed).To(Equal(1))
 
 			// Verify key was deleted from database (404 is treated as success)
 			var count int
@@ -159,8 +161,9 @@ var _ = Describe("KeyDeletionServer", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// Run deletion once
-			err = server.DeleteKeys(ctx, logger)
+			keysProcessed, err := server.DeleteKeys(ctx, logger)
 			Expect(err).ToNot(HaveOccurred())
+			Expect(keysProcessed).To(Equal(1))
 
 			// Verify key was NOT deleted from database
 			var count int
@@ -186,8 +189,9 @@ var _ = Describe("KeyDeletionServer", func() {
 			}
 
 			// Run deletion once
-			err := server.DeleteKeys(ctx, logger)
+			keysProcessed, err := server.DeleteKeys(ctx, logger)
 			Expect(err).ToNot(HaveOccurred())
+			Expect(keysProcessed).To(Equal(20))
 
 			// Verify only 20 keys were deleted, 5 remain
 			var count int
@@ -213,8 +217,9 @@ var _ = Describe("KeyDeletionServer", func() {
 			}
 
 			// Run deletion once
-			err := server.DeleteKeys(ctx, logger)
+			keysProcessed, err := server.DeleteKeys(ctx, logger)
 			Expect(err).ToNot(HaveOccurred())
+			Expect(keysProcessed).To(Equal(7))
 
 			// Verify all 7 keys were deleted, 0 remain
 			var count int
