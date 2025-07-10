@@ -152,7 +152,7 @@ var _ = Describe("CancelDatarangeUpload", func() {
 			// Start a large upload that requires multipart
 			req := &dataranges.UploadDatarangeRequest{
 				Datas3tName:         env.TestDatas3tName,
-				DataSize:            10 * 1024 * 1024, // 10MB
+				DataSize:            25 * 1024 * 1024, // 25MB
 				NumberOfDatapoints:  1000,
 				FirstDatapointIndex: 100,
 			}

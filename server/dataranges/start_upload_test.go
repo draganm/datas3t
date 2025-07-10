@@ -61,7 +61,7 @@ var _ = Describe("StartDatarangeUpload", func() {
 		It("should successfully create upload with multipart URLs", func(ctx SpecContext) {
 			req := &dataranges.UploadDatarangeRequest{
 				Datas3tName:         env.TestDatas3tName,
-				DataSize:            10 * 1024 * 1024, // 10MB > 5MB threshold
+				DataSize:            25 * 1024 * 1024, // 25MB > 20MB threshold
 				NumberOfDatapoints:  1000,
 				FirstDatapointIndex: 100,
 			}
@@ -73,7 +73,7 @@ var _ = Describe("StartDatarangeUpload", func() {
 			Expect(resp.PresignedDataPutURL).To(BeEmpty())
 			Expect(resp.PresignedIndexPutURL).NotTo(BeEmpty())
 			Expect(resp.PresignedMultipartUploadPutURLs).NotTo(BeEmpty())
-			Expect(len(resp.PresignedMultipartUploadPutURLs)).To(Equal(2)) // 10MB / 5MB = 2 parts
+			Expect(len(resp.PresignedMultipartUploadPutURLs)).To(Equal(2)) // 25MB / 20MB = 2 parts (rounded up)
 			Expect(resp.DatarangeID).To(BeNumerically(">", 0))
 			Expect(resp.FirstDatapointIndex).To(Equal(uint64(100)))
 

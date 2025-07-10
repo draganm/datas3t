@@ -27,7 +27,7 @@ type UploadDatarangeResponse struct {
 	// Upload type indicator
 	UseDirectPut bool `json:"use_direct_put"`
 
-	// For multipart upload (DataSize >= 5MB)
+	// For multipart upload (DataSize >= 20MB)
 	PresignedMultipartUploadPutURLs []string `json:"presigned_multipart_upload_urls,omitempty"`
 
 	// For direct PUT (DataSize < 5MB)
@@ -40,8 +40,8 @@ type UploadDatarangeResponse struct {
 type ValidationError error
 
 const (
-	// 5MB minimum part size for S3 multipart upload
-	MinPartSize = 5 * 1024 * 1024
+	// 20MB minimum part size for S3 multipart upload
+	MinPartSize = 20 * 1024 * 1024
 	// 100MB maximum part size to keep reasonable number of parts
 	MaxPartSize = 100 * 1024 * 1024
 	// Maximum number of parts allowed by S3
