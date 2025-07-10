@@ -197,7 +197,7 @@ var _ = Describe("CompleteUpload", func() {
 			// Start a large upload that requires multipart
 			req := &dataranges.UploadDatarangeRequest{
 				Datas3tName:         env.TestDatas3tName,
-				DataSize:            10 * 1024 * 1024, // 10MB
+				DataSize:            25 * 1024 * 1024, // 25MB
 				NumberOfDatapoints:  1000,
 				FirstDatapointIndex: 0,
 			}
@@ -208,7 +208,7 @@ var _ = Describe("CompleteUpload", func() {
 			Expect(uploadResp.UseDirectPut).To(BeFalse())
 
 			// Prepare test data
-			testData = make([]byte, 10*1024*1024)
+			testData = make([]byte, 25*1024*1024)
 			for i := range testData {
 				testData[i] = byte(i % 256)
 			}
@@ -219,7 +219,7 @@ var _ = Describe("CompleteUpload", func() {
 		Context("when completing a successful multipart upload", func() {
 			It("should complete successfully with all parts uploaded", func(ctx SpecContext) {
 				// Upload all parts
-				partSize := 5 * 1024 * 1024 // 5MB per part
+				partSize := 20 * 1024 * 1024 // 20MB per part
 				var etags []string
 
 				for i, url := range uploadResp.PresignedMultipartUploadPutURLs {
@@ -283,7 +283,7 @@ var _ = Describe("CompleteUpload", func() {
 		Context("when multipart upload fails due to missing parts", func() {
 			It("should fail to complete with incomplete parts", func(ctx SpecContext) {
 				// Upload only the first part (missing second part)
-				partSize := 5 * 1024 * 1024 // 5MB per part
+				partSize := 20 * 1024 * 1024 // 20MB per part
 				partData := testData[:partSize]
 
 				resp, err := HttpPut(uploadResp.PresignedMultipartUploadPutURLs[0], bytes.NewReader(partData))
