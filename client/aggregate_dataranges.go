@@ -85,7 +85,9 @@ func (c *Client) AggregateDataRanges(ctx context.Context, datas3tName string, fi
 	for _, source := range aggregateResp.SourceDatarangeDownloadURLs {
 		totalSourceSize += source.SizeBytes
 	}
-	tracker.totalBytes = totalSourceSize
+	// Estimate total bytes for progress tracking: download + upload
+	// We use source size * 2 as an estimate (download + upload approximately same size)
+	tracker.totalBytes = totalSourceSize * 2
 	tracker.nextStep()
 
 	// Phase 2: Download all source dataranges
@@ -104,6 +106,14 @@ func (c *Client) AggregateDataRanges(ctx context.Context, datas3tName string, fi
 	}
 	defer os.Remove(aggregatedTarFile.Name()) // Clean up temporary file
 	defer aggregatedTarFile.Close()
+	
+	// Update total bytes with actual aggregated file size for more accurate progress
+	if fileInfo, err := aggregatedTarFile.Stat(); err == nil {
+		actualUploadSize := fileInfo.Size()
+		// Adjust total: already downloaded source size + actual upload size + index size estimate
+		tracker.totalBytes = totalSourceSize + actualUploadSize + int64(len(aggregatedIndex))
+	}
+	
 	tracker.nextStep()
 
 	// Phase 4: Upload aggregated data

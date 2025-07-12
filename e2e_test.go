@@ -2199,4 +2199,229 @@ var _ = Describe("End-to-End Server Test", func() {
 			"new_upload_after_clear_verified", true)
 	})
 
+	It("should handle large datas3t aggregation (>100MB with >1000 dataranges)", func(ctx SpecContext) {
+		logger.Info("Starting large dataset aggregation test")
+		
+		// Create a large datas3t configuration for testing
+		largeDatas3tName := "large-test-datas3t"
+		largeBucketConfigName := "large-test-bucket-config"
+		
+		// Step 1: Create bucket configuration for large test
+		logger.Info("Step 1: Creating bucket configuration for large test")
+		err := runCLICommand(cliPath, "bucket", "add",
+			"--name", largeBucketConfigName,
+			"--endpoint", minioEndpoint,
+			"--bucket", testBucketName,
+			"--access-key", minioAccessKey,
+			"--secret-key", minioSecretKey,
+		)
+		Expect(err).NotTo(HaveOccurred())
+		
+		// Step 2: Create datas3t for large test
+		logger.Info("Step 2: Creating datas3t for large test")
+		err = runCLICommand(cliPath, "datas3t", "add",
+			"--name", largeDatas3tName,
+			"--bucket", largeBucketConfigName,
+		)
+		Expect(err).NotTo(HaveOccurred())
+		
+		// Step 3: Upload many small dataranges to create a large dataset
+		logger.Info("Step 3: Uploading many small dataranges to create large dataset")
+		
+		// Upload 1200 dataranges, each with 5 files (6,000 total datapoints)
+		// Each datarange will be ~100KB, so total will be ~120MB (>100MB as requested)
+		const numDataranges = 1200
+		const filesPerDatarange = 5
+		const totalDatapoints = numDataranges * filesPerDatarange
+		
+		logger.Info("Uploading dataranges",
+			"num_dataranges", numDataranges,
+			"files_per_datarange", filesPerDatarange,
+			"total_datapoints", totalDatapoints)
+		
+		// Upload dataranges in parallel batches to speed up the test
+		batchSize := 50
+		for batch := 0; batch < numDataranges; batch += batchSize {
+			batchEnd := batch + batchSize
+			if batchEnd > numDataranges {
+				batchEnd = numDataranges
+			}
+			
+			logger.Info("Uploading batch of dataranges",
+				"batch_start", batch,
+				"batch_end", batchEnd-1,
+				"total_batches", (numDataranges+batchSize-1)/batchSize)
+			
+			// Upload dataranges in this batch
+			for i := batch; i < batchEnd; i++ {
+				startDatapoint := int64(i * filesPerDatarange)
+				
+				// Create small tar file for this datarange
+				tarData, _ := createTestTarWithIndex(filesPerDatarange, startDatapoint)
+				
+				// Write to temporary file
+				tarPath := filepath.Join(tempDir, fmt.Sprintf("large_test_datarange_%d.tar", i))
+				
+				err = os.WriteFile(tarPath, tarData, 0644)
+				Expect(err).NotTo(HaveOccurred())
+				
+				// Upload the datarange
+				err = runCLICommand(cliPath, "datarange", "upload-tar",
+					"--datas3t", largeDatas3tName,
+					"--file", tarPath,
+				)
+				Expect(err).NotTo(HaveOccurred())
+				
+				// Clean up temp files
+				os.Remove(tarPath)
+			}
+		}
+		
+		logger.Info("Large dataset upload completed",
+			"total_dataranges", numDataranges,
+			"total_datapoints", totalDatapoints)
+		
+		// Step 4: Verify the dataset was uploaded correctly
+		logger.Info("Step 4: Verifying large dataset upload")
+		
+		client := datas3tclient.NewClient(serverBaseURL)
+		bitmap, err := client.GetDatapointsBitmap(ctx, largeDatas3tName)
+		Expect(err).NotTo(HaveOccurred())
+		
+		expectedCardinality := uint64(totalDatapoints)
+		actualCardinality := bitmap.GetCardinality()
+		Expect(actualCardinality).To(Equal(expectedCardinality),
+			"Large dataset should contain exactly %d datapoints", expectedCardinality)
+		
+		logger.Info("Large dataset verification passed",
+			"expected_datapoints", expectedCardinality,
+			"actual_datapoints", actualCardinality)
+		
+		// Step 5: Perform large-scale aggregation
+		logger.Info("Step 5: Performing large-scale aggregation")
+		
+		// Aggregate the first 600 dataranges (3,000 datapoints)
+		// This should create a large aggregated datarange >60MB
+		firstDatapoint := 0
+		lastDatapoint := 599 * filesPerDatarange - 1 // 2995 - 1 = 2994
+		
+		logger.Info("Starting large aggregation",
+			"first_datapoint", firstDatapoint,
+			"last_datapoint", lastDatapoint,
+			"expected_datapoints", lastDatapoint-firstDatapoint+1)
+		
+		// Use higher parallelism for large aggregation
+		err = runCLICommand(cliPath, "datarange", "aggregate",
+			"--datas3t", largeDatas3tName,
+			"--first-datapoint", fmt.Sprintf("%d", firstDatapoint),
+			"--last-datapoint", fmt.Sprintf("%d", lastDatapoint),
+			"--max-parallelism", "8",
+			"--max-retries", "3",
+		)
+		Expect(err).NotTo(HaveOccurred())
+		
+		logger.Info("Large aggregation completed successfully")
+		
+		// Step 6: Verify aggregation worked correctly
+		logger.Info("Step 6: Verifying large aggregation")
+		
+		// Check that all datapoints still exist
+		bitmap, err = client.GetDatapointsBitmap(ctx, largeDatas3tName)
+		Expect(err).NotTo(HaveOccurred())
+		
+		Expect(bitmap.GetCardinality()).To(Equal(expectedCardinality),
+			"All datapoints should still exist after large aggregation")
+		
+		// Test downloading a sample from the aggregated range
+		logger.Info("Testing download from aggregated range")
+		
+		sampleTarPath := filepath.Join(tempDir, "large_aggregated_sample.tar")
+		err = runCLICommand(cliPath, "datarange", "download-tar",
+			"--datas3t", largeDatas3tName,
+			"--first-datapoint", "0",
+			"--last-datapoint", "99",
+			"--output", sampleTarPath,
+		)
+		Expect(err).NotTo(HaveOccurred())
+		
+		// Validate the sample
+		sampleData, err := os.ReadFile(sampleTarPath)
+		Expect(err).NotTo(HaveOccurred())
+		
+		err = validateTarArchive(sampleData)
+		Expect(err).NotTo(HaveOccurred())
+		
+		logger.Info("Large aggregation validation passed")
+		
+		// Step 7: Test DatapointIterator on aggregated data
+		logger.Info("Step 7: Testing DatapointIterator on large aggregated data")
+		
+		// Test iterator on a subset of the aggregated data
+		iteratorCount := 0
+		testRangeStart := uint64(0)
+		testRangeEnd := uint64(199) // Test first 200 datapoints
+		
+		for content, err := range client.DatapointIterator(ctx, largeDatas3tName, testRangeStart, testRangeEnd) {
+			if err != nil {
+				logger.Error("DatapointIterator error", "error", err, "count", iteratorCount)
+				Expect(err).NotTo(HaveOccurred())
+			}
+			
+			Expect(content).NotTo(BeEmpty(), "Datapoint content should not be empty")
+			Expect(isValidUTF8(content)).To(BeTrue(), "Datapoint content should be valid UTF-8")
+			
+			iteratorCount++
+			
+			// Log progress periodically
+			if iteratorCount%50 == 0 {
+				logger.Info("DatapointIterator progress", "processed", iteratorCount)
+			}
+		}
+		
+		expectedIteratorCount := int(testRangeEnd - testRangeStart + 1)
+		Expect(iteratorCount).To(Equal(expectedIteratorCount),
+			"Should iterate through exactly %d datapoints", expectedIteratorCount)
+		
+		logger.Info("DatapointIterator test on large aggregated data passed",
+			"datapoints_processed", iteratorCount)
+		
+		// Step 8: Perform a second aggregation to test multiple aggregations
+		logger.Info("Step 8: Performing second large aggregation")
+		
+		// Aggregate the next 400 dataranges (2,000 datapoints)
+		secondFirstDatapoint := 600 * filesPerDatarange
+		secondLastDatapoint := 999 * filesPerDatarange - 1
+		
+		logger.Info("Starting second large aggregation",
+			"first_datapoint", secondFirstDatapoint,
+			"last_datapoint", secondLastDatapoint)
+		
+		err = runCLICommand(cliPath, "datarange", "aggregate",
+			"--datas3t", largeDatas3tName,
+			"--first-datapoint", fmt.Sprintf("%d", secondFirstDatapoint),
+			"--last-datapoint", fmt.Sprintf("%d", secondLastDatapoint),
+			"--max-parallelism", "6",
+			"--max-retries", "3",
+		)
+		Expect(err).NotTo(HaveOccurred())
+		
+		logger.Info("Second large aggregation completed successfully")
+		
+		// Step 9: Final verification
+		logger.Info("Step 9: Final verification of large dataset")
+		
+		bitmap, err = client.GetDatapointsBitmap(ctx, largeDatas3tName)
+		Expect(err).NotTo(HaveOccurred())
+		
+		Expect(bitmap.GetCardinality()).To(Equal(expectedCardinality),
+			"All datapoints should still exist after second large aggregation")
+		
+		logger.Info("Large dataset aggregation test completed successfully",
+			"total_dataranges_uploaded", numDataranges,
+			"total_datapoints", totalDatapoints,
+			"first_aggregation_range", fmt.Sprintf("%d-%d", firstDatapoint, lastDatapoint),
+			"second_aggregation_range", fmt.Sprintf("%d-%d", secondFirstDatapoint, secondLastDatapoint),
+			"final_datapoint_count", bitmap.GetCardinality())
+	})
+
 })
