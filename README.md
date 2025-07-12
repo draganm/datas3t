@@ -452,11 +452,11 @@ export ENCRYPTION_KEY="your-encryption-key"
 - The datas3t remains in the database with zero dataranges and datapoints
 - S3 objects are deleted by the background worker within 24 hours
 
-### Datarange Operations
+### TAR Upload Operations
 
 #### Upload TAR File
 ```bash
-./datas3t datarange upload-tar \
+./datas3t upload-tar \
   --datas3t my-dataset \
   --file /path/to/data.tar \
   --max-parallelism 8 \
@@ -468,6 +468,8 @@ export ENCRYPTION_KEY="your-encryption-key"
 - `--file` - Path to TAR file to upload (required)
 - `--max-parallelism` - Maximum concurrent uploads (default: 4)
 - `--max-retries` - Maximum retry attempts per chunk (default: 3)
+
+### Datarange Operations
 
 #### Download Datapoints as TAR
 ```bash
@@ -494,7 +496,7 @@ export ENCRYPTION_KEY="your-encryption-key"
 
 #### Aggregate Multiple Dataranges
 ```bash
-./datas3t datarange aggregate \
+./datas3t aggregate \
   --datas3t my-dataset \
   --first-datapoint 1 \
   --last-datapoint 5000 \
@@ -516,9 +518,11 @@ export ENCRYPTION_KEY="your-encryption-key"
 - Atomically replaces the original dataranges with the new aggregate
 - Validates that the datapoint range is fully covered by existing dataranges with no gaps
 
+### Optimization Operations
+
 #### Optimize Datarange Storage
 ```bash
-./datas3t datarange optimize \
+./datas3t optimize \
   --datas3t my-dataset \
   --dry-run \
   --min-score 2.0 \
@@ -558,25 +562,25 @@ Each potential aggregation is scored based on:
 **Example Usage:**
 ```bash
 # One-time optimization with dry-run to see recommendations
-./datas3t datarange optimize \
+./datas3t optimize \
   --datas3t my-dataset \
   --dry-run
 
 # Execute optimization with custom thresholds
-./datas3t datarange optimize \
+./datas3t optimize \
   --datas3t my-dataset \
   --min-score 2.0 \
   --target-size 2GB \
   --max-operations 5
 
 # Continuous monitoring mode
-./datas3t datarange optimize \
+./datas3t optimize \
   --datas3t my-dataset \
   --daemon \
   --interval 5m
 
 # Show all available optimization opportunities
-./datas3t datarange optimize \
+./datas3t optimize \
   --datas3t my-dataset \
   --dry-run \
   --min-score 0.5 \
@@ -598,7 +602,7 @@ Each potential aggregation is scored based on:
 ./datas3t datas3t list
 
 # Aggregate the first 10,000 datapoints into a single larger datarange
-./datas3t datarange aggregate \
+./datas3t aggregate \
   --datas3t my-dataset \
   --first-datapoint 1 \
   --last-datapoint 10000 \
@@ -638,7 +642,7 @@ export ENCRYPTION_KEY="generated-key-here"
   --bucket production-bucket
 
 # 5. Upload data
-./datas3t datarange upload-tar \
+./datas3t upload-tar \
   --datas3t image-dataset \
   --file ./images-batch-1.tar
 
@@ -657,17 +661,17 @@ export ENCRYPTION_KEY="generated-key-here"
   --output ./images-100-200.tar
 
 # 9. Optimize datarange storage automatically
-./datas3t datarange optimize \
+./datas3t optimize \
   --datas3t image-dataset \
   --dry-run
 
 # 10. Execute optimization
-./datas3t datarange optimize \
+./datas3t optimize \
   --datas3t image-dataset \
   --min-score 2.0
 
 # 11. Or aggregate specific ranges manually
-./datas3t datarange aggregate \
+./datas3t aggregate \
   --datas3t image-dataset \
   --first-datapoint 1 \
   --last-datapoint 10000

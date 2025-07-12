@@ -1,4 +1,4 @@
-package clear
+package datasetclear
 
 import (
 	"bufio"

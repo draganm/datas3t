@@ -1,4 +1,4 @@
-package list
+package bucketlist
 
 import (
 	"context"

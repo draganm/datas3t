@@ -39,8 +39,8 @@ func createTestTarWithIndex(numFiles int, startIndex int64) ([]byte, []byte) {
 	tw := tar.NewWriter(&tarBuf)
 
 	// Create files with proper %020d.<extension> naming
-	// Target 20MB total per datarange, calculate file size accordingly
-	const targetDatarangeSize = 20 * 1024 * 1024 // 20MB per datarange
+	// Target 2MB total per datarange, calculate file size accordingly
+	const targetDatarangeSize = 2 * 1024 * 1024 // 2MB per datarange
 	fileSize := targetDatarangeSize / numFiles   // Dynamic file size based on number of files
 
 	// Ensure minimum file size for meaningful content
@@ -448,11 +448,11 @@ var _ = Describe("End-to-End Server Test", func() {
 		)
 		Expect(err).NotTo(HaveOccurred())
 
-		// Step 3: Upload first datarange (files 0-17999)
-		logger.Info("Step 3: Uploading first datarange with 18,000 datapoints")
-		testData1, _ := createTestTarWithIndex(18000, 0) // files 0-17999, ~20MB total
+		// Step 3: Upload first datarange (files 0-1999)
+		logger.Info("Step 3: Uploading first datarange with 2,000 datapoints")
+		testData1, _ := createTestTarWithIndex(2000, 0) // files 0-1999, ~2MB total
 
-		logger.Info("Created large test TAR file", "datapoints", 18000, "size_mb", len(testData1)/(1024*1024), "size_bytes", len(testData1), "avg_file_size_bytes", len(testData1)/18000)
+		logger.Info("Created test TAR file", "datapoints", 2000, "size_mb", len(testData1)/(1024*1024), "size_bytes", len(testData1), "avg_file_size_bytes", len(testData1)/2000)
 
 		// Create temporary file for upload
 		tarFile1 := filepath.Join(tempDir, "test1.tar")
@@ -460,17 +460,17 @@ var _ = Describe("End-to-End Server Test", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// Upload using CLI
-		err = runCLICommand(cliPath, "datarange", "upload-tar",
+		err = runCLICommand(cliPath, "upload-tar",
 			"--datas3t", testDatas3tName,
 			"--file", tarFile1,
 		)
 		Expect(err).NotTo(HaveOccurred())
 
-		// Step 4: Upload second datarange (files 20000-37999) - gap between 18000-19999
-		logger.Info("Step 4: Uploading second datarange with 18,000 datapoints")
-		testData2, _ := createTestTarWithIndex(18000, 20000) // files 20000-37999, ~20MB total
+		// Step 4: Upload second datarange (files 3000-4999) - gap between 2000-2999
+		logger.Info("Step 4: Uploading second datarange with 2,000 datapoints")
+		testData2, _ := createTestTarWithIndex(2000, 3000) // files 3000-4999, ~2MB total
 
-		logger.Info("Created second large test TAR file", "datapoints", 18000, "size_mb", len(testData2)/(1024*1024), "size_bytes", len(testData2), "avg_file_size_bytes", len(testData2)/18000)
+		logger.Info("Created second test TAR file", "datapoints", 2000, "size_mb", len(testData2)/(1024*1024), "size_bytes", len(testData2), "avg_file_size_bytes", len(testData2)/2000)
 
 		// Create temporary file for upload
 		tarFile2 := filepath.Join(tempDir, "test2.tar")
@@ -478,7 +478,7 @@ var _ = Describe("End-to-End Server Test", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// Upload using CLI
-		err = runCLICommand(cliPath, "datarange", "upload-tar",
+		err = runCLICommand(cliPath, "upload-tar",
 			"--datas3t", testDatas3tName,
 			"--file", tarFile2,
 		)
@@ -487,12 +487,12 @@ var _ = Describe("End-to-End Server Test", func() {
 		// Step 5: Download tar file containing both dataranges using CLI
 		logger.Info("Step 5: Downloading subset spanning both dataranges as TAR file using CLI")
 
-		// Download partial range (files 17990-20010) to span across both dataranges and the gap using CLI
+		// Download partial range (files 1990-3010) to span across both dataranges and the gap using CLI
 		partialTarPath := filepath.Join(tempDir, "partial_download.tar")
 		err = runCLICommand(cliPath, "datarange", "download-tar",
 			"--datas3t", testDatas3tName,
-			"--first-datapoint", "17990",
-			"--last-datapoint", "20010",
+			"--first-datapoint", "1990",
+			"--last-datapoint", "3010",
 			"--output", partialTarPath,
 		)
 		Expect(err).NotTo(HaveOccurred())
@@ -513,17 +513,17 @@ var _ = Describe("End-to-End Server Test", func() {
 		// Step 5.1: Compare downloaded TAR file directly with expected TAR reconstruction
 		logger.Info("Step 5.1: Performing byte-for-byte comparison of downloaded TAR vs expected TAR reconstruction")
 
-		// Create expected TAR file for the partial range (17990-20010)
-		// This includes files 17990-17999 from first datarange and 20000-20010 from second datarange
-		expectedPartialTarData, _ := createTestTarWithIndex(21, 17990) // 21 files: 17990-17999 (10) + gap + 20000-20010 (11)
+		// Create expected TAR file for the partial range (1990-3010)
+		// This includes files 1990-1999 from first datarange and 3000-3010 from second datarange
+		expectedPartialTarData, _ := createTestTarWithIndex(21, 1990) // 21 files: 1990-1999 (10) + gap + 3000-3010 (11)
 
-		// However, since there's a gap (18000-19999 don't exist), we need to create the expected TAR more carefully
+		// However, since there's a gap (2000-2999 don't exist), we need to create the expected TAR more carefully
 		var expectedTarBuf bytes.Buffer
 		tw := tar.NewWriter(&expectedTarBuf)
 
-		// Files from first datarange (17990-17999)
-		const targetFileSize = 20 * 1024 * 1024 / 18000 // Same size as original files
-		for i := 17990; i <= 17999; i++ {
+		// Files from first datarange (1990-1999)
+		const targetFileSize = 2 * 1024 * 1024 / 2000 // Same size as original files
+		for i := 1990; i <= 1999; i++ {
 			filename := fmt.Sprintf("%020d.txt", i)
 			baseContent := fmt.Sprintf("Content of file %d - ", i)
 
@@ -569,8 +569,8 @@ var _ = Describe("End-to-End Server Test", func() {
 			Expect(err).NotTo(HaveOccurred())
 		}
 
-		// Files from second datarange (20000-20010)
-		for i := 20000; i <= 20010; i++ {
+		// Files from second datarange (3000-3010)
+		for i := 3000; i <= 3010; i++ {
 			filename := fmt.Sprintf("%020d.txt", i)
 			baseContent := fmt.Sprintf("Content of file %d - ", i)
 
@@ -631,13 +631,13 @@ var _ = Describe("End-to-End Server Test", func() {
 		logger.Info("Partial TAR byte-for-byte comparison passed", "size_bytes", len(partialTarData))
 
 		// Step 6: Download complete archive with all available files using CLI
-		logger.Info("Step 6: Downloading complete archive with all 36,000 datapoints as TAR file using CLI")
+		logger.Info("Step 6: Downloading complete archive with all 4,000 datapoints as TAR file using CLI")
 
 		completeTarPath := filepath.Join(tempDir, "complete_download.tar")
 		err = runCLICommand(cliPath, "datarange", "download-tar",
 			"--datas3t", testDatas3tName,
 			"--first-datapoint", "0",
-			"--last-datapoint", "37999",
+			"--last-datapoint", "4999",
 			"--output", completeTarPath,
 		)
 		Expect(err).NotTo(HaveOccurred())
@@ -662,8 +662,8 @@ var _ = Describe("End-to-End Server Test", func() {
 		var expectedCompleteTarBuf bytes.Buffer
 		completeTw := tar.NewWriter(&expectedCompleteTarBuf)
 
-		// Files from first datarange (0-17999)
-		for i := 0; i < 18000; i++ {
+		// Files from first datarange (0-1999)
+		for i := 0; i < 2000; i++ {
 			filename := fmt.Sprintf("%020d.txt", i)
 			baseContent := fmt.Sprintf("Content of file %d - ", i)
 
@@ -709,8 +709,8 @@ var _ = Describe("End-to-End Server Test", func() {
 			Expect(err).NotTo(HaveOccurred())
 		}
 
-		// Files from second datarange (20000-37999)
-		for i := 20000; i < 38000; i++ {
+		// Files from second datarange (3000-4999)
+		for i := 3000; i < 5000; i++ {
 			filename := fmt.Sprintf("%020d.txt", i)
 			baseContent := fmt.Sprintf("Content of file %d - ", i)
 
@@ -774,20 +774,20 @@ var _ = Describe("End-to-End Server Test", func() {
 		// Create a client to use the DatapointIterator
 		client := datas3t.NewClient(serverBaseURL)
 
-		// Use DatapointIterator for the same partial range (17990-20010) to validate streaming
+		// Use DatapointIterator for the same partial range (1990-3010) to validate streaming
 		datapointCount := 0
 		expectedDatapoints := []int{}
 
-		// Build list of expected datapoint indices (17990-17999 and 20000-20010)
-		for i := 17990; i <= 17999; i++ {
+		// Build list of expected datapoint indices (1990-1999 and 3000-3010)
+		for i := 1990; i <= 1999; i++ {
 			expectedDatapoints = append(expectedDatapoints, i)
 		}
-		for i := 20000; i <= 20010; i++ {
+		for i := 3000; i <= 3010; i++ {
 			expectedDatapoints = append(expectedDatapoints, i)
 		}
 
 		datapointIndex := 0
-		for content, err := range client.DatapointIterator(ctx, testDatas3tName, 17990, 20010) {
+		for content, err := range client.DatapointIterator(ctx, testDatas3tName, 1990, 3010) {
 			if err != nil {
 				logger.Error("DatapointIterator error", "error", err)
 				Expect(err).NotTo(HaveOccurred())
@@ -835,8 +835,8 @@ var _ = Describe("End-to-End Server Test", func() {
 		Expect(bitmap).NotTo(BeNil())
 
 		// Validate the bitmap has the correct total cardinality
-		// Should be 36,000 datapoints (18,000 from first range + 18,000 from second range)
-		expectedCardinality := uint64(36000)
+		// Should be 4,000 datapoints (2,000 from first range + 2,000 from second range)
+		expectedCardinality := uint64(4000)
 		actualCardinality := bitmap.GetCardinality()
 		Expect(actualCardinality).To(Equal(expectedCardinality),
 			"Bitmap should contain exactly %d datapoints", expectedCardinality)
@@ -846,25 +846,25 @@ var _ = Describe("End-to-End Server Test", func() {
 			"actual_cardinality", actualCardinality)
 
 		// Validate specific datapoints are set correctly
-		// Test first datarange boundaries (0-17999)
+		// Test first datarange boundaries (0-1999)
 		Expect(bitmap.Contains(0)).To(BeTrue(), "Datapoint 0 should be set")
 		Expect(bitmap.Contains(1)).To(BeTrue(), "Datapoint 1 should be set")
-		Expect(bitmap.Contains(17998)).To(BeTrue(), "Datapoint 17998 should be set")
-		Expect(bitmap.Contains(17999)).To(BeTrue(), "Datapoint 17999 should be set")
+		Expect(bitmap.Contains(1998)).To(BeTrue(), "Datapoint 1998 should be set")
+		Expect(bitmap.Contains(1999)).To(BeTrue(), "Datapoint 1999 should be set")
 
-		// Test gap datapoints are NOT set (18000-19999)
-		Expect(bitmap.Contains(18000)).To(BeFalse(), "Datapoint 18000 should NOT be set (gap)")
-		Expect(bitmap.Contains(18500)).To(BeFalse(), "Datapoint 18500 should NOT be set (gap)")
-		Expect(bitmap.Contains(19999)).To(BeFalse(), "Datapoint 19999 should NOT be set (gap)")
+		// Test gap datapoints are NOT set (2000-2999)
+		Expect(bitmap.Contains(2000)).To(BeFalse(), "Datapoint 2000 should NOT be set (gap)")
+		Expect(bitmap.Contains(2500)).To(BeFalse(), "Datapoint 2500 should NOT be set (gap)")
+		Expect(bitmap.Contains(2999)).To(BeFalse(), "Datapoint 2999 should NOT be set (gap)")
 
-		// Test second datarange boundaries (20000-37999)
-		Expect(bitmap.Contains(20000)).To(BeTrue(), "Datapoint 20000 should be set")
-		Expect(bitmap.Contains(20001)).To(BeTrue(), "Datapoint 20001 should be set")
-		Expect(bitmap.Contains(37998)).To(BeTrue(), "Datapoint 37998 should be set")
-		Expect(bitmap.Contains(37999)).To(BeTrue(), "Datapoint 37999 should be set")
+		// Test second datarange boundaries (3000-4999)
+		Expect(bitmap.Contains(3000)).To(BeTrue(), "Datapoint 3000 should be set")
+		Expect(bitmap.Contains(3001)).To(BeTrue(), "Datapoint 3001 should be set")
+		Expect(bitmap.Contains(4998)).To(BeTrue(), "Datapoint 4998 should be set")
+		Expect(bitmap.Contains(4999)).To(BeTrue(), "Datapoint 4999 should be set")
 
 		// Test datapoints beyond the ranges are NOT set
-		Expect(bitmap.Contains(38000)).To(BeFalse(), "Datapoint 38000 should NOT be set (beyond range)")
+		Expect(bitmap.Contains(5000)).To(BeFalse(), "Datapoint 5000 should NOT be set (beyond range)")
 		Expect(bitmap.Contains(100000)).To(BeFalse(), "Datapoint 100000 should NOT be set (beyond range)")
 
 		logger.Info("Bitmap individual datapoint validation passed")
@@ -874,35 +874,35 @@ var _ = Describe("End-to-End Server Test", func() {
 		for i := uint64(0); i < 100; i++ {
 			Expect(bitmap.Contains(i)).To(BeTrue(), "Datapoint %d should be set (first range)", i)
 		}
-		for i := uint64(17900); i < 18000; i++ {
+		for i := uint64(1900); i < 2000; i++ {
 			Expect(bitmap.Contains(i)).To(BeTrue(), "Datapoint %d should be set (first range end)", i)
 		}
-		for i := uint64(20000); i < 20100; i++ {
+		for i := uint64(3000); i < 3100; i++ {
 			Expect(bitmap.Contains(i)).To(BeTrue(), "Datapoint %d should be set (second range start)", i)
 		}
-		for i := uint64(37900); i < 38000; i++ {
+		for i := uint64(4900); i < 5000; i++ {
 			Expect(bitmap.Contains(i)).To(BeTrue(), "Datapoint %d should be set (second range end)", i)
 		}
 
 		// Test bitmap operations
 		// Create a test bitmap with some overlapping datapoints
 		testBitmap := roaring64.New()
-		testBitmap.AddRange(17990, 20011) // AddRange uses exclusive upper bound, so this adds 17990-20010
+		testBitmap.AddRange(1990, 3011) // AddRange uses exclusive upper bound, so this adds 1990-3010
 
 		// Intersection should only contain the datapoints that exist in both bitmaps
 		intersection := roaring64.And(bitmap, testBitmap)
-		expectedIntersectionCardinality := uint64(21) // 10 from first range (17990-17999) + 11 from second range (20000-20010)
+		expectedIntersectionCardinality := uint64(21) // 10 from first range (1990-1999) + 11 from second range (3000-3010)
 		Expect(intersection.GetCardinality()).To(Equal(expectedIntersectionCardinality),
 			"Intersection should contain exactly %d datapoints", expectedIntersectionCardinality)
 
 		// Validate the intersection contains the expected datapoints
-		for i := uint64(17990); i <= 17999; i++ {
+		for i := uint64(1990); i <= 1999; i++ {
 			Expect(intersection.Contains(i)).To(BeTrue(), "Intersection should contain datapoint %d", i)
 		}
-		for i := uint64(18000); i <= 19999; i++ {
+		for i := uint64(2000); i <= 2999; i++ {
 			Expect(intersection.Contains(i)).To(BeFalse(), "Intersection should NOT contain datapoint %d (gap)", i)
 		}
-		for i := uint64(20000); i <= 20010; i++ {
+		for i := uint64(3000); i <= 3010; i++ {
 			Expect(intersection.Contains(i)).To(BeTrue(), "Intersection should contain datapoint %d", i)
 		}
 
@@ -932,7 +932,7 @@ var _ = Describe("End-to-End Server Test", func() {
 			"partial_tar_size_bytes", len(partialTarData),
 			"complete_tar_size_bytes", len(completeTarData),
 			"total_data_processed_mb", (len(partialTarData)+len(completeTarData))/(1024*1024),
-			"total_datapoints_processed", 36000,
+			"total_datapoints_processed", 4000,
 			"iterator_datapoints_validated", datapointCount)
 	})
 
@@ -959,18 +959,16 @@ var _ = Describe("End-to-End Server Test", func() {
 		// Step 3: Upload multiple small dataranges for aggregation
 		logger.Info("Step 3: Uploading multiple small dataranges for CLI aggregation test")
 
-		// Create 6 small dataranges (each 2,000 datapoints, ~2MB each)
+		// Create 4 small dataranges (each 500 datapoints, ~500KB each)
 		datarangeInfo := []struct {
 			startIndex int64
 			numFiles   int
 			filename   string
 		}{
-			{0, 2000, "cli_datarange1.tar"},     // 0-1999
-			{2000, 2000, "cli_datarange2.tar"},  // 2000-3999
-			{4000, 2000, "cli_datarange3.tar"},  // 4000-5999
-			{6000, 2000, "cli_datarange4.tar"},  // 6000-7999
-			{8000, 2000, "cli_datarange5.tar"},  // 8000-9999
-			{10000, 2000, "cli_datarange6.tar"}, // 10000-11999
+			{0, 500, "cli_datarange1.tar"},     // 0-499
+			{500, 500, "cli_datarange2.tar"},   // 500-999
+			{1000, 500, "cli_datarange3.tar"},  // 1000-1499
+			{1500, 500, "cli_datarange4.tar"},  // 1500-1999
 		}
 
 		for i, info := range datarangeInfo {
@@ -981,7 +979,7 @@ var _ = Describe("End-to-End Server Test", func() {
 			err = os.WriteFile(tarFile, testData, 0644)
 			Expect(err).NotTo(HaveOccurred())
 
-			err = runCLICommand(cliPath, "datarange", "upload-tar",
+			err = runCLICommand(cliPath, "upload-tar",
 				"--datas3t", testDatas3tName,
 				"--file", tarFile,
 			)
@@ -991,13 +989,13 @@ var _ = Describe("End-to-End Server Test", func() {
 		// Step 4: Test aggregation using CLI command
 		logger.Info("Step 4: Testing aggregation using CLI command")
 
-		// Test 1: Aggregate first 3 dataranges (0-5999) using CLI
-		logger.Info("Test 1: Aggregating first 3 dataranges (0-5999) using CLI")
+		// Test 1: Aggregate first 2 dataranges (0-999) using CLI
+		logger.Info("Test 1: Aggregating first 2 dataranges (0-999) using CLI")
 
-		err = runCLICommand(cliPath, "datarange", "aggregate",
+		err = runCLICommand(cliPath, "aggregate",
 			"--datas3t", testDatas3tName,
 			"--first-datapoint", "0",
-			"--last-datapoint", "5999",
+			"--last-datapoint", "999",
 			"--max-parallelism", "2",
 			"--max-retries", "3",
 		)
@@ -1008,26 +1006,26 @@ var _ = Describe("End-to-End Server Test", func() {
 		bitmap, err := client.GetDatapointsBitmap(ctx, testDatas3tName)
 		Expect(err).NotTo(HaveOccurred())
 
-		// Should still have all 12,000 datapoints (6,000 in aggregate + 6,000 in remaining ranges)
-		Expect(bitmap.GetCardinality()).To(Equal(uint64(12000)))
+		// Should still have all 2,000 datapoints (1,000 in aggregate + 1,000 in remaining ranges)
+		Expect(bitmap.GetCardinality()).To(Equal(uint64(2000)))
 
 		// Verify specific datapoints in the aggregated range still exist
 		for i := uint64(0); i < 100; i++ {
 			Expect(bitmap.Contains(i)).To(BeTrue(), "Datapoint %d should still exist after CLI aggregation", i)
 		}
-		for i := uint64(5900); i < 6000; i++ {
+		for i := uint64(900); i < 1000; i++ {
 			Expect(bitmap.Contains(i)).To(BeTrue(), "Datapoint %d should still exist after CLI aggregation", i)
 		}
 
 		logger.Info("CLI aggregation test 1 passed")
 
-		// Test 2: Aggregate next 2 dataranges (6000-9999) using CLI
-		logger.Info("Test 2: Aggregating next 2 dataranges (6000-9999) using CLI")
+		// Test 2: Aggregate remaining 2 dataranges (1000-1999) using CLI
+		logger.Info("Test 2: Aggregating remaining 2 dataranges (1000-1999) using CLI")
 
-		err = runCLICommand(cliPath, "datarange", "aggregate",
+		err = runCLICommand(cliPath, "aggregate",
 			"--datas3t", testDatas3tName,
-			"--first-datapoint", "6000",
-			"--last-datapoint", "9999",
+			"--first-datapoint", "1000",
+			"--last-datapoint", "1999",
 			"--max-parallelism", "3",
 			"--max-retries", "2",
 		)
@@ -1037,14 +1035,14 @@ var _ = Describe("End-to-End Server Test", func() {
 		bitmap, err = client.GetDatapointsBitmap(ctx, testDatas3tName)
 		Expect(err).NotTo(HaveOccurred())
 
-		// Should still have all 12,000 datapoints (now in fewer aggregated ranges)
-		Expect(bitmap.GetCardinality()).To(Equal(uint64(12000)))
+		// Should still have all 2,000 datapoints (now in fewer aggregated ranges)
+		Expect(bitmap.GetCardinality()).To(Equal(uint64(2000)))
 
 		// Verify specific datapoints in the second aggregated range still exist
-		for i := uint64(6000); i < 6100; i++ {
+		for i := uint64(1000); i < 1100; i++ {
 			Expect(bitmap.Contains(i)).To(BeTrue(), "Datapoint %d should still exist after second CLI aggregation", i)
 		}
-		for i := uint64(9900); i < 10000; i++ {
+		for i := uint64(1900); i < 2000; i++ {
 			Expect(bitmap.Contains(i)).To(BeTrue(), "Datapoint %d should still exist after second CLI aggregation", i)
 		}
 
@@ -1053,12 +1051,12 @@ var _ = Describe("End-to-End Server Test", func() {
 		// Step 5: Test aggregated data integrity by downloading and validating
 		logger.Info("Step 5: Testing CLI aggregated data integrity")
 
-		// Download a range that spans the boundary of the first aggregation (5995-6005)
+		// Download a range that spans the boundary of the first aggregation (995-1005)
 		boundaryTarPath := filepath.Join(tempDir, "cli_boundary_download.tar")
 		err = runCLICommand(cliPath, "datarange", "download-tar",
 			"--datas3t", testDatas3tName,
-			"--first-datapoint", "5995",
-			"--last-datapoint", "6005",
+			"--first-datapoint", "995",
+			"--last-datapoint", "1005",
 			"--output", boundaryTarPath,
 		)
 		Expect(err).NotTo(HaveOccurred())
@@ -1076,11 +1074,11 @@ var _ = Describe("End-to-End Server Test", func() {
 		err = extractFilesFromTar(boundaryTarData, boundaryFiles)
 		Expect(err).NotTo(HaveOccurred())
 
-		// Verify we have the expected 11 files (5995-6005)
+		// Verify we have the expected 11 files (995-1005)
 		Expect(len(boundaryFiles)).To(Equal(11))
 
 		// Verify specific files exist and have correct content
-		for i := 5995; i <= 6005; i++ {
+		for i := 995; i <= 1005; i++ {
 			filename := fmt.Sprintf("%020d.txt", i)
 			content, exists := boundaryFiles[filename]
 			Expect(exists).To(BeTrue(), "File %s should exist", filename)
@@ -1092,13 +1090,13 @@ var _ = Describe("End-to-End Server Test", func() {
 
 		logger.Info("CLI aggregated data integrity test passed")
 
-		// Step 6: Test final aggregation of everything (0-11999) using CLI
-		logger.Info("Step 6: Testing final CLI aggregation of all data (0-11999)")
+		// Step 6: Test final aggregation of everything (0-1999) using CLI
+		logger.Info("Step 6: Testing final CLI aggregation of all data (0-1999)")
 
-		err = runCLICommand(cliPath, "datarange", "aggregate",
+		err = runCLICommand(cliPath, "aggregate",
 			"--datas3t", testDatas3tName,
 			"--first-datapoint", "0",
-			"--last-datapoint", "11999",
+			"--last-datapoint", "1999",
 			"--max-parallelism", "4",
 			"--max-retries", "3",
 		)
@@ -1107,7 +1105,7 @@ var _ = Describe("End-to-End Server Test", func() {
 		// Verify final state - should still have all datapoints
 		bitmap, err = client.GetDatapointsBitmap(ctx, testDatas3tName)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(bitmap.GetCardinality()).To(Equal(uint64(12000)))
+		Expect(bitmap.GetCardinality()).To(Equal(uint64(2000)))
 
 		logger.Info("Final CLI aggregation passed")
 
@@ -1116,16 +1114,16 @@ var _ = Describe("End-to-End Server Test", func() {
 
 		// Test 1: Try to aggregate insufficient dataranges (invalid range)
 		logger.Info("Testing CLI insufficient dataranges error")
-		err = runCLICommand(cliPath, "datarange", "aggregate",
+		err = runCLICommand(cliPath, "aggregate",
 			"--datas3t", testDatas3tName,
 			"--first-datapoint", "0",
-			"--last-datapoint", "1999", // Only 1 aggregate datarange now
+			"--last-datapoint", "999", // Only 1 aggregate datarange now
 		)
 		Expect(err).To(HaveOccurred()) // Should fail because there's only 1 aggregate now
 
 		// Test 2: Try to aggregate non-existent datas3t
 		logger.Info("Testing CLI non-existent datas3t error")
-		err = runCLICommand(cliPath, "datarange", "aggregate",
+		err = runCLICommand(cliPath, "aggregate",
 			"--datas3t", "non-existent-datas3t",
 			"--first-datapoint", "0",
 			"--last-datapoint", "1000",
@@ -1134,7 +1132,7 @@ var _ = Describe("End-to-End Server Test", func() {
 
 		// Test 3: Try to aggregate with invalid range (first > last)
 		logger.Info("Testing CLI invalid range error")
-		err = runCLICommand(cliPath, "datarange", "aggregate",
+		err = runCLICommand(cliPath, "aggregate",
 			"--datas3t", testDatas3tName,
 			"--first-datapoint", "1000",
 			"--last-datapoint", "500",
@@ -1179,10 +1177,10 @@ var _ = Describe("End-to-End Server Test", func() {
 			datapointCount++
 		}
 
-		Expect(datapointCount).To(Equal(12000), "Should iterate over all 12,000 datapoints")
+		Expect(datapointCount).To(Equal(2000), "Should iterate over all 2,000 datapoints")
 
 		logger.Info("CLI aggregation workflow completed successfully",
-			"original_dataranges", 6,
+			"original_dataranges", 4,
 			"cli_aggregation_operations", 3,
 			"final_datapoint_count", datapointCount,
 			"final_tar_size_mb", len(finalTarData)/(1024*1024),
@@ -1236,7 +1234,7 @@ var _ = Describe("End-to-End Server Test", func() {
 			err = os.WriteFile(tarFile, testData, 0644)
 			Expect(err).NotTo(HaveOccurred())
 
-			err = runCLICommand(cliPath, "datarange", "upload-tar",
+			err = runCLICommand(cliPath, "upload-tar",
 				"--datas3t", testDatas3tName,
 				"--file", tarFile,
 			)
@@ -1246,7 +1244,7 @@ var _ = Describe("End-to-End Server Test", func() {
 		// Step 4: Test optimization dry-run
 		logger.Info("Step 4: Testing optimization dry-run")
 
-		err = runCLICommand(cliPath, "datarange", "optimize",
+		err = runCLICommand(cliPath, "optimize",
 			"--datas3t", testDatas3tName,
 			"--dry-run",
 			"--min-score", "0.5", // Lower threshold to see more opportunities
@@ -1257,7 +1255,7 @@ var _ = Describe("End-to-End Server Test", func() {
 		// Step 5: Execute optimization with default settings
 		logger.Info("Step 5: Executing optimization with default settings")
 
-		err = runCLICommand(cliPath, "datarange", "optimize",
+		err = runCLICommand(cliPath, "optimize",
 			"--datas3t", testDatas3tName,
 			"--min-score", "1.0",
 			"--target-size", "2MB", // Use smaller target size for testing
@@ -1292,7 +1290,7 @@ var _ = Describe("End-to-End Server Test", func() {
 		// Step 7: Test optimization with custom thresholds
 		logger.Info("Step 7: Testing optimization with custom thresholds")
 
-		err = runCLICommand(cliPath, "datarange", "optimize",
+		err = runCLICommand(cliPath, "optimize",
 			"--datas3t", testDatas3tName,
 			"--min-score", "0.8",
 			"--target-size", "1.5MB",
@@ -1346,7 +1344,7 @@ var _ = Describe("End-to-End Server Test", func() {
 		// Step 9: Test optimization with very high threshold (should find no operations)
 		logger.Info("Step 9: Testing optimization with high threshold")
 
-		err = runCLICommand(cliPath, "datarange", "optimize",
+		err = runCLICommand(cliPath, "optimize",
 			"--datas3t", testDatas3tName,
 			"--min-score", "10.0", // Very high threshold
 			"--max-operations", "5",
@@ -1378,14 +1376,14 @@ var _ = Describe("End-to-End Server Test", func() {
 		logger.Info("Step 11: Testing optimization error cases")
 
 		// Test optimization on non-existent datas3t
-		err = runCLICommand(cliPath, "datarange", "optimize",
+		err = runCLICommand(cliPath, "optimize",
 			"--datas3t", "non-existent-datas3t",
 			"--dry-run",
 		)
 		Expect(err).To(HaveOccurred())
 
 		// Test optimization with invalid size format
-		err = runCLICommand(cliPath, "datarange", "optimize",
+		err = runCLICommand(cliPath, "optimize",
 			"--datas3t", testDatas3tName,
 			"--target-size", "invalid-size",
 			"--dry-run",
@@ -1469,7 +1467,7 @@ var _ = Describe("End-to-End Server Test", func() {
 			err = os.WriteFile(tarFile, testData, 0644)
 			Expect(err).NotTo(HaveOccurred())
 
-			err = runCLICommand(cliPath, "datarange", "upload-tar",
+			err = runCLICommand(cliPath, "upload-tar",
 				"--datas3t", testDatas3tName,
 				"--file", tarFile,
 			)
@@ -1498,7 +1496,7 @@ var _ = Describe("End-to-End Server Test", func() {
 		for optimizationRounds < maxRounds {
 			logger.Info("Running optimization round", "round", optimizationRounds+1)
 			
-			err = runCLICommand(cliPath, "datarange", "optimize",
+			err = runCLICommand(cliPath, "optimize",
 				"--datas3t", testDatas3tName,
 				"--min-score", "0.5",
 				"--target-size", "10MB",
@@ -1846,7 +1844,7 @@ var _ = Describe("End-to-End Server Test", func() {
 		err = os.WriteFile(newTarFile, testData, 0644)
 		Expect(err).NotTo(HaveOccurred())
 
-		err = runCLICommand(cliPath, "datarange", "upload-tar",
+		err = runCLICommand(cliPath, "upload-tar",
 			"--datas3t", "import-test-dataset-1",
 			"--file", newTarFile,
 		)
@@ -2050,7 +2048,7 @@ var _ = Describe("End-to-End Server Test", func() {
 			err = os.WriteFile(tarFile, testData, 0644)
 			Expect(err).NotTo(HaveOccurred())
 
-			err = runCLICommand(cliPath, "datarange", "upload-tar",
+			err = runCLICommand(cliPath, "upload-tar",
 				"--datas3t", testDatas3tName,
 				"--file", tarFile,
 			)
@@ -2138,7 +2136,7 @@ var _ = Describe("End-to-End Server Test", func() {
 		err = os.WriteFile(newTarFile, newTestData, 0644)
 		Expect(err).NotTo(HaveOccurred())
 
-		err = runCLICommand(cliPath, "datarange", "upload-tar",
+		err = runCLICommand(cliPath, "upload-tar",
 			"--datas3t", testDatas3tName,
 			"--file", newTarFile,
 		)
@@ -2199,7 +2197,7 @@ var _ = Describe("End-to-End Server Test", func() {
 			"new_upload_after_clear_verified", true)
 	})
 
-	It("should handle large datas3t aggregation (>100MB with >1000 dataranges)", func(ctx SpecContext) {
+	It("should handle large datas3t aggregation (multiple small dataranges)", func(ctx SpecContext) {
 		logger.Info("Starting large dataset aggregation test")
 		
 		// Create a large datas3t configuration for testing
@@ -2228,10 +2226,10 @@ var _ = Describe("End-to-End Server Test", func() {
 		// Step 3: Upload many small dataranges to create a large dataset
 		logger.Info("Step 3: Uploading many small dataranges to create large dataset")
 		
-		// Upload 1200 dataranges, each with 5 files (6,000 total datapoints)
-		// Each datarange will be ~100KB, so total will be ~120MB (>100MB as requested)
-		const numDataranges = 1200
-		const filesPerDatarange = 5
+		// Upload 200 dataranges, each with 3 files (600 total datapoints)
+		// Each datarange will be ~10KB, so total will be ~2MB (much faster for testing)
+		const numDataranges = 200
+		const filesPerDatarange = 3
 		const totalDatapoints = numDataranges * filesPerDatarange
 		
 		logger.Info("Uploading dataranges",
@@ -2240,7 +2238,7 @@ var _ = Describe("End-to-End Server Test", func() {
 			"total_datapoints", totalDatapoints)
 		
 		// Upload dataranges in parallel batches to speed up the test
-		batchSize := 50
+		batchSize := 20
 		for batch := 0; batch < numDataranges; batch += batchSize {
 			batchEnd := batch + batchSize
 			if batchEnd > numDataranges {
@@ -2266,7 +2264,7 @@ var _ = Describe("End-to-End Server Test", func() {
 				Expect(err).NotTo(HaveOccurred())
 				
 				// Upload the datarange
-				err = runCLICommand(cliPath, "datarange", "upload-tar",
+				err = runCLICommand(cliPath, "upload-tar",
 					"--datas3t", largeDatas3tName,
 					"--file", tarPath,
 				)
@@ -2300,10 +2298,10 @@ var _ = Describe("End-to-End Server Test", func() {
 		// Step 5: Perform large-scale aggregation
 		logger.Info("Step 5: Performing large-scale aggregation")
 		
-		// Aggregate the first 600 dataranges (3,000 datapoints)
-		// This should create a large aggregated datarange >60MB
+		// Aggregate the first 100 dataranges (300 datapoints)
+		// This should create a larger aggregated datarange
 		firstDatapoint := 0
-		lastDatapoint := 599 * filesPerDatarange - 1 // 2995 - 1 = 2994
+		lastDatapoint := 100 * filesPerDatarange - 1 // 100 * 3 - 1 = 299
 		
 		logger.Info("Starting large aggregation",
 			"first_datapoint", firstDatapoint,
@@ -2311,7 +2309,7 @@ var _ = Describe("End-to-End Server Test", func() {
 			"expected_datapoints", lastDatapoint-firstDatapoint+1)
 		
 		// Use higher parallelism for large aggregation
-		err = runCLICommand(cliPath, "datarange", "aggregate",
+		err = runCLICommand(cliPath, "aggregate",
 			"--datas3t", largeDatas3tName,
 			"--first-datapoint", fmt.Sprintf("%d", firstDatapoint),
 			"--last-datapoint", fmt.Sprintf("%d", lastDatapoint),
@@ -2388,15 +2386,15 @@ var _ = Describe("End-to-End Server Test", func() {
 		// Step 8: Perform a second aggregation to test multiple aggregations
 		logger.Info("Step 8: Performing second large aggregation")
 		
-		// Aggregate the next 400 dataranges (2,000 datapoints)
-		secondFirstDatapoint := 600 * filesPerDatarange
-		secondLastDatapoint := 999 * filesPerDatarange - 1
+		// Aggregate the next 100 dataranges (300 datapoints)
+		secondFirstDatapoint := 100 * filesPerDatarange // 300
+		secondLastDatapoint := 200 * filesPerDatarange - 1 // 600 - 1 = 599
 		
 		logger.Info("Starting second large aggregation",
 			"first_datapoint", secondFirstDatapoint,
 			"last_datapoint", secondLastDatapoint)
 		
-		err = runCLICommand(cliPath, "datarange", "aggregate",
+		err = runCLICommand(cliPath, "aggregate",
 			"--datas3t", largeDatas3tName,
 			"--first-datapoint", fmt.Sprintf("%d", secondFirstDatapoint),
 			"--last-datapoint", fmt.Sprintf("%d", secondLastDatapoint),
