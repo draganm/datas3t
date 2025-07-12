@@ -7,45 +7,19 @@ import (
 	"time"
 )
 
+// DeleteKeys provides backward compatibility for tests - uses the old HTTP-based deletion method
 func (s *KeyDeletionServer) DeleteKeys(ctx context.Context, log *slog.Logger) (int, error) {
-	// Get up to 20 keys to delete
-	keys, err := s.db.Query(ctx, `
-		SELECT id, presigned_delete_url
-		FROM keys_to_delete
-		ORDER BY created_at
-		LIMIT 20
-	`)
+	// Get up to 20 keys to delete using the old method
+	keys, err := s.queries.GetKeysToDelete(ctx, 20)
 	if err != nil {
 		return 0, err
 	}
-	defer keys.Close()
 
-	var keysToDelete []struct {
-		ID  int64
-		URL string
-	}
-
-	for keys.Next() {
-		var key struct {
-			ID  int64
-			URL string
-		}
-		err := keys.Scan(&key.ID, &key.URL)
-		if err != nil {
-			return 0, err
-		}
-		keysToDelete = append(keysToDelete, key)
-	}
-
-	if err := keys.Err(); err != nil {
-		return 0, err
-	}
-
-	if len(keysToDelete) == 0 {
+	if len(keys) == 0 {
 		return 0, nil
 	}
 
-	log.Info("Processing keys for deletion", "count", len(keysToDelete))
+	log.Info("Processing keys for deletion (compatibility mode)", "count", len(keys))
 
 	// Delete keys from S3 and track successful deletions
 	var successfulDeletions []int64
@@ -53,8 +27,8 @@ func (s *KeyDeletionServer) DeleteKeys(ctx context.Context, log *slog.Logger) (i
 		Timeout: 30 * time.Second,
 	}
 
-	for _, key := range keysToDelete {
-		req, err := http.NewRequestWithContext(ctx, http.MethodDelete, key.URL, nil)
+	for _, key := range keys {
+		req, err := http.NewRequestWithContext(ctx, http.MethodDelete, key.PresignedDeleteUrl, nil)
 		if err != nil {
 			log.Error("Error creating delete request", "error", err, "key_id", key.ID)
 			continue
@@ -78,18 +52,7 @@ func (s *KeyDeletionServer) DeleteKeys(ctx context.Context, log *slog.Logger) (i
 
 	// Remove successfully deleted keys from database
 	if len(successfulDeletions) > 0 {
-		tx, err := s.db.Begin(ctx)
-		if err != nil {
-			return 0, err
-		}
-		defer tx.Rollback(ctx)
-
-		_, err = tx.Exec(ctx, `DELETE FROM keys_to_delete WHERE id = ANY($1)`, successfulDeletions)
-		if err != nil {
-			return 0, err
-		}
-
-		err = tx.Commit(ctx)
+		err = s.queries.DeleteKeysToDelete(ctx, successfulDeletions)
 		if err != nil {
 			return 0, err
 		}
@@ -97,5 +60,5 @@ func (s *KeyDeletionServer) DeleteKeys(ctx context.Context, log *slog.Logger) (i
 		log.Info("Removed keys from database", "count", len(successfulDeletions))
 	}
 
-	return len(keysToDelete), nil
+	return len(keys), nil
 }

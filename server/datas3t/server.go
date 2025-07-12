@@ -21,3 +21,7 @@ func NewServer(db *pgxpool.Pool, encryptionKey string) (*Datas3tServer, error) {
 		encryptor: encryptor,
 	}, nil
 }
+
+func (s *Datas3tServer) GetEncryptor() *crypto.CredentialEncryptor {
+	return s.encryptor
+}

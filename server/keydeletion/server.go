@@ -5,16 +5,25 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/draganm/datas3t/postgresstore"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type KeyDeletionServer struct {
-	db *pgxpool.Pool
+	db        *pgxpool.Pool
+	queries   *postgresstore.Queries
+	encryptor interface {
+		DecryptCredentials(accessKey, secretKey string) (string, string, error)
+	}
 }
 
-func NewServer(db *pgxpool.Pool) *KeyDeletionServer {
+func NewServer(db *pgxpool.Pool, encryptor interface {
+	DecryptCredentials(accessKey, secretKey string) (string, string, error)
+}) *KeyDeletionServer {
 	return &KeyDeletionServer{
-		db: db,
+		db:        db,
+		queries:   postgresstore.New(db),
+		encryptor: encryptor,
 	}
 }
 
@@ -23,30 +32,30 @@ func (s *KeyDeletionServer) Start(ctx context.Context, log *slog.Logger) {
 }
 
 func (s *KeyDeletionServer) deletionWorker(ctx context.Context, log *slog.Logger) {
-	log.Info("Key deletion worker started")
+	log.Info("Object deletion worker started")
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info("Key deletion worker shutting down")
+			log.Info("Object deletion worker shutting down")
 			return
 		default:
-			keysProcessed, err := s.DeleteKeys(ctx, log)
+			objectsProcessed, err := s.DeleteObjects(ctx, log)
 			if err != nil {
-				log.Error("Error deleting keys", "error", err)
+				log.Error("Error deleting objects", "error", err)
 			}
 
-			// If no keys were processed, wait 1 minute before checking again
-			if keysProcessed == 0 {
+			// If no objects were processed, wait 1 minute before checking again
+			if objectsProcessed == 0 {
 				select {
 				case <-ctx.Done():
-					log.Info("Key deletion worker shutting down")
+					log.Info("Object deletion worker shutting down")
 					return
 				case <-time.After(60 * time.Second):
 					continue
 				}
 			}
-			// If keys were processed, continue immediately to check for more
+			// If objects were processed, continue immediately to check for more
 		}
 	}
 }

@@ -1,0 +1,3 @@
+-- Remove the old presigned_delete_url column as it's no longer needed
+-- TODO: This step will be done in a future migration after all code is updated
+-- ALTER TABLE objects_to_delete DROP COLUMN presigned_delete_url;
