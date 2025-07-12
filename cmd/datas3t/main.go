@@ -7,9 +7,12 @@ import (
 	"log"
 	"os"
 
+	datasetadd "github.com/draganm/datas3t/cmd/datas3t/add"
 	"github.com/draganm/datas3t/cmd/datas3t/bucket"
+	datasetclear "github.com/draganm/datas3t/cmd/datas3t/clear"
 	"github.com/draganm/datas3t/cmd/datas3t/datarange"
-	"github.com/draganm/datas3t/cmd/datas3t/datas3t"
+	"github.com/draganm/datas3t/cmd/datas3t/importcmd"
+	datasetlist "github.com/draganm/datas3t/cmd/datas3t/list"
 	"github.com/draganm/datas3t/cmd/datas3t/server"
 	"github.com/urfave/cli/v2"
 )
@@ -32,7 +35,16 @@ Keep this key secure and backed up - if you lose it, you won't be able to decryp
 				Action: keygenAction,
 			},
 			bucket.Command(),
-			datas3t.Command(),
+			{
+				Name:  "datas3t",
+				Usage: "Manage datas3ts",
+				Subcommands: []*cli.Command{
+					datasetadd.Command(),
+					datasetclear.Command(),
+					datasetlist.Command(),
+					importcmd.Command(),
+				},
+			},
 			datarange.Command(),
 		},
 	}
