@@ -994,7 +994,7 @@ var _ = Describe("End-to-End Server Test", func() {
 		// Test 1: Aggregate first 3 dataranges (0-5999) using CLI
 		logger.Info("Test 1: Aggregating first 3 dataranges (0-5999) using CLI")
 
-		err = runCLICommand(cliPath, "datarange", "aggregate",
+		err = runCLICommand(cliPath, "aggregate",
 			"--datas3t", testDatas3tName,
 			"--first-datapoint", "0",
 			"--last-datapoint", "5999",
@@ -1024,7 +1024,7 @@ var _ = Describe("End-to-End Server Test", func() {
 		// Test 2: Aggregate next 2 dataranges (6000-9999) using CLI
 		logger.Info("Test 2: Aggregating next 2 dataranges (6000-9999) using CLI")
 
-		err = runCLICommand(cliPath, "datarange", "aggregate",
+		err = runCLICommand(cliPath, "aggregate",
 			"--datas3t", testDatas3tName,
 			"--first-datapoint", "6000",
 			"--last-datapoint", "9999",
@@ -1095,7 +1095,7 @@ var _ = Describe("End-to-End Server Test", func() {
 		// Step 6: Test final aggregation of everything (0-11999) using CLI
 		logger.Info("Step 6: Testing final CLI aggregation of all data (0-11999)")
 
-		err = runCLICommand(cliPath, "datarange", "aggregate",
+		err = runCLICommand(cliPath, "aggregate",
 			"--datas3t", testDatas3tName,
 			"--first-datapoint", "0",
 			"--last-datapoint", "11999",
@@ -1116,7 +1116,7 @@ var _ = Describe("End-to-End Server Test", func() {
 
 		// Test 1: Try to aggregate insufficient dataranges (invalid range)
 		logger.Info("Testing CLI insufficient dataranges error")
-		err = runCLICommand(cliPath, "datarange", "aggregate",
+		err = runCLICommand(cliPath, "aggregate",
 			"--datas3t", testDatas3tName,
 			"--first-datapoint", "0",
 			"--last-datapoint", "1999", // Only 1 aggregate datarange now
@@ -1125,7 +1125,7 @@ var _ = Describe("End-to-End Server Test", func() {
 
 		// Test 2: Try to aggregate non-existent datas3t
 		logger.Info("Testing CLI non-existent datas3t error")
-		err = runCLICommand(cliPath, "datarange", "aggregate",
+		err = runCLICommand(cliPath, "aggregate",
 			"--datas3t", "non-existent-datas3t",
 			"--first-datapoint", "0",
 			"--last-datapoint", "1000",
@@ -1134,7 +1134,7 @@ var _ = Describe("End-to-End Server Test", func() {
 
 		// Test 3: Try to aggregate with invalid range (first > last)
 		logger.Info("Testing CLI invalid range error")
-		err = runCLICommand(cliPath, "datarange", "aggregate",
+		err = runCLICommand(cliPath, "aggregate",
 			"--datas3t", testDatas3tName,
 			"--first-datapoint", "1000",
 			"--last-datapoint", "500",
@@ -1246,7 +1246,7 @@ var _ = Describe("End-to-End Server Test", func() {
 		// Step 4: Test optimization dry-run
 		logger.Info("Step 4: Testing optimization dry-run")
 
-		err = runCLICommand(cliPath, "datarange", "optimize",
+		err = runCLICommand(cliPath, "optimize",
 			"--datas3t", testDatas3tName,
 			"--dry-run",
 			"--min-score", "0.5", // Lower threshold to see more opportunities
@@ -1257,7 +1257,7 @@ var _ = Describe("End-to-End Server Test", func() {
 		// Step 5: Execute optimization with default settings
 		logger.Info("Step 5: Executing optimization with default settings")
 
-		err = runCLICommand(cliPath, "datarange", "optimize",
+		err = runCLICommand(cliPath, "optimize",
 			"--datas3t", testDatas3tName,
 			"--min-score", "1.0",
 			"--target-size", "2MB", // Use smaller target size for testing
@@ -1292,7 +1292,7 @@ var _ = Describe("End-to-End Server Test", func() {
 		// Step 7: Test optimization with custom thresholds
 		logger.Info("Step 7: Testing optimization with custom thresholds")
 
-		err = runCLICommand(cliPath, "datarange", "optimize",
+		err = runCLICommand(cliPath, "optimize",
 			"--datas3t", testDatas3tName,
 			"--min-score", "0.8",
 			"--target-size", "1.5MB",
@@ -1346,7 +1346,7 @@ var _ = Describe("End-to-End Server Test", func() {
 		// Step 9: Test optimization with very high threshold (should find no operations)
 		logger.Info("Step 9: Testing optimization with high threshold")
 
-		err = runCLICommand(cliPath, "datarange", "optimize",
+		err = runCLICommand(cliPath, "optimize",
 			"--datas3t", testDatas3tName,
 			"--min-score", "10.0", // Very high threshold
 			"--max-operations", "5",
@@ -1378,14 +1378,14 @@ var _ = Describe("End-to-End Server Test", func() {
 		logger.Info("Step 11: Testing optimization error cases")
 
 		// Test optimization on non-existent datas3t
-		err = runCLICommand(cliPath, "datarange", "optimize",
+		err = runCLICommand(cliPath, "optimize",
 			"--datas3t", "non-existent-datas3t",
 			"--dry-run",
 		)
 		Expect(err).To(HaveOccurred())
 
 		// Test optimization with invalid size format
-		err = runCLICommand(cliPath, "datarange", "optimize",
+		err = runCLICommand(cliPath, "optimize",
 			"--datas3t", testDatas3tName,
 			"--target-size", "invalid-size",
 			"--dry-run",
@@ -1498,7 +1498,7 @@ var _ = Describe("End-to-End Server Test", func() {
 		for optimizationRounds < maxRounds {
 			logger.Info("Running optimization round", "round", optimizationRounds+1)
 			
-			err = runCLICommand(cliPath, "datarange", "optimize",
+			err = runCLICommand(cliPath, "optimize",
 				"--datas3t", testDatas3tName,
 				"--min-score", "0.5",
 				"--target-size", "10MB",
@@ -2311,7 +2311,7 @@ var _ = Describe("End-to-End Server Test", func() {
 			"expected_datapoints", lastDatapoint-firstDatapoint+1)
 		
 		// Use higher parallelism for large aggregation
-		err = runCLICommand(cliPath, "datarange", "aggregate",
+		err = runCLICommand(cliPath, "aggregate",
 			"--datas3t", largeDatas3tName,
 			"--first-datapoint", fmt.Sprintf("%d", firstDatapoint),
 			"--last-datapoint", fmt.Sprintf("%d", lastDatapoint),
@@ -2396,7 +2396,7 @@ var _ = Describe("End-to-End Server Test", func() {
 			"first_datapoint", secondFirstDatapoint,
 			"last_datapoint", secondLastDatapoint)
 		
-		err = runCLICommand(cliPath, "datarange", "aggregate",
+		err = runCLICommand(cliPath, "aggregate",
 			"--datas3t", largeDatas3tName,
 			"--first-datapoint", fmt.Sprintf("%d", secondFirstDatapoint),
 			"--last-datapoint", fmt.Sprintf("%d", secondLastDatapoint),
