@@ -243,6 +243,7 @@ SELECT
     dr.id,
     dr.data_object_key,
     dr.index_object_key,
+    s.id as s3_bucket_id,
     s.endpoint,
     s.bucket,
     s.access_key,
@@ -258,6 +259,7 @@ type ClearDatas3tDatarangesRow struct {
 	ID             int64
 	DataObjectKey  string
 	IndexObjectKey string
+	S3BucketID     int64
 	Endpoint       string
 	Bucket         string
 	AccessKey      string
@@ -277,6 +279,7 @@ func (q *Queries) ClearDatas3tDataranges(ctx context.Context, name string) ([]Cl
 			&i.ID,
 			&i.DataObjectKey,
 			&i.IndexObjectKey,
+			&i.S3BucketID,
 			&i.Endpoint,
 			&i.Bucket,
 			&i.AccessKey,
@@ -318,11 +321,23 @@ func (q *Queries) CountDataranges(ctx context.Context) (int64, error) {
 
 const countKeysToDelete = `-- name: CountKeysToDelete :one
 SELECT count(*)
-FROM keys_to_delete
+FROM objects_to_delete
 `
 
 func (q *Queries) CountKeysToDelete(ctx context.Context) (int64, error) {
 	row := q.db.QueryRow(ctx, countKeysToDelete)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countObjectsToDelete = `-- name: CountObjectsToDelete :one
+SELECT count(*)
+FROM objects_to_delete
+`
+
+func (q *Queries) CountObjectsToDelete(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countObjectsToDelete)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -487,11 +502,20 @@ func (q *Queries) DeleteDatarangesByIDs(ctx context.Context, dollar_1 []int64) e
 }
 
 const deleteKeysToDelete = `-- name: DeleteKeysToDelete :exec
-DELETE FROM keys_to_delete WHERE id = ANY($1::BIGINT[])
+DELETE FROM objects_to_delete WHERE id = ANY($1::BIGINT[])
 `
 
 func (q *Queries) DeleteKeysToDelete(ctx context.Context, dollar_1 []int64) error {
 	_, err := q.db.Exec(ctx, deleteKeysToDelete, dollar_1)
+	return err
+}
+
+const deleteObjectsToDelete = `-- name: DeleteObjectsToDelete :exec
+DELETE FROM objects_to_delete WHERE id = ANY($1::BIGINT[])
+`
+
+func (q *Queries) DeleteObjectsToDelete(ctx context.Context, dollar_1 []int64) error {
+	_, err := q.db.Exec(ctx, deleteObjectsToDelete, dollar_1)
 	return err
 }
 
@@ -1065,7 +1089,8 @@ func (q *Queries) GetDatas3tWithBucket(ctx context.Context, name string) (GetDat
 
 const getKeysToDelete = `-- name: GetKeysToDelete :many
 SELECT id, presigned_delete_url
-FROM keys_to_delete
+FROM objects_to_delete
+WHERE presigned_delete_url != '' AND presigned_delete_url IS NOT NULL
 ORDER BY created_at
 LIMIT $1
 `
@@ -1085,6 +1110,57 @@ func (q *Queries) GetKeysToDelete(ctx context.Context, limit int32) ([]GetKeysTo
 	for rows.Next() {
 		var i GetKeysToDeleteRow
 		if err := rows.Scan(&i.ID, &i.PresignedDeleteUrl); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getObjectsToDelete = `-- name: GetObjectsToDelete :many
+SELECT 
+    otd.id,
+    otd.object_name,
+    s.endpoint,
+    s.bucket,
+    s.access_key,
+    s.secret_key
+FROM objects_to_delete otd
+JOIN s3_buckets s ON otd.s3_bucket_id = s.id
+WHERE otd.object_name IS NOT NULL
+ORDER BY otd.created_at
+LIMIT $1
+`
+
+type GetObjectsToDeleteRow struct {
+	ID         int64
+	ObjectName *string
+	Endpoint   string
+	Bucket     string
+	AccessKey  string
+	SecretKey  string
+}
+
+func (q *Queries) GetObjectsToDelete(ctx context.Context, limit int32) ([]GetObjectsToDeleteRow, error) {
+	rows, err := q.db.Query(ctx, getObjectsToDelete, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetObjectsToDeleteRow
+	for rows.Next() {
+		var i GetObjectsToDeleteRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ObjectName,
+			&i.Endpoint,
+			&i.Bucket,
+			&i.AccessKey,
+			&i.SecretKey,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1247,12 +1323,42 @@ func (q *Queries) ListDatas3ts(ctx context.Context) ([]ListDatas3tsRow, error) {
 }
 
 const scheduleKeyForDeletion = `-- name: ScheduleKeyForDeletion :exec
-INSERT INTO keys_to_delete (presigned_delete_url)
+INSERT INTO objects_to_delete (presigned_delete_url)
 VALUES ($1)
 `
 
 func (q *Queries) ScheduleKeyForDeletion(ctx context.Context, presignedDeleteUrl string) error {
 	_, err := q.db.Exec(ctx, scheduleKeyForDeletion, presignedDeleteUrl)
+	return err
+}
+
+const scheduleObjectForDeletion = `-- name: ScheduleObjectForDeletion :exec
+INSERT INTO objects_to_delete (presigned_delete_url, s3_bucket_id, object_name)
+VALUES ('', $1, $2)
+`
+
+type ScheduleObjectForDeletionParams struct {
+	S3BucketID *int64
+	ObjectName *string
+}
+
+func (q *Queries) ScheduleObjectForDeletion(ctx context.Context, arg ScheduleObjectForDeletionParams) error {
+	_, err := q.db.Exec(ctx, scheduleObjectForDeletion, arg.S3BucketID, arg.ObjectName)
+	return err
+}
+
+const scheduleObjectsForDeletion = `-- name: ScheduleObjectsForDeletion :exec
+INSERT INTO objects_to_delete (presigned_delete_url, s3_bucket_id, object_name)
+SELECT '', $1, unnest($2::VARCHAR[])
+`
+
+type ScheduleObjectsForDeletionParams struct {
+	S3BucketID *int64
+	Column2    []string
+}
+
+func (q *Queries) ScheduleObjectsForDeletion(ctx context.Context, arg ScheduleObjectsForDeletionParams) error {
+	_, err := q.db.Exec(ctx, scheduleObjectsForDeletion, arg.S3BucketID, arg.Column2)
 	return err
 }
 

@@ -5,11 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
-	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
-	awsutil "github.com/draganm/datas3t/aws"
 	"github.com/draganm/datas3t/postgresstore"
 )
 
@@ -117,82 +113,38 @@ func (s *Datas3tServer) checkDatas3tExists(ctx context.Context, queries *postgre
 	return slices.Contains(existingDatas3ts, datas3tName), nil
 }
 
-// scheduleAllObjectsForDeletion schedules all S3 objects for deletion
+// scheduleAllObjectsForDeletion schedules all S3 objects for deletion using bucket references
 func (s *Datas3tServer) scheduleAllObjectsForDeletion(ctx context.Context, log *slog.Logger, queries *postgresstore.Queries, dataranges []postgresstore.ClearDatas3tDatarangesRow) (int, error) {
 	if len(dataranges) == 0 {
 		return 0, nil
 	}
 
-	// Create S3 client from the first datarange (all should have same credentials)
-	s3Client, err := s.createS3ClientFromDatarange(ctx, log, dataranges[0])
-	if err != nil {
-		return 0, fmt.Errorf("failed to create S3 client: %w", err)
-	}
-
-	presigner := s3.NewPresignClient(s3Client)
-	objectsScheduled := 0
-
-	// Schedule all objects for deletion
+	// Group objects by bucket for efficient batch operations
+	bucketObjects := make(map[int64][]string)
 	for _, datarange := range dataranges {
-		// Schedule data object for deletion
-		dataDeleteReq, err := presigner.PresignDeleteObject(ctx, &s3.DeleteObjectInput{
-			Bucket: aws.String(datarange.Bucket),
-			Key:    aws.String(datarange.DataObjectKey),
-		}, func(opts *s3.PresignOptions) {
-			opts.Expires = 24 * time.Hour
-		})
-		if err != nil {
-			log.Error("Failed to presign data object delete", "data_object_key", datarange.DataObjectKey, "error", err)
-			continue
-		}
-
-		err = queries.ScheduleKeyForDeletion(ctx, dataDeleteReq.URL)
-		if err != nil {
-			log.Error("Failed to schedule data object deletion", "data_object_key", datarange.DataObjectKey, "error", err)
-			continue
-		}
-		objectsScheduled++
-
-		// Schedule index object for deletion
-		indexDeleteReq, err := presigner.PresignDeleteObject(ctx, &s3.DeleteObjectInput{
-			Bucket: aws.String(datarange.Bucket),
-			Key:    aws.String(datarange.IndexObjectKey),
-		}, func(opts *s3.PresignOptions) {
-			opts.Expires = 24 * time.Hour
-		})
-		if err != nil {
-			log.Error("Failed to presign index object delete", "index_object_key", datarange.IndexObjectKey, "error", err)
-			continue
-		}
-
-		err = queries.ScheduleKeyForDeletion(ctx, indexDeleteReq.URL)
-		if err != nil {
-			log.Error("Failed to schedule index object deletion", "index_object_key", datarange.IndexObjectKey, "error", err)
-			continue
-		}
-		objectsScheduled++
+		// Add both data and index objects to the bucket group
+		bucketObjects[datarange.S3BucketID] = append(bucketObjects[datarange.S3BucketID], datarange.DataObjectKey, datarange.IndexObjectKey)
 	}
 
-	log.Info("Scheduled objects for deletion", "total_objects", objectsScheduled)
-	return objectsScheduled, nil
-}
+	totalObjectsScheduled := 0
 
-// createS3ClientFromDatarange creates an S3 client from datarange details
-func (s *Datas3tServer) createS3ClientFromDatarange(ctx context.Context, log *slog.Logger, datarange postgresstore.ClearDatas3tDatarangesRow) (*s3.Client, error) {
-	// Decrypt credentials
-	accessKey, secretKey, err := s.encryptor.DecryptCredentials(datarange.AccessKey, datarange.SecretKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decrypt credentials: %w", err)
+	// Schedule objects for deletion in batches per bucket
+	for bucketID, objectNames := range bucketObjects {
+		err := queries.ScheduleObjectsForDeletion(ctx, postgresstore.ScheduleObjectsForDeletionParams{
+			S3BucketID: &bucketID,
+			Column2:    objectNames,
+		})
+		if err != nil {
+			log.Error("Failed to schedule objects for deletion", "bucket_id", bucketID, "count", len(objectNames), "error", err)
+			continue
+		}
+		totalObjectsScheduled += len(objectNames)
 	}
 
-	// Use shared AWS utility for S3 client creation with logging
-	return awsutil.CreateS3Client(ctx, awsutil.S3ClientConfig{
-		AccessKey: accessKey,
-		SecretKey: secretKey,
-		Endpoint:  datarange.Endpoint,
-		Logger:    log,
-	})
+	log.Info("Scheduled objects for deletion", "total_objects", totalObjectsScheduled)
+	return totalObjectsScheduled, nil
 }
+
 
 // deleteDatarangesFromDatabase deletes all dataranges from database using the provided transaction
 func (s *Datas3tServer) deleteDatarangesFromDatabase(ctx context.Context, queries *postgresstore.Queries, dataranges []postgresstore.ClearDatas3tDatarangesRow) error {

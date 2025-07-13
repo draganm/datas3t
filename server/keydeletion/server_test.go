@@ -20,6 +20,14 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
+// mockCredentialEncryptor is a simple mock for testing
+type mockCredentialEncryptor struct{}
+
+func (m *mockCredentialEncryptor) DecryptCredentials(accessKey, secretKey string) (string, string, error) {
+	// For testing purposes, just return the credentials as-is
+	return accessKey, secretKey, nil
+}
+
 func TestKeyDeletion(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "KeyDeletion Suite")
@@ -74,8 +82,9 @@ var _ = Describe("KeyDeletionServer", func() {
 			Expect(err).NotTo(HaveOccurred())
 		}
 
-		// Create server instance
-		server = keydeletion.NewServer(db)
+		// Create server instance with mock encryptor
+		mockEncryptor := &mockCredentialEncryptor{}
+		server = keydeletion.NewServer(db, mockEncryptor)
 	})
 
 	AfterEach(func(ctx SpecContext) {
@@ -99,13 +108,13 @@ var _ = Describe("KeyDeletionServer", func() {
 
 			// Insert a test key
 			_, err := db.Exec(ctx, 
-				"INSERT INTO keys_to_delete (presigned_delete_url) VALUES ($1)",
+				"INSERT INTO objects_to_delete (presigned_delete_url) VALUES ($1)",
 				testServer.URL+"/test-key")
 			Expect(err).ToNot(HaveOccurred())
 
 			// Verify key exists
 			var count int
-			err = db.QueryRow(ctx, "SELECT COUNT(*) FROM keys_to_delete").Scan(&count)
+			err = db.QueryRow(ctx, "SELECT COUNT(*) FROM objects_to_delete").Scan(&count)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(count).To(Equal(1))
 
@@ -115,7 +124,7 @@ var _ = Describe("KeyDeletionServer", func() {
 			Expect(keysProcessed).To(Equal(1))
 
 			// Verify key was deleted from database
-			err = db.QueryRow(ctx, "SELECT COUNT(*) FROM keys_to_delete").Scan(&count)
+			err = db.QueryRow(ctx, "SELECT COUNT(*) FROM objects_to_delete").Scan(&count)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(count).To(Equal(0))
 		})
@@ -130,7 +139,7 @@ var _ = Describe("KeyDeletionServer", func() {
 
 			// Insert a test key
 			_, err := db.Exec(ctx, 
-				"INSERT INTO keys_to_delete (presigned_delete_url) VALUES ($1)",
+				"INSERT INTO objects_to_delete (presigned_delete_url) VALUES ($1)",
 				testServer.URL+"/test-key")
 			Expect(err).ToNot(HaveOccurred())
 
@@ -141,7 +150,7 @@ var _ = Describe("KeyDeletionServer", func() {
 
 			// Verify key was deleted from database (404 is treated as success)
 			var count int
-			err = db.QueryRow(ctx, "SELECT COUNT(*) FROM keys_to_delete").Scan(&count)
+			err = db.QueryRow(ctx, "SELECT COUNT(*) FROM objects_to_delete").Scan(&count)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(count).To(Equal(0))
 		})
@@ -156,7 +165,7 @@ var _ = Describe("KeyDeletionServer", func() {
 
 			// Insert a test key
 			_, err := db.Exec(ctx, 
-				"INSERT INTO keys_to_delete (presigned_delete_url) VALUES ($1)",
+				"INSERT INTO objects_to_delete (presigned_delete_url) VALUES ($1)",
 				testServer.URL+"/test-key")
 			Expect(err).ToNot(HaveOccurred())
 
@@ -167,7 +176,7 @@ var _ = Describe("KeyDeletionServer", func() {
 
 			// Verify key was NOT deleted from database
 			var count int
-			err = db.QueryRow(ctx, "SELECT COUNT(*) FROM keys_to_delete").Scan(&count)
+			err = db.QueryRow(ctx, "SELECT COUNT(*) FROM objects_to_delete").Scan(&count)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(count).To(Equal(1))
 		})
@@ -183,7 +192,7 @@ var _ = Describe("KeyDeletionServer", func() {
 			// Insert 25 test keys (more than the limit of 20)
 			for i := 0; i < 25; i++ {
 				_, err := db.Exec(ctx, 
-					"INSERT INTO keys_to_delete (presigned_delete_url) VALUES ($1)",
+					"INSERT INTO objects_to_delete (presigned_delete_url) VALUES ($1)",
 					testServer.URL+"/test-key")
 				Expect(err).ToNot(HaveOccurred())
 			}
@@ -195,7 +204,7 @@ var _ = Describe("KeyDeletionServer", func() {
 
 			// Verify only 20 keys were deleted, 5 remain
 			var count int
-			err = db.QueryRow(ctx, "SELECT COUNT(*) FROM keys_to_delete").Scan(&count)
+			err = db.QueryRow(ctx, "SELECT COUNT(*) FROM objects_to_delete").Scan(&count)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(count).To(Equal(5))
 		})
@@ -211,7 +220,7 @@ var _ = Describe("KeyDeletionServer", func() {
 			// Insert 7 test keys (fewer than the limit of 20)
 			for i := 0; i < 7; i++ {
 				_, err := db.Exec(ctx, 
-					"INSERT INTO keys_to_delete (presigned_delete_url) VALUES ($1)",
+					"INSERT INTO objects_to_delete (presigned_delete_url) VALUES ($1)",
 					testServer.URL+"/test-key")
 				Expect(err).ToNot(HaveOccurred())
 			}
@@ -223,7 +232,7 @@ var _ = Describe("KeyDeletionServer", func() {
 
 			// Verify all 7 keys were deleted, 0 remain
 			var count int
-			err = db.QueryRow(ctx, "SELECT COUNT(*) FROM keys_to_delete").Scan(&count)
+			err = db.QueryRow(ctx, "SELECT COUNT(*) FROM objects_to_delete").Scan(&count)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(count).To(Equal(0))
 		})

@@ -41,7 +41,7 @@ func NewServer(db *pgxpool.Pool, cacheDir string, maxCacheSize int64, encryption
 		return nil, err
 	}
 
-	keyDeletionServer := keydeletion.NewServer(db)
+	keyDeletionServer := keydeletion.NewServer(db, datas3tServer.GetEncryptor())
 
 	return &Server{
 		BucketServer:          bucketServer,

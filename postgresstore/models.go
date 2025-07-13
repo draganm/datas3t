@@ -56,11 +56,13 @@ type Datas3t struct {
 	UpdatedAt     pgtype.Timestamp
 }
 
-type KeysToDelete struct {
+type ObjectsToDelete struct {
 	ID                 int64
 	PresignedDeleteUrl string
 	CreatedAt          pgtype.Timestamp
 	UpdatedAt          pgtype.Timestamp
+	S3BucketID         *int64
+	ObjectName         *string
 }
 
 type S3Bucket struct {

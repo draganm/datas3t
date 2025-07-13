@@ -96,17 +96,43 @@ JOIN s3_buckets s ON d.s3_bucket_id = s.id
 WHERE du.id = $1;
 
 -- name: ScheduleKeyForDeletion :exec
-INSERT INTO keys_to_delete (presigned_delete_url)
+INSERT INTO objects_to_delete (presigned_delete_url)
 VALUES ($1);
+
+-- name: ScheduleObjectForDeletion :exec
+INSERT INTO objects_to_delete (presigned_delete_url, s3_bucket_id, object_name)
+VALUES ('', $1, $2);
+
+-- name: ScheduleObjectsForDeletion :exec
+INSERT INTO objects_to_delete (presigned_delete_url, s3_bucket_id, object_name)
+SELECT '', $1, unnest($2::VARCHAR[]);
+
+-- name: GetObjectsToDelete :many
+SELECT 
+    otd.id,
+    otd.object_name,
+    s.endpoint,
+    s.bucket,
+    s.access_key,
+    s.secret_key
+FROM objects_to_delete otd
+JOIN s3_buckets s ON otd.s3_bucket_id = s.id
+WHERE otd.object_name IS NOT NULL
+ORDER BY otd.created_at
+LIMIT $1;
 
 -- name: GetKeysToDelete :many
 SELECT id, presigned_delete_url
-FROM keys_to_delete
+FROM objects_to_delete
+WHERE presigned_delete_url != '' AND presigned_delete_url IS NOT NULL
 ORDER BY created_at
 LIMIT $1;
 
+-- name: DeleteObjectsToDelete :exec
+DELETE FROM objects_to_delete WHERE id = ANY($1::BIGINT[]);
+
 -- name: DeleteKeysToDelete :exec
-DELETE FROM keys_to_delete WHERE id = ANY($1::BIGINT[]);
+DELETE FROM objects_to_delete WHERE id = ANY($1::BIGINT[]);
 
 -- name: DeleteDatarangeUpload :exec
 DELETE FROM datarange_uploads WHERE id = $1;
@@ -161,9 +187,13 @@ FROM dataranges;
 SELECT count(*)
 FROM datarange_uploads;
 
+-- name: CountObjectsToDelete :one
+SELECT count(*)
+FROM objects_to_delete;
+
 -- name: CountKeysToDelete :one
 SELECT count(*)
-FROM keys_to_delete;
+FROM objects_to_delete;
 
 -- name: GetDatarangesForDatapoints :many
 SELECT 
@@ -348,6 +378,7 @@ SELECT
     dr.id,
     dr.data_object_key,
     dr.index_object_key,
+    s.id as s3_bucket_id,
     s.endpoint,
     s.bucket,
     s.access_key,
