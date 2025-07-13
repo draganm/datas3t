@@ -9,8 +9,8 @@ import (
 
 // DeleteKeys provides backward compatibility for tests - uses the old HTTP-based deletion method
 func (s *KeyDeletionServer) DeleteKeys(ctx context.Context, log *slog.Logger) (int, error) {
-	// Get up to 20 keys to delete using the old method
-	keys, err := s.queries.GetKeysToDelete(ctx, 20)
+	// Get up to 100 keys to delete using the old method (limited for HTTP requests)
+	keys, err := s.queries.GetKeysToDelete(ctx, 100)
 	if err != nil {
 		return 0, err
 	}

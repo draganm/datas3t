@@ -107,7 +107,7 @@ var _ = Describe("KeyDeletionServer", func() {
 			defer testServer.Close()
 
 			// Insert a test key
-			_, err := db.Exec(ctx, 
+			_, err := db.Exec(ctx,
 				"INSERT INTO objects_to_delete (presigned_delete_url) VALUES ($1)",
 				testServer.URL+"/test-key")
 			Expect(err).ToNot(HaveOccurred())
@@ -138,7 +138,7 @@ var _ = Describe("KeyDeletionServer", func() {
 			defer testServer.Close()
 
 			// Insert a test key
-			_, err := db.Exec(ctx, 
+			_, err := db.Exec(ctx,
 				"INSERT INTO objects_to_delete (presigned_delete_url) VALUES ($1)",
 				testServer.URL+"/test-key")
 			Expect(err).ToNot(HaveOccurred())
@@ -164,7 +164,7 @@ var _ = Describe("KeyDeletionServer", func() {
 			defer testServer.Close()
 
 			// Insert a test key
-			_, err := db.Exec(ctx, 
+			_, err := db.Exec(ctx,
 				"INSERT INTO objects_to_delete (presigned_delete_url) VALUES ($1)",
 				testServer.URL+"/test-key")
 			Expect(err).ToNot(HaveOccurred())
@@ -181,7 +181,7 @@ var _ = Describe("KeyDeletionServer", func() {
 			Expect(count).To(Equal(1))
 		})
 
-		It("should process up to 20 keys at a time", func(ctx SpecContext) {
+		It("should process up to 100 keys at a time", func(ctx SpecContext) {
 			// Create a test HTTP server that returns 200 for DELETE requests
 			testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				Expect(r.Method).To(Equal("DELETE"))
@@ -189,9 +189,9 @@ var _ = Describe("KeyDeletionServer", func() {
 			}))
 			defer testServer.Close()
 
-			// Insert 25 test keys (more than the limit of 20)
-			for i := 0; i < 25; i++ {
-				_, err := db.Exec(ctx, 
+			// Insert 150 test keys (more than the limit of 100)
+			for i := 0; i < 150; i++ {
+				_, err := db.Exec(ctx,
 					"INSERT INTO objects_to_delete (presigned_delete_url) VALUES ($1)",
 					testServer.URL+"/test-key")
 				Expect(err).ToNot(HaveOccurred())
@@ -200,13 +200,13 @@ var _ = Describe("KeyDeletionServer", func() {
 			// Run deletion once
 			keysProcessed, err := server.DeleteKeys(ctx, logger)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(keysProcessed).To(Equal(20))
+			Expect(keysProcessed).To(Equal(100))
 
-			// Verify only 20 keys were deleted, 5 remain
+			// Verify only 100 keys were deleted, 50 remain
 			var count int
 			err = db.QueryRow(ctx, "SELECT COUNT(*) FROM objects_to_delete").Scan(&count)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(count).To(Equal(5))
+			Expect(count).To(Equal(50))
 		})
 
 		It("should process all keys when fewer than limit", func(ctx SpecContext) {
@@ -217,9 +217,9 @@ var _ = Describe("KeyDeletionServer", func() {
 			}))
 			defer testServer.Close()
 
-			// Insert 7 test keys (fewer than the limit of 20)
+			// Insert 7 test keys (fewer than the limit of 100)
 			for i := 0; i < 7; i++ {
-				_, err := db.Exec(ctx, 
+				_, err := db.Exec(ctx,
 					"INSERT INTO objects_to_delete (presigned_delete_url) VALUES ($1)",
 					testServer.URL+"/test-key")
 				Expect(err).ToNot(HaveOccurred())
