@@ -230,41 +230,14 @@ func (s *UploadDatarangeServer) handleAggregateFailureInTransaction(ctx context.
 	// Create queries with transaction
 	txQueries := queries.WithTx(tx)
 
-	// Generate presigned delete URLs for both data and index objects
-	presigner := s3.NewPresignClient(s3Client)
-
-	// Schedule data object for deletion
-	dataDeleteReq, err := presigner.PresignDeleteObject(ctx, &s3.DeleteObjectInput{
-		Bucket: aws.String(uploadDetails.Bucket),
-		Key:    aws.String(uploadDetails.DataObjectKey),
-	}, func(opts *s3.PresignOptions) {
-		opts.Expires = 7 * 24 * time.Hour
+	// Schedule both data and index objects for deletion
+	objectNames := []string{uploadDetails.DataObjectKey, uploadDetails.IndexObjectKey}
+	err = txQueries.ScheduleObjectsForDeletion(ctx, postgresstore.ScheduleObjectsForDeletionParams{
+		S3BucketID: &uploadDetails.S3BucketID,
+		Column2:    objectNames,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to presign data object delete: %w", err)
-	}
-
-	// Schedule index object for deletion
-	indexDeleteReq, err := presigner.PresignDeleteObject(ctx, &s3.DeleteObjectInput{
-		Bucket: aws.String(uploadDetails.Bucket),
-		Key:    aws.String(uploadDetails.IndexObjectKey),
-	}, func(opts *s3.PresignOptions) {
-		opts.Expires = 7 * 24 * time.Hour
-	})
-	if err != nil {
-		return fmt.Errorf("failed to presign index object delete: %w", err)
-	}
-
-	// Schedule both objects for deletion
-
-	err = txQueries.ScheduleKeyForDeletion(ctx, dataDeleteReq.URL)
-	if err != nil {
-		return fmt.Errorf("failed to schedule data object deletion: %w", err)
-	}
-
-	err = txQueries.ScheduleKeyForDeletion(ctx, indexDeleteReq.URL)
-	if err != nil {
-		return fmt.Errorf("failed to schedule index object deletion: %w", err)
+		return fmt.Errorf("failed to schedule objects for deletion: %w", err)
 	}
 
 	// Delete the aggregate upload record (no datarange record exists yet since upload failed)
@@ -295,48 +268,25 @@ func (s *UploadDatarangeServer) scheduleOriginalDatarangesForDeletion(ctx contex
 		return fmt.Errorf("failed to get original dataranges for deletion: %w", err)
 	}
 
-	// Create S3 client for scheduling deletions
-	s3Client, err := s.createS3ClientFromAggregateUploadDetails(ctx, slog.Default(), uploadDetails)
-	if err != nil {
-		return fmt.Errorf("failed to create S3 client for scheduling deletions: %w", err)
+	if len(originalDataranges) == 0 {
+		return nil
 	}
 
-	presigner := s3.NewPresignClient(s3Client)
-
-	// Schedule each datarange's data and index objects for deletion
+	// Group objects by bucket for efficient batch operations
+	bucketObjects := make(map[int64][]string)
 	for _, dr := range originalDataranges {
-		// Schedule data object for deletion
-		dataDeleteReq, err := presigner.PresignDeleteObject(ctx, &s3.DeleteObjectInput{
-			Bucket: aws.String(dr.Bucket),
-			Key:    aws.String(dr.DataObjectKey),
-		}, func(opts *s3.PresignOptions) {
-			opts.Expires = 24 * time.Hour
+		// Add both data and index objects to the bucket group
+		bucketObjects[dr.S3BucketID] = append(bucketObjects[dr.S3BucketID], dr.DataObjectKey, dr.IndexObjectKey)
+	}
+
+	// Schedule objects for deletion in batches per bucket
+	for bucketID, objectNames := range bucketObjects {
+		err := queries.ScheduleObjectsForDeletion(ctx, postgresstore.ScheduleObjectsForDeletionParams{
+			S3BucketID: &bucketID,
+			Column2:    objectNames,
 		})
 		if err != nil {
-			return fmt.Errorf("failed to presign data object delete for datarange %d: %w", dr.ID, err)
-		}
-
-		// Schedule index object for deletion
-		indexDeleteReq, err := presigner.PresignDeleteObject(ctx, &s3.DeleteObjectInput{
-			Bucket: aws.String(dr.Bucket),
-			Key:    aws.String(dr.IndexObjectKey),
-		}, func(opts *s3.PresignOptions) {
-			opts.Expires = 24 * time.Hour
-		})
-		if err != nil {
-			return fmt.Errorf("failed to presign index object delete for datarange %d: %w", dr.ID, err)
-		}
-
-		// Schedule both objects for deletion
-
-		err = queries.ScheduleKeyForDeletion(ctx, dataDeleteReq.URL)
-		if err != nil {
-			return fmt.Errorf("failed to schedule data object deletion for datarange %d: %w", dr.ID, err)
-		}
-
-		err = queries.ScheduleKeyForDeletion(ctx, indexDeleteReq.URL)
-		if err != nil {
-			return fmt.Errorf("failed to schedule index object deletion for datarange %d: %w", dr.ID, err)
+			return fmt.Errorf("failed to schedule objects for deletion (bucket %d): %w", bucketID, err)
 		}
 	}
 

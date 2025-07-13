@@ -987,6 +987,7 @@ SELECT
     dr.max_datapoint_key,
     dr.size_bytes,
     d.name as datas3t_name,
+    s.id as s3_bucket_id,
     s.endpoint,
     s.bucket,
     s.access_key,
@@ -1014,6 +1015,7 @@ type GetDatarangesInRangeRow struct {
 	MaxDatapointKey int64
 	SizeBytes       int64
 	Datas3tName     string
+	S3BucketID      int64
 	Endpoint        string
 	Bucket          string
 	AccessKey       string
@@ -1037,6 +1039,7 @@ func (q *Queries) GetDatarangesInRange(ctx context.Context, arg GetDatarangesInR
 			&i.MaxDatapointKey,
 			&i.SizeBytes,
 			&i.Datas3tName,
+			&i.S3BucketID,
 			&i.Endpoint,
 			&i.Bucket,
 			&i.AccessKey,
