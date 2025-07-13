@@ -308,6 +308,7 @@ SELECT
     dr.max_datapoint_key,
     dr.size_bytes,
     d.name as datas3t_name,
+    s.id as s3_bucket_id,
     s.endpoint,
     s.bucket,
     s.access_key,
