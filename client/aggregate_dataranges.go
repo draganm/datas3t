@@ -20,8 +20,8 @@ import (
 const (
 	PhaseStartingAggregate   ProgressPhase = "starting_aggregate"
 	PhaseDownloadingSources  ProgressPhase = "downloading_sources"
-	PhaseMergingTars        ProgressPhase = "merging_tars"
-	PhaseUploadingAggregate ProgressPhase = "uploading_aggregate"
+	PhaseMergingTars         ProgressPhase = "merging_tars"
+	PhaseUploadingAggregate  ProgressPhase = "uploading_aggregate"
 	PhaseCompletingAggregate ProgressPhase = "completing_aggregate"
 )
 
@@ -43,11 +43,11 @@ func DefaultAggregateOptions() *AggregateOptions {
 }
 
 // AggregateDataRanges combines multiple existing dataranges into a single aggregate datarange
-func (c *Client) AggregateDataRanges(ctx context.Context, datas3tName string, firstDatapointIndex, lastDatapointIndex uint64, opts *AggregateOptions) error {
+func (c *Client) AggregateDataRanges(ctx context.Context, datas3tName string, firstDatapointIndex, lastDatapointIndex uint64, opts *AggregateOptions) (err error) {
 	if opts == nil {
 		opts = DefaultAggregateOptions()
 	}
-	
+
 	// Set default temp directory if not specified
 	if opts.TempDir == "" {
 		opts.TempDir = os.TempDir()
@@ -106,14 +106,14 @@ func (c *Client) AggregateDataRanges(ctx context.Context, datas3tName string, fi
 	}
 	defer os.Remove(aggregatedTarFile.Name()) // Clean up temporary file
 	defer aggregatedTarFile.Close()
-	
+
 	// Update total bytes with actual aggregated file size for more accurate progress
 	if fileInfo, err := aggregatedTarFile.Stat(); err == nil {
 		actualUploadSize := fileInfo.Size()
 		// Adjust total: already downloaded source size + actual upload size + index size estimate
 		tracker.totalBytes = totalSourceSize + actualUploadSize + int64(len(aggregatedIndex))
 	}
-	
+
 	tracker.nextStep()
 
 	// Phase 4: Upload aggregated data
@@ -160,17 +160,17 @@ func (c *Client) AggregateDataRanges(ctx context.Context, datas3tName string, fi
 
 // sourceDataInfo holds downloaded source datarange information
 type sourceDataInfo struct {
-	DatarangeID    int64
-	MinDatapoint   int64
-	MaxDatapoint   int64
-	Data           []byte
-	Index          []byte
+	DatarangeID  int64
+	MinDatapoint int64
+	MaxDatapoint int64
+	Data         []byte
+	Index        []byte
 }
 
 // downloadSourceDataranges downloads all source dataranges in parallel
 func (c *Client) downloadSourceDataranges(ctx context.Context, sources []DatarangeDownloadURL, opts *AggregateOptions, tracker *progressTracker) ([]sourceDataInfo, error) {
 	results := make([]sourceDataInfo, len(sources))
-	
+
 	// Use errgroup with parallelism limit
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(opts.MaxParallelism)
@@ -266,7 +266,7 @@ func (c *Client) mergeTarFiles(sources []sourceDataInfo, tempDir string, tracker
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create temporary file: %w", err)
 	}
-	
+
 	tw := tar.NewWriter(tempFile)
 
 	currentDatapoint := sources[0].MinDatapoint
@@ -352,7 +352,6 @@ func (c *Client) mergeTarFiles(sources []sourceDataInfo, tempDir string, tracker
 	return tempFile, indexData, nil
 }
 
-
 // uploadAggregateDataDirectPutFromFile uploads aggregate data from a file using direct PUT
 func (c *Client) uploadAggregateDataDirectPutFromFile(ctx context.Context, url string, file *os.File, maxRetries int, tracker *progressTracker) error {
 	operation := func() error {
@@ -361,7 +360,7 @@ func (c *Client) uploadAggregateDataDirectPutFromFile(ctx context.Context, url s
 		if err != nil {
 			return err
 		}
-		
+
 		// Seek to beginning
 		_, err = file.Seek(0, 0)
 		if err != nil {
@@ -396,7 +395,6 @@ func (c *Client) uploadAggregateDataDirectPutFromFile(ctx context.Context, url s
 	b := createBackoffConfig(maxRetries)
 	return backoff.Retry(operation, backoff.WithContext(b, ctx))
 }
-
 
 // uploadAggregateDataMultipartFromFile uploads aggregate data from a file using multipart upload
 func (c *Client) uploadAggregateDataMultipartFromFile(ctx context.Context, urls []string, file *os.File, opts *AggregateOptions, tracker *progressTracker) ([]string, error) {
@@ -456,7 +454,6 @@ func (c *Client) uploadAggregateDataMultipartFromFile(ctx context.Context, urls 
 	return etags, nil
 }
 
-
 // uploadChunkFromFileWithRetry uploads a single chunk from a file with retry logic for aggregate data
 func (c *Client) uploadChunkFromFileWithRetry(ctx context.Context, url string, file *os.File, offset, size int64, maxRetries int, tracker *progressTracker, partNum, totalParts int) (string, error) {
 	var etag string
@@ -464,7 +461,7 @@ func (c *Client) uploadChunkFromFileWithRetry(ctx context.Context, url string, f
 	operation := func() error {
 		// Create a section reader for this chunk
 		sectionReader := io.NewSectionReader(file, offset, size)
-		
+
 		req, err := http.NewRequestWithContext(ctx, "PUT", url, sectionReader)
 		if err != nil {
 			return err

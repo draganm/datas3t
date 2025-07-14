@@ -315,6 +315,9 @@ func runSingleOptimization(clientInstance *client.Client, datas3tName string, is
 		op.LastDatapoint,
 		aggregateOpts,
 	)
+	if err != nil {
+		return fmt.Errorf("failed to aggregate data ranges: %w", err)
+	}
 
 	// Finish progress bar
 	progressBar.finish()
