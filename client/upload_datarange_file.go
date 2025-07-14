@@ -401,8 +401,8 @@ func uploadDataMultipart(ctx context.Context, urls []string, file io.ReaderAt, s
 	}
 
 	// Calculate part sizes respecting S3 minimum part size requirements
-	// All parts except the last must be at least 5MB
-	const minPartSize = 5 * 1024 * 1024 // 5MB
+	// All parts except the last must be at least 20MB (matching server expectation)
+	const minPartSize = 20 * 1024 * 1024 // 20MB
 
 	// Use the minimum part size for all parts except the last
 	// The last part can be smaller and will contain any remainder

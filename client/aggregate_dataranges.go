@@ -410,8 +410,8 @@ func (c *Client) uploadAggregateDataMultipartFromFile(ctx context.Context, urls 
 	}
 	fileSize := fileInfo.Size()
 
-	// Calculate part sizes (minimum 5MB except for last part)
-	const minPartSize = 5 * 1024 * 1024
+	// Calculate part sizes (minimum 20MB except for last part, matching server expectation)
+	const minPartSize = 20 * 1024 * 1024
 	standardPartSize := int64(minPartSize)
 
 	// Use errgroup with parallelism limit
