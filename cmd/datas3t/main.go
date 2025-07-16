@@ -10,6 +10,7 @@ import (
 	datasetadd "github.com/draganm/datas3t/cmd/datas3t/add"
 	"github.com/draganm/datas3t/cmd/datas3t/aggregate"
 	"github.com/draganm/datas3t/cmd/datas3t/bucket"
+	"github.com/draganm/datas3t/cmd/datas3t/catrange"
 	datasetclear "github.com/draganm/datas3t/cmd/datas3t/clear"
 	"github.com/draganm/datas3t/cmd/datas3t/datarange"
 	"github.com/draganm/datas3t/cmd/datas3t/importcmd"
@@ -41,6 +42,7 @@ Keep this key secure and backed up - if you lose it, you won't be able to decryp
 			datasetadd.Command(),
 			datasetclear.Command(),
 			datasetlist.Command(),
+			catrange.Command(),
 			importcmd.Command(),
 			datarange.Command(),
 			uploadtar.Command(),
