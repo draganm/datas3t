@@ -296,10 +296,6 @@ func (c *Client) mergeTarFiles(sources []sourceDataInfo, tempDir string, tracker
 				return nil, nil, fmt.Errorf("invalid filename in source TAR: %w", err)
 			}
 
-			// Create new filename with continuous datapoint index
-			newFilename := fmt.Sprintf("%020d.txt", currentDatapoint)
-			header.Name = newFilename
-
 			// Write header to aggregate TAR
 			err = tw.WriteHeader(header)
 			if err != nil {
