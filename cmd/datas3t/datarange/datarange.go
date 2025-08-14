@@ -3,6 +3,7 @@ package datarange
 import (
 	"github.com/draganm/datas3t/cmd/datas3t/datarange/delete"
 	"github.com/draganm/datas3t/cmd/datas3t/datarange/downloadtar"
+	"github.com/draganm/datas3t/cmd/datas3t/datarange/list"
 	"github.com/urfave/cli/v2"
 )
 
@@ -13,6 +14,7 @@ func Command() *cli.Command {
 		Subcommands: []*cli.Command{
 			downloadtar.Command(),
 			delete.Command(),
+			list.Command(),
 		},
 	}
 }

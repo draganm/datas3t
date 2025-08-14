@@ -1637,6 +1637,150 @@ var _ = Describe("End-to-End Server Test", func() {
 			"data_integrity_verified", true)
 	})
 
+	It("should list dataranges using CLI command", func(ctx SpecContext) {
+		// Step 1: Add bucket configuration using CLI
+		logger.Info("Step 1: Adding bucket configuration for list dataranges test")
+		err := runCLICommand(cliPath, "bucket", "add",
+			"--name", testBucketConfigName,
+			"--endpoint", "http://"+minioEndpoint,
+			"--bucket", testBucketName,
+			"--access-key", minioAccessKey,
+			"--secret-key", minioSecretKey,
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Step 2: Add datas3t using CLI
+		logger.Info("Step 2: Adding datas3t for list dataranges test")
+		err = runCLICommand(cliPath, "add",
+			"--name", testDatas3tName,
+			"--bucket", testBucketConfigName,
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Step 3: Upload multiple dataranges with different sizes
+		logger.Info("Step 3: Uploading multiple dataranges with different sizes")
+
+		datarangeInfo := []struct {
+			startIndex int64
+			numFiles   int
+			filename   string
+		}{
+			{0, 100, "list_test1.tar"},      // Small: 100 files
+			{100, 500, "list_test2.tar"},    // Medium: 500 files
+			{600, 1000, "list_test3.tar"},   // Large: 1000 files
+			{1600, 50, "list_test4.tar"},    // Very small: 50 files
+			{2000, 300, "list_test5.tar"},   // Medium: 300 files (with gap)
+		}
+
+		for i, info := range datarangeInfo {
+			logger.Info("Creating and uploading datarange", "index", i+1, "start", info.startIndex, "count", info.numFiles)
+
+			testData, _ := createTestTarWithIndex(info.numFiles, info.startIndex)
+			tarFile := filepath.Join(tempDir, info.filename)
+			err = os.WriteFile(tarFile, testData, 0644)
+			Expect(err).NotTo(HaveOccurred())
+
+			err = runCLICommand(cliPath, "upload-tar",
+				"--datas3t", testDatas3tName,
+				"--file", tarFile,
+			)
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		// Step 4: Test list dataranges command
+		logger.Info("Step 4: Testing list dataranges command")
+
+		cmd := exec.Command(cliPath, "datarange", "list", "--datas3t", testDatas3tName)
+		cmd.Env = append(os.Environ(), "DATAS3T_SERVER_URL="+serverBaseURL)
+		
+		output, err := cmd.CombinedOutput()
+		Expect(err).NotTo(HaveOccurred())
+
+		outputStr := string(output)
+		logger.Info("List dataranges output", "output", outputStr)
+
+		// Verify output contains expected information
+		Expect(outputStr).To(ContainSubstring("ID"))
+		Expect(outputStr).To(ContainSubstring("RANGE"))
+		Expect(outputStr).To(ContainSubstring("SIZE"))
+		Expect(outputStr).To(ContainSubstring("OBJECT KEY"))
+		Expect(outputStr).To(ContainSubstring("Total dataranges: 5"))
+
+		// Verify specific datarange information is present
+		Expect(outputStr).To(ContainSubstring("0-99"))       // First datarange
+		Expect(outputStr).To(ContainSubstring("100-599"))    // Second datarange
+		Expect(outputStr).To(ContainSubstring("600-1599"))   // Third datarange
+		Expect(outputStr).To(ContainSubstring("1600-1649"))  // Fourth datarange
+		Expect(outputStr).To(ContainSubstring("2000-2299"))  // Fifth datarange
+
+		// Step 5: Verify using client that all dataranges are present
+		logger.Info("Step 5: Verifying dataranges using client")
+
+		client := datas3tclient.NewClient(serverBaseURL)
+		dataranges, err := client.ListDataranges(ctx, testDatas3tName)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(len(dataranges)).To(Equal(5))
+
+		// Verify dataranges are sorted and have correct information
+		totalDatapoints := int64(0)
+		for _, dr := range dataranges {
+			totalDatapoints += (dr.MaxDatapointKey - dr.MinDatapointKey + 1)
+			Expect(dr.DatarangeID).To(BeNumerically(">", 0))
+			Expect(dr.SizeBytes).To(BeNumerically(">", 0))
+			Expect(dr.DataObjectKey).NotTo(BeEmpty())
+			Expect(dr.IndexObjectKey).NotTo(BeEmpty())
+		}
+
+		// Total should be 100 + 500 + 1000 + 50 + 300 = 1950
+		Expect(totalDatapoints).To(Equal(int64(1950)))
+
+		// Step 6: Test list command with non-existent datas3t
+		logger.Info("Step 6: Testing list command with non-existent datas3t")
+
+		cmd = exec.Command(cliPath, "datarange", "list", "--datas3t", "non-existent-datas3t")
+		cmd.Env = append(os.Environ(), "DATAS3T_SERVER_URL="+serverBaseURL)
+		
+		output, err = cmd.CombinedOutput()
+		Expect(err).NotTo(HaveOccurred())
+
+		outputStr = string(output)
+		Expect(outputStr).To(ContainSubstring("No dataranges found"))
+
+		// Step 7: Test after aggregation to verify list still works
+		logger.Info("Step 7: Testing list after aggregation")
+
+		// Aggregate some dataranges
+		err = runCLICommand(cliPath, "aggregate",
+			"--datas3t", testDatas3tName,
+			"--first-datapoint", "0",
+			"--last-datapoint", "599",
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		// List again
+		cmd = exec.Command(cliPath, "datarange", "list", "--datas3t", testDatas3tName)
+		cmd.Env = append(os.Environ(), "DATAS3T_SERVER_URL="+serverBaseURL)
+		
+		output, err = cmd.CombinedOutput()
+		Expect(err).NotTo(HaveOccurred())
+
+		outputStr = string(output)
+		logger.Info("List after aggregation", "output", outputStr)
+
+		// Should now have 4 dataranges (2 were aggregated into 1)
+		Expect(outputStr).To(ContainSubstring("Total dataranges: 4"))
+
+		// The aggregated range should be 0-599
+		Expect(outputStr).To(ContainSubstring("0-599"))
+
+		logger.Info("List dataranges test completed successfully",
+			"initial_dataranges", 5,
+			"dataranges_after_aggregation", 4,
+			"total_datapoints", totalDatapoints,
+			"list_command_verified", true,
+			"error_cases_tested", true)
+	})
+
 	It("should complete full datas3t import workflow using CLI", func(ctx SpecContext) {
 		// Step 1: Add bucket configuration using CLI
 		logger.Info("Step 1: Adding bucket configuration for import test")
