@@ -1781,6 +1781,181 @@ var _ = Describe("End-to-End Server Test", func() {
 			"error_cases_tested", true)
 	})
 
+	It("should delete multiple dataranges with validation using CLI", func(ctx SpecContext) {
+		// Step 1: Add bucket configuration using CLI
+		logger.Info("Step 1: Adding bucket configuration for delete test")
+		err := runCLICommand(cliPath, "bucket", "add",
+			"--name", testBucketConfigName,
+			"--endpoint", "http://"+minioEndpoint,
+			"--bucket", testBucketName,
+			"--access-key", minioAccessKey,
+			"--secret-key", minioSecretKey,
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Step 2: Add datas3t using CLI
+		logger.Info("Step 2: Adding datas3t for delete test")
+		err = runCLICommand(cliPath, "add",
+			"--name", testDatas3tName,
+			"--bucket", testBucketConfigName,
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Step 3: Upload multiple consecutive dataranges
+		logger.Info("Step 3: Uploading 5 consecutive dataranges")
+
+		datarangeInfo := []struct {
+			startIndex int64
+			numFiles   int
+			filename   string
+		}{
+			{0, 100, "delete_test1.tar"},   // 0-99
+			{100, 100, "delete_test2.tar"}, // 100-199
+			{200, 100, "delete_test3.tar"}, // 200-299
+			{300, 100, "delete_test4.tar"}, // 300-399
+			{400, 100, "delete_test5.tar"}, // 400-499
+		}
+
+		for i, info := range datarangeInfo {
+			logger.Info("Creating and uploading datarange", "index", i+1, "start", info.startIndex, "count", info.numFiles)
+
+			testData, _ := createTestTarWithIndex(info.numFiles, info.startIndex)
+			tarFile := filepath.Join(tempDir, info.filename)
+			err = os.WriteFile(tarFile, testData, 0644)
+			Expect(err).NotTo(HaveOccurred())
+
+			err = runCLICommand(cliPath, "upload-tar",
+				"--datas3t", testDatas3tName,
+				"--file", tarFile,
+			)
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		// Step 4: Verify initial state
+		logger.Info("Step 4: Verifying initial state")
+
+		client := datas3tclient.NewClient(serverBaseURL)
+		initialDataranges, err := client.ListDataranges(ctx, testDatas3tName)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(len(initialDataranges)).To(Equal(5))
+
+		// Step 5: Test deletion with boundary validation errors
+		logger.Info("Step 5: Testing boundary validation errors")
+
+		// Test 1: First datapoint doesn't match boundary (should fail)
+		logger.Info("Test 1: Testing first datapoint boundary mismatch")
+		cmd := exec.Command(cliPath, "datarange", "delete",
+			"--datas3t", testDatas3tName,
+			"--first-datapoint", "50", // Doesn't match boundary of 100
+			"--last-datapoint", "299",
+			"--force",
+		)
+		cmd.Env = append(os.Environ(), "DATAS3T_SERVER_URL="+serverBaseURL)
+		err = cmd.Run()
+		Expect(err).To(HaveOccurred(), "Should fail when first datapoint doesn't match boundary")
+
+		// Test 2: Last datapoint doesn't match boundary (should fail)
+		logger.Info("Test 2: Testing last datapoint boundary mismatch")
+		cmd = exec.Command(cliPath, "datarange", "delete",
+			"--datas3t", testDatas3tName,
+			"--first-datapoint", "100",
+			"--last-datapoint", "250", // Doesn't match boundary of 299
+			"--force",
+		)
+		cmd.Env = append(os.Environ(), "DATAS3T_SERVER_URL="+serverBaseURL)
+		err = cmd.Run()
+		Expect(err).To(HaveOccurred(), "Should fail when last datapoint doesn't match boundary")
+
+		// Step 6: Test successful deletion with force flag
+		logger.Info("Step 6: Testing successful deletion with force flag")
+
+		err = runCLICommand(cliPath, "datarange", "delete",
+			"--datas3t", testDatas3tName,
+			"--first-datapoint", "100",
+			"--last-datapoint", "299",
+			"--force",
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Verify deletion
+		datarangesAfterDelete, err := client.ListDataranges(ctx, testDatas3tName)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(len(datarangesAfterDelete)).To(Equal(3), "Should have 3 dataranges after deleting 2")
+
+		// Verify correct dataranges remain
+		remainingRanges := make(map[string]bool)
+		for _, dr := range datarangesAfterDelete {
+			key := fmt.Sprintf("%d-%d", dr.MinDatapointKey, dr.MaxDatapointKey)
+			remainingRanges[key] = true
+		}
+		Expect(remainingRanges["0-99"]).To(BeTrue(), "First datarange should remain")
+		Expect(remainingRanges["300-399"]).To(BeTrue(), "Fourth datarange should remain")
+		Expect(remainingRanges["400-499"]).To(BeTrue(), "Fifth datarange should remain")
+
+		// Step 7: Test deletion with confirmation prompt
+		logger.Info("Step 7: Testing deletion with confirmation prompt")
+
+		// Create a command that will provide "y" to the confirmation prompt
+		cmd = exec.Command("sh", "-c",
+			fmt.Sprintf("echo 'y' | %s datarange delete --datas3t %s --first-datapoint 300 --last-datapoint 399",
+				cliPath, testDatas3tName))
+		cmd.Env = append(os.Environ(), "DATAS3T_SERVER_URL="+serverBaseURL)
+
+		output, err := cmd.CombinedOutput()
+		logger.Info("Delete with confirmation output", "output", string(output))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(output)).To(ContainSubstring("Delete Summary"))
+		Expect(string(output)).To(ContainSubstring("Successfully deleted"))
+
+		// Verify this deletion
+		datarangesAfterConfirm, err := client.ListDataranges(ctx, testDatas3tName)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(len(datarangesAfterConfirm)).To(Equal(2), "Should have 2 dataranges after second deletion")
+
+		// Step 8: Test cancellation with "n" response
+		logger.Info("Step 8: Testing deletion cancellation")
+
+		cmd = exec.Command("sh", "-c",
+			fmt.Sprintf("echo 'n' | %s datarange delete --datas3t %s --first-datapoint 0 --last-datapoint 99",
+				cliPath, testDatas3tName))
+		cmd.Env = append(os.Environ(), "DATAS3T_SERVER_URL="+serverBaseURL)
+
+		output, err = cmd.CombinedOutput()
+		logger.Info("Delete cancellation output", "output", string(output))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(output)).To(ContainSubstring("Deletion cancelled"))
+
+		// Verify no deletion occurred
+		datarangesAfterCancel, err := client.ListDataranges(ctx, testDatas3tName)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(len(datarangesAfterCancel)).To(Equal(2), "Should still have 2 dataranges after cancellation")
+
+		// Step 9: Test deletion of single datarange
+		logger.Info("Step 9: Testing single datarange deletion")
+
+		err = runCLICommand(cliPath, "datarange", "delete",
+			"--datas3t", testDatas3tName,
+			"--first-datapoint", "0",
+			"--last-datapoint", "99",
+			"--force",
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Final verification
+		finalDataranges, err := client.ListDataranges(ctx, testDatas3tName)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(len(finalDataranges)).To(Equal(1), "Should have 1 datarange remaining")
+		Expect(finalDataranges[0].MinDatapointKey).To(Equal(int64(400)))
+		Expect(finalDataranges[0].MaxDatapointKey).To(Equal(int64(499)))
+
+		logger.Info("Multiple datarange deletion test completed successfully",
+			"initial_dataranges", 5,
+			"final_dataranges", 1,
+			"boundary_validation_tested", true,
+			"confirmation_prompt_tested", true,
+			"force_flag_tested", true)
+	})
+
 	It("should complete full datas3t import workflow using CLI", func(ctx SpecContext) {
 		// Step 1: Add bucket configuration using CLI
 		logger.Info("Step 1: Adding bucket configuration for import test")
