@@ -1665,11 +1665,11 @@ var _ = Describe("End-to-End Server Test", func() {
 			numFiles   int
 			filename   string
 		}{
-			{0, 100, "list_test1.tar"},      // Small: 100 files
-			{100, 500, "list_test2.tar"},    // Medium: 500 files
-			{600, 1000, "list_test3.tar"},   // Large: 1000 files
-			{1600, 50, "list_test4.tar"},    // Very small: 50 files
-			{2000, 300, "list_test5.tar"},   // Medium: 300 files (with gap)
+			{0, 100, "list_test1.tar"},    // Small: 100 files
+			{100, 500, "list_test2.tar"},  // Medium: 500 files
+			{600, 1000, "list_test3.tar"}, // Large: 1000 files
+			{1600, 50, "list_test4.tar"},  // Very small: 50 files
+			{2000, 300, "list_test5.tar"}, // Medium: 300 files (with gap)
 		}
 
 		for i, info := range datarangeInfo {
@@ -1692,7 +1692,7 @@ var _ = Describe("End-to-End Server Test", func() {
 
 		cmd := exec.Command(cliPath, "datarange", "list", "--datas3t", testDatas3tName)
 		cmd.Env = append(os.Environ(), "DATAS3T_SERVER_URL="+serverBaseURL)
-		
+
 		output, err := cmd.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred())
 
@@ -1707,11 +1707,11 @@ var _ = Describe("End-to-End Server Test", func() {
 		Expect(outputStr).To(ContainSubstring("Total dataranges: 5"))
 
 		// Verify specific datarange information is present
-		Expect(outputStr).To(ContainSubstring("0-99"))       // First datarange
-		Expect(outputStr).To(ContainSubstring("100-599"))    // Second datarange
-		Expect(outputStr).To(ContainSubstring("600-1599"))   // Third datarange
-		Expect(outputStr).To(ContainSubstring("1600-1649"))  // Fourth datarange
-		Expect(outputStr).To(ContainSubstring("2000-2299"))  // Fifth datarange
+		Expect(outputStr).To(ContainSubstring("0-99"))      // First datarange
+		Expect(outputStr).To(ContainSubstring("100-599"))   // Second datarange
+		Expect(outputStr).To(ContainSubstring("600-1599"))  // Third datarange
+		Expect(outputStr).To(ContainSubstring("1600-1649")) // Fourth datarange
+		Expect(outputStr).To(ContainSubstring("2000-2299")) // Fifth datarange
 
 		// Step 5: Verify using client that all dataranges are present
 		logger.Info("Step 5: Verifying dataranges using client")
@@ -1739,7 +1739,7 @@ var _ = Describe("End-to-End Server Test", func() {
 
 		cmd = exec.Command(cliPath, "datarange", "list", "--datas3t", "non-existent-datas3t")
 		cmd.Env = append(os.Environ(), "DATAS3T_SERVER_URL="+serverBaseURL)
-		
+
 		output, err = cmd.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred())
 
@@ -1760,7 +1760,7 @@ var _ = Describe("End-to-End Server Test", func() {
 		// List again
 		cmd = exec.Command(cliPath, "datarange", "list", "--datas3t", testDatas3tName)
 		cmd.Env = append(os.Environ(), "DATAS3T_SERVER_URL="+serverBaseURL)
-		
+
 		output, err = cmd.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred())
 
