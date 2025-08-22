@@ -1956,6 +1956,156 @@ var _ = Describe("End-to-End Server Test", func() {
 			"force_flag_tested", true)
 	})
 
+	It("should delete datas3t using CLI command", func(ctx SpecContext) {
+		// Step 1: Add bucket configuration using CLI
+		logger.Info("Step 1: Adding bucket configuration for delete test")
+		err := runCLICommand(cliPath, "bucket", "add",
+			"--name", testBucketConfigName,
+			"--endpoint", "http://"+minioEndpoint,
+			"--bucket", testBucketName,
+			"--access-key", minioAccessKey,
+			"--secret-key", minioSecretKey,
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Step 2: Add multiple datas3ts using CLI
+		logger.Info("Step 2: Adding multiple datas3ts for delete test")
+		emptyDatas3tName := "empty-datas3t-for-delete"
+		nonEmptyDatas3tName := "non-empty-datas3t-for-delete"
+
+		// Add first datas3t (will remain empty)
+		err = runCLICommand(cliPath, "add",
+			"--name", emptyDatas3tName,
+			"--bucket", testBucketConfigName,
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Add second datas3t (will have data)
+		err = runCLICommand(cliPath, "add",
+			"--name", nonEmptyDatas3tName,
+			"--bucket", testBucketConfigName,
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Step 3: Upload data to the second datas3t to make it non-empty
+		logger.Info("Step 3: Uploading data to make one datas3t non-empty")
+		testData, _ := createTestTarWithIndex(100, 0)
+		tarFile := filepath.Join(tempDir, "delete_test.tar")
+		err = os.WriteFile(tarFile, testData, 0644)
+		Expect(err).NotTo(HaveOccurred())
+
+		err = runCLICommand(cliPath, "upload-tar",
+			"--datas3t", nonEmptyDatas3tName,
+			"--file", tarFile,
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Step 4: Test deletion of empty datas3t with confirmation
+		logger.Info("Step 4: Testing deletion of empty datas3t with confirmation")
+		
+		// Test with "n" response (cancellation)
+		cmd := exec.Command("sh", "-c",
+			fmt.Sprintf("echo 'n' | %s delete --name %s",
+				cliPath, emptyDatas3tName))
+		cmd.Env = append(os.Environ(), "DATAS3T_SERVER_URL="+serverBaseURL)
+
+		output, err := cmd.CombinedOutput()
+		logger.Info("Delete cancellation output", "output", string(output))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(output)).To(ContainSubstring("Operation cancelled"))
+
+		// Verify datas3t still exists
+		client := datas3tclient.NewClient(serverBaseURL)
+		datas3ts, err := client.ListDatas3ts(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		datas3tNames := []string{}
+		for _, d := range datas3ts {
+			datas3tNames = append(datas3tNames, d.Datas3tName)
+		}
+		Expect(datas3tNames).To(ContainElement(emptyDatas3tName))
+
+		// Test with "y" response (confirmation)
+		cmd = exec.Command("sh", "-c",
+			fmt.Sprintf("echo 'y' | %s delete --name %s",
+				cliPath, emptyDatas3tName))
+		cmd.Env = append(os.Environ(), "DATAS3T_SERVER_URL="+serverBaseURL)
+
+		output, err = cmd.CombinedOutput()
+		logger.Info("Delete confirmation output", "output", string(output))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(output)).To(ContainSubstring("Successfully deleted datas3t"))
+
+		// Verify datas3t no longer exists
+		datas3ts, err = client.ListDatas3ts(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		datas3tNames = []string{}
+		for _, d := range datas3ts {
+			datas3tNames = append(datas3tNames, d.Datas3tName)
+		}
+		Expect(datas3tNames).NotTo(ContainElement(emptyDatas3tName))
+
+		// Step 5: Test deletion of non-empty datas3t (should fail)
+		logger.Info("Step 5: Testing deletion of non-empty datas3t (should fail)")
+		
+		err = runCLICommand(cliPath, "delete",
+			"--name", nonEmptyDatas3tName,
+			"--force",
+		)
+		Expect(err).To(HaveOccurred())
+
+		// Verify datas3t still exists
+		datas3ts, err = client.ListDatas3ts(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		datas3tNames = []string{}
+		for _, d := range datas3ts {
+			datas3tNames = append(datas3tNames, d.Datas3tName)
+		}
+		Expect(datas3tNames).To(ContainElement(nonEmptyDatas3tName))
+
+		// Step 6: Clear and then delete the non-empty datas3t
+		logger.Info("Step 6: Testing clear followed by delete")
+		
+		// First clear the datas3t
+		err = runCLICommand(cliPath, "clear",
+			"--name", nonEmptyDatas3tName,
+			"--force",
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Now delete should succeed
+		err = runCLICommand(cliPath, "delete",
+			"--name", nonEmptyDatas3tName,
+			"--force",
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Verify datas3t no longer exists
+		datas3ts, err = client.ListDatas3ts(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		datas3tNames = []string{}
+		for _, d := range datas3ts {
+			datas3tNames = append(datas3tNames, d.Datas3tName)
+		}
+		Expect(datas3tNames).NotTo(ContainElement(nonEmptyDatas3tName))
+
+		// Step 7: Test deletion of non-existent datas3t
+		logger.Info("Step 7: Testing deletion of non-existent datas3t")
+		
+		err = runCLICommand(cliPath, "delete",
+			"--name", "non-existent-datas3t",
+			"--force",
+		)
+		Expect(err).To(HaveOccurred())
+
+		logger.Info("Delete datas3t test completed successfully",
+			"empty_delete_tested", true,
+			"non_empty_delete_tested", true,
+			"clear_then_delete_tested", true,
+			"non_existent_delete_tested", true,
+			"confirmation_prompt_tested", true,
+			"force_flag_tested", true)
+	})
+
 	It("should complete full datas3t import workflow using CLI", func(ctx SpecContext) {
 		// Step 1: Add bucket configuration using CLI
 		logger.Info("Step 1: Adding bucket configuration for import test")

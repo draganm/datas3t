@@ -319,6 +319,20 @@ func (q *Queries) CountDataranges(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countDatarangesForDatas3t = `-- name: CountDatarangesForDatas3t :one
+SELECT COUNT(*)::INT
+FROM dataranges dr
+JOIN datas3ts d ON dr.datas3t_id = d.id
+WHERE d.name = $1
+`
+
+func (q *Queries) CountDatarangesForDatas3t(ctx context.Context, name string) (int32, error) {
+	row := q.db.QueryRow(ctx, countDatarangesForDatas3t, name)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const countKeysToDelete = `-- name: CountKeysToDelete :one
 SELECT count(*)
 FROM objects_to_delete
@@ -498,6 +512,15 @@ DELETE FROM dataranges WHERE id = ANY($1::BIGINT[])
 
 func (q *Queries) DeleteDatarangesByIDs(ctx context.Context, dollar_1 []int64) error {
 	_, err := q.db.Exec(ctx, deleteDatarangesByIDs, dollar_1)
+	return err
+}
+
+const deleteDatas3t = `-- name: DeleteDatas3t :exec
+DELETE FROM datas3ts WHERE name = $1
+`
+
+func (q *Queries) DeleteDatas3t(ctx context.Context, name string) error {
+	_, err := q.db.Exec(ctx, deleteDatas3t, name)
 	return err
 }
 
@@ -1053,6 +1076,17 @@ func (q *Queries) GetDatarangesInRange(ctx context.Context, arg GetDatarangesInR
 		return nil, err
 	}
 	return items, nil
+}
+
+const getDatas3tIDByName = `-- name: GetDatas3tIDByName :one
+SELECT id FROM datas3ts WHERE name = $1
+`
+
+func (q *Queries) GetDatas3tIDByName(ctx context.Context, name string) (int64, error) {
+	row := q.db.QueryRow(ctx, getDatas3tIDByName, name)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
 }
 
 const getDatas3tWithBucket = `-- name: GetDatas3tWithBucket :one

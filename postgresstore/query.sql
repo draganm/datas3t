@@ -389,3 +389,15 @@ JOIN datas3ts d ON dr.datas3t_id = d.id
 JOIN s3_buckets s ON d.s3_bucket_id = s.id
 WHERE d.name = $1
 ORDER BY dr.min_datapoint_key;
+
+-- name: CountDatarangesForDatas3t :one
+SELECT COUNT(*)::INT
+FROM dataranges dr
+JOIN datas3ts d ON dr.datas3t_id = d.id
+WHERE d.name = $1;
+
+-- name: GetDatas3tIDByName :one
+SELECT id FROM datas3ts WHERE name = $1;
+
+-- name: DeleteDatas3t :exec
+DELETE FROM datas3ts WHERE name = $1;
