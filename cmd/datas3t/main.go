@@ -13,6 +13,7 @@ import (
 	"github.com/draganm/datas3t/cmd/datas3t/catrange"
 	datasetclear "github.com/draganm/datas3t/cmd/datas3t/clear"
 	"github.com/draganm/datas3t/cmd/datas3t/datarange"
+	datasetdelete "github.com/draganm/datas3t/cmd/datas3t/delete"
 	"github.com/draganm/datas3t/cmd/datas3t/importcmd"
 	datasetlist "github.com/draganm/datas3t/cmd/datas3t/list"
 	"github.com/draganm/datas3t/cmd/datas3t/optimize"
@@ -41,6 +42,7 @@ Keep this key secure and backed up - if you lose it, you won't be able to decryp
 			bucket.Command(),
 			datasetadd.Command(),
 			datasetclear.Command(),
+			datasetdelete.Command(),
 			datasetlist.Command(),
 			catrange.Command(),
 			importcmd.Command(),
