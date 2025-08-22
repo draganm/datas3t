@@ -1247,8 +1247,6 @@ var _ = Describe("End-to-End Server Test", func() {
 		err = runCLICommand(cliPath, "optimize",
 			"--datas3t", testDatas3tName,
 			"--dry-run",
-			"--min-score", "0.5", // Lower threshold to see more opportunities
-			"--max-operations", "10",
 		)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -1257,9 +1255,6 @@ var _ = Describe("End-to-End Server Test", func() {
 
 		err = runCLICommand(cliPath, "optimize",
 			"--datas3t", testDatas3tName,
-			"--min-score", "1.0",
-			"--target-size", "2MB", // Use smaller target size for testing
-			"--max-operations", "3",
 		)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -1292,11 +1287,6 @@ var _ = Describe("End-to-End Server Test", func() {
 
 		err = runCLICommand(cliPath, "optimize",
 			"--datas3t", testDatas3tName,
-			"--min-score", "0.8",
-			"--target-size", "1.5MB",
-			"--max-aggregate-size", "10MB",
-			"--max-operations", "2",
-			"--max-parallelism", "2",
 		)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -1344,10 +1334,9 @@ var _ = Describe("End-to-End Server Test", func() {
 		// Step 9: Test optimization with very high threshold (should find no operations)
 		logger.Info("Step 9: Testing optimization with high threshold")
 
+		// The simplified optimizer will find no operations if already optimized
 		err = runCLICommand(cliPath, "optimize",
 			"--datas3t", testDatas3tName,
-			"--min-score", "10.0", // Very high threshold
-			"--max-operations", "5",
 		)
 		Expect(err).NotTo(HaveOccurred()) // Should succeed but find no operations
 
@@ -1498,9 +1487,6 @@ var _ = Describe("End-to-End Server Test", func() {
 
 			err = runCLICommand(cliPath, "optimize",
 				"--datas3t", testDatas3tName,
-				"--min-score", "0.5",
-				"--target-size", "10MB",
-				"--max-aggregate-size", "50MB",
 			)
 
 			if err != nil {
