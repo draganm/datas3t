@@ -17,6 +17,7 @@ import (
 	"github.com/draganm/datas3t/cmd/datas3t/importcmd"
 	datasetlist "github.com/draganm/datas3t/cmd/datas3t/list"
 	"github.com/draganm/datas3t/cmd/datas3t/optimize"
+	"github.com/draganm/datas3t/cmd/datas3t/optimizeall"
 	"github.com/draganm/datas3t/cmd/datas3t/server"
 	"github.com/draganm/datas3t/cmd/datas3t/uploadtar"
 	"github.com/urfave/cli/v2"
@@ -50,6 +51,7 @@ Keep this key secure and backed up - if you lose it, you won't be able to decryp
 			uploadtar.Command(),
 			aggregate.Command(),
 			optimize.Command(),
+			optimizeall.Command(),
 		},
 	}
 
