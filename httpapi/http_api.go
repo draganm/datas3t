@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/draganm/datas3t/httpapi/webui"
 	"github.com/draganm/datas3t/server"
 )
 
@@ -16,6 +17,12 @@ func NewHTTPAPI(s *server.Server, log *slog.Logger) *http.ServeMux {
 	mux := http.NewServeMux()
 	a := &api{s: s, log: log}
 
+	// Web UI routes
+	webHandler := webui.NewHandler(s, log)
+	mux.HandleFunc("GET /", webHandler.IndexPage)
+	mux.HandleFunc("GET /ui/dataranges/{datas3t}", webHandler.DatarangeChart)
+
+	// API routes
 	mux.HandleFunc("GET /api/v1/buckets", a.listBuckets)
 	mux.HandleFunc("POST /api/v1/buckets", a.addBucket)
 	mux.HandleFunc("GET /api/v1/datas3ts", a.listDatas3ts)
