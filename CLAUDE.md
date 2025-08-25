@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Core Commands
 - `nix develop` - Enter development environment with all dependencies
 - `nix develop -c go test ./...` - Run all tests
-- `nix develop -c go generate ./...` - Generate code (includes sqlc for database queries)
+- `nix develop -c go generate ./...` - Generate code (includes sqlc for database queries and templ templates)
 - `nix develop -c go build -o datas3t ./cmd/datas3t` - Build CLI binary
 - `nix develop -c go run ./cmd/datas3t server` - Run server directly
 
@@ -19,6 +19,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Database Operations
 - `nix develop -c go generate ./postgresstore` - Generate database code with sqlc
 - Database migrations are embedded in `postgresstore/migrations/`
+
+### Web UI Development
+- `nix develop -c go generate ./httpapi/webui` - Generate Go code from templ templates
+- Templates use the templ templating language for type-safe HTML generation
 
 ## Architecture Overview
 
@@ -35,6 +39,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - REST API layer that wraps the server components
 - Endpoints follow `/api/v1/` pattern
 - Handles JSON serialization and HTTP concerns
+- `webui/` - Web-based dashboard for visualizing and managing datas3ts
 
 **Client Library (client/)**
 - Go SDK for programmatic access
@@ -51,6 +56,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Binary format: 16-byte entries per file (position, header blocks, size)
 - Disk caching system for frequently accessed indices
 
+**Web UI (httpapi/webui/)**
+- Interactive dashboard for visualizing datas3ts and dataranges
+- Built with templ for type-safe HTML templating
+- Uses HTMX for dynamic content loading without full page refreshes
+- Tailwind CSS for styling
+- Chart.js for datarange size visualizations
+- Components:
+  - `handler.go` - HTTP handlers for UI endpoints
+  - `components.templ` - Templ templates for HTML generation
+  - `generate.go` - Go generate directive for templ compilation
+
 ### Key Concepts
 
 **Datapoints**: Individual files numbered sequentially (e.g., `00000000000000000001.txt`)
@@ -63,6 +79,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 1. **Upload**: Client uploads TAR → Server validates → Stored in S3 with index
 2. **Download**: Client requests range → Server generates presigned URLs → Direct S3 access
 3. **Aggregation**: Server combines small dataranges into larger ones for efficiency
+
+## Web UI Features
+
+### Available Views
+- **Dashboard** (`/ui/`) - Main overview showing all datas3ts with their metrics
+- **Datarange Chart** (`/ui/dataranges/{datas3t}`) - Interactive bar chart showing size distribution of dataranges
+
+### UI Patterns
+- Lazy loading of charts using HTMX for better performance
+- Responsive design that works on desktop and mobile
+- Real-time updates without page refresh
+- Human-readable formatting for bytes and large numbers
 
 ## Important Patterns
 
