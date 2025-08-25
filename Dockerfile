@@ -7,6 +7,9 @@ ADD . /build/
 # Create output directory
 RUN mkdir /out
 
+# Generate code (templ and sqlc)
+RUN go generate ./...
+
 # Build all binaries with CGO enabled and static linking
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod/ \
