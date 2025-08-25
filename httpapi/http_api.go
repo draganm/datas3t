@@ -20,7 +20,6 @@ func NewHTTPAPI(s *server.Server, log *slog.Logger) *http.ServeMux {
 	// Web UI routes
 	webHandler := webui.NewHandler(s, log)
 	mux.HandleFunc("GET /", webHandler.IndexPage)
-	mux.HandleFunc("GET /ui/dataranges/{datas3t}", webHandler.DatarangeChart)
 
 	// API routes
 	mux.HandleFunc("GET /api/v1/buckets", a.listBuckets)

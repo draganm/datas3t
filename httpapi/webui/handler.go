@@ -25,30 +25,26 @@ func (h *Handler) IndexPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Fetch dataranges for each datas3t
+	datarangesMap := make(map[string][]dataranges.DatarangeInfo)
+	for _, d := range datas3ts {
+		req := &dataranges.ListDatarangesRequest{
+			Datas3tName: d.Datas3tName,
+		}
+		resp, err := h.server.ListDataranges(r.Context(), h.log, req)
+		if err != nil {
+			h.log.Warn("Failed to list dataranges", "error", err, "datas3t", d.Datas3tName)
+			// Continue with empty dataranges for this datas3t
+			datarangesMap[d.Datas3tName] = []dataranges.DatarangeInfo{}
+		} else {
+			datarangesMap[d.Datas3tName] = resp.Dataranges
+		}
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	component := IndexPage(datas3ts)
+	component := IndexPage(datas3ts, datarangesMap)
 	if err := component.Render(r.Context(), w); err != nil {
 		h.log.Error("Failed to render page", "error", err)
 	}
 }
 
-func (h *Handler) DatarangeChart(w http.ResponseWriter, r *http.Request) {
-	datas3tName := r.PathValue("datas3t")
-
-	req := &dataranges.ListDatarangesRequest{
-		Datas3tName: datas3tName,
-	}
-
-	resp, err := h.server.ListDataranges(r.Context(), h.log, req)
-	if err != nil {
-		h.log.Error("Failed to list dataranges", "error", err, "datas3t", datas3tName)
-		http.Error(w, "Failed to load dataranges", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	component := DatarangeChart(datas3tName, resp.Dataranges)
-	if err := component.Render(r.Context(), w); err != nil {
-		h.log.Error("Failed to render chart", "error", err)
-	}
-}
