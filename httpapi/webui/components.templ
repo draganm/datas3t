@@ -1,0 +1,201 @@
+package webui
+
+import (
+    "fmt"
+    "github.com/draganm/datas3t/server/datas3t"
+    "github.com/draganm/datas3t/server/dataranges"
+)
+
+// Helper function for formatting bytes
+func formatBytes(bytes int64) string {
+    const unit = 1024
+    if bytes < unit {
+        return fmt.Sprintf("%d B", bytes)
+    }
+    div, exp := int64(unit), 0
+    for n := bytes / unit; n >= unit; n /= unit {
+        div *= unit
+        exp++
+    }
+    return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+// Base layout with Tailwind, HTMX, Chart.js
+templ Layout(title string) {
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+        <title>{ title }</title>
+        <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0"></script>
+    </head>
+    <body class="bg-gray-50">
+        { children... }
+    </body>
+    </html>
+}
+
+// Main dashboard page
+templ IndexPage(datas3ts []datas3t.Datas3tInfo) {
+    @Layout("Datas3t Dashboard") {
+        <div class="container mx-auto p-6">
+            <h1 class="text-3xl font-bold mb-6 text-gray-800">Datas3t Overview</h1>
+            @Datas3tTable(datas3ts)
+        </div>
+    }
+}
+
+// Table with expandable rows for charts
+templ Datas3tTable(datas3ts []datas3t.Datas3tInfo) {
+    <div class="overflow-x-auto">
+        <table class="min-w-full bg-white rounded-lg shadow-md">
+            <thead class="bg-gray-100 border-b">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bucket</th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Datapoints</th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Dataranges</th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total Size</th>
+                    <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+                for _, d := range datas3ts {
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{ d.Datas3tName }</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{ d.BucketName }</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">{ fmt.Sprintf("%d", d.TotalDatapoints) }</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">{ fmt.Sprintf("%d", d.DatarangeCount) }</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">{ formatBytes(d.TotalBytes) }</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <button 
+                                class="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                                hx-get={ fmt.Sprintf("/ui/dataranges/%s", d.Datas3tName) }
+                                hx-target={ fmt.Sprintf("#chart-%s", d.Datas3tName) }
+                                hx-swap="innerHTML"
+                                hx-indicator={ fmt.Sprintf("#loading-%s", d.Datas3tName) }>
+                                View Chart
+                            </button>
+                            <span id={ fmt.Sprintf("loading-%s", d.Datas3tName) } class="htmx-indicator ml-2">
+                                <svg class="animate-spin h-4 w-4 text-blue-600 inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                            </span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="6" class="p-0">
+                            <div id={ fmt.Sprintf("chart-%s", d.Datas3tName) } class="bg-gray-50"></div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+        if len(datas3ts) == 0 {
+            <div class="text-center py-8 text-gray-500">
+                No datas3ts found. Create one to get started.
+            </div>
+        }
+    </div>
+}
+
+// Datarange chart component
+templ DatarangeChart(datas3tName string, dataranges []dataranges.DatarangeInfo) {
+    <div class="p-6 bg-white border-t">
+        <h3 class="text-lg font-semibold mb-4 text-gray-800">Datarange Sizes for { datas3tName }</h3>
+        <div style="height: 300px;">
+            <canvas id={ fmt.Sprintf("canvas-%s", datas3tName) }></canvas>
+        </div>
+        @templ.Raw(fmt.Sprintf(`
+        <script>
+            (function() {
+                const ctx = document.getElementById('canvas-%s').getContext('2d');
+                const labels = [%s];
+                const data = [%s];
+                
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Size (bytes)',
+                            data: data,
+                            backgroundColor: 'rgba(59, 130, 246, 0.5)',
+                            borderColor: 'rgba(59, 130, 246, 1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return 'Size: ' + formatBytes(context.parsed.y);
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    callback: function(value) {
+                                        return formatBytes(value);
+                                    }
+                                }
+                            },
+                            x: {
+                                ticks: {
+                                    maxRotation: 45,
+                                    minRotation: 45
+                                }
+                            }
+                        }
+                    }
+                });
+                
+                // Helper function for formatting bytes in JavaScript
+                function formatBytes(bytes) {
+                    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+                    let unit = 0;
+                    let value = bytes;
+                    while (value >= 1024 && unit < units.length - 1) {
+                        value /= 1024;
+                        unit++;
+                    }
+                    return value.toFixed(1) + ' ' + units[unit];
+                }
+            })();
+        </script>
+        `, datas3tName, buildLabelsJSON(dataranges), buildDataJSON(dataranges)))
+    </div>
+}
+
+// Helper functions to build JSON arrays for the chart
+func buildLabelsJSON(dataranges []dataranges.DatarangeInfo) string {
+    labels := ""
+    for i, dr := range dataranges {
+        if i > 0 {
+            labels += ","
+        }
+        labels += fmt.Sprintf("'%d-%d'", dr.MinDatapointKey, dr.MaxDatapointKey)
+    }
+    return labels
+}
+
+func buildDataJSON(dataranges []dataranges.DatarangeInfo) string {
+    data := ""
+    for i, dr := range dataranges {
+        if i > 0 {
+            data += ","
+        }
+        data += fmt.Sprintf("%d", dr.SizeBytes)
+    }
+    return data
+}
