@@ -16,6 +16,7 @@ import (
 	datasetdelete "github.com/draganm/datas3t/cmd/datas3t/delete"
 	"github.com/draganm/datas3t/cmd/datas3t/importcmd"
 	datasetlist "github.com/draganm/datas3t/cmd/datas3t/list"
+	missing_datapoints "github.com/draganm/datas3t/cmd/datas3t/missing-datapoints"
 	"github.com/draganm/datas3t/cmd/datas3t/optimize"
 	"github.com/draganm/datas3t/cmd/datas3t/optimizeall"
 	"github.com/draganm/datas3t/cmd/datas3t/server"
@@ -52,6 +53,7 @@ Keep this key secure and backed up - if you lose it, you won't be able to decryp
 			aggregate.Command(),
 			optimize.Command(),
 			optimizeall.Command(),
+			missing_datapoints.Command(),
 		},
 	}
 
