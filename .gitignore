@@ -42,6 +42,3 @@ profile.cov
 
 tests/spec-tests/
 
-# Templ generated files
-*_templ.go
-*_templ.txt
