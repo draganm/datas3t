@@ -11,6 +11,7 @@ interface Props {
 
 export default function DatarangeSizeChart(props: Props) {
   let chart: uPlot | undefined;
+  let observer: ResizeObserver | undefined;
 
   const [dataranges] = createResource(
     () => props.datas3tName,
@@ -18,6 +19,7 @@ export default function DatarangeSizeChart(props: Props) {
   );
 
   onCleanup(() => {
+    observer?.disconnect();
     chart?.destroy();
   });
 
@@ -26,14 +28,16 @@ export default function DatarangeSizeChart(props: Props) {
     ranges: { min_datapoint_key: number; max_datapoint_key: number; size_bytes: number }[],
   ) {
     if (chart) chart.destroy();
+    if (observer) observer.disconnect();
     if (ranges.length === 0) return;
 
     const xData = ranges.map((_, i) => i);
     const yData = ranges.map((r) => r.size_bytes);
+    const height = 200;
 
     const opts: uPlot.Options = {
-      width: 400,
-      height: 150,
+      width: container.clientWidth || 400,
+      height,
       cursor: { show: false },
       legend: { show: false },
       axes: [
@@ -54,6 +58,16 @@ export default function DatarangeSizeChart(props: Props) {
     };
 
     chart = new uPlot(opts, [xData, yData], container);
+
+    observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const newWidth = entry.contentRect.width;
+        if (newWidth > 0 && chart) {
+          chart.setSize({ width: newWidth, height });
+        }
+      }
+    });
+    observer.observe(container);
   }
 
   return (
@@ -74,10 +88,11 @@ export default function DatarangeSizeChart(props: Props) {
         }
         return (
           <div
+            class="w-full"
+            style={{ height: "200px" }}
             ref={(el) => {
               requestAnimationFrame(() => initChart(el, ranges));
             }}
-            style={{ height: "150px", width: "400px" }}
           />
         );
       }}
