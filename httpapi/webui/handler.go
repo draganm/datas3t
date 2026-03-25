@@ -1,50 +1,35 @@
 package webui
 
 import (
-	"log/slog"
+	"io/fs"
 	"net/http"
-
-	"github.com/draganm/datas3t/server"
-	"github.com/draganm/datas3t/server/dataranges"
 )
 
-type Handler struct {
-	server *server.Server
-	log    *slog.Logger
-}
-
-func NewHandler(s *server.Server, log *slog.Logger) *Handler {
-	return &Handler{server: s, log: log}
-}
-
-func (h *Handler) IndexPage(w http.ResponseWriter, r *http.Request) {
-	datas3ts, err := h.server.ListDatas3ts(r.Context(), h.log)
+func NewHandler() http.Handler {
+	subFS, err := fs.Sub(distFS, "dist")
 	if err != nil {
-		h.log.Error("Failed to list datas3ts", "error", err)
-		http.Error(w, "Failed to load datas3ts", http.StatusInternalServerError)
-		return
+		panic(err)
 	}
 
-	// Fetch dataranges for each datas3t
-	datarangesMap := make(map[string][]dataranges.DatarangeInfo)
-	for _, d := range datas3ts {
-		req := &dataranges.ListDatarangesRequest{
-			Datas3tName: d.Datas3tName,
+	fileServer := http.FileServer(http.FS(subFS))
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Try to serve the file directly; fall back to index.html for SPA routing.
+		path := r.URL.Path
+		if path == "/" {
+			fileServer.ServeHTTP(w, r)
+			return
 		}
-		resp, err := h.server.ListDataranges(r.Context(), h.log, req)
+
+		f, err := subFS.Open(path[1:])
 		if err != nil {
-			h.log.Warn("Failed to list dataranges", "error", err, "datas3t", d.Datas3tName)
-			// Continue with empty dataranges for this datas3t
-			datarangesMap[d.Datas3tName] = []dataranges.DatarangeInfo{}
-		} else {
-			datarangesMap[d.Datas3tName] = resp.Dataranges
+			// File not found — serve index.html for SPA routing
+			r.URL.Path = "/"
+			fileServer.ServeHTTP(w, r)
+			return
 		}
-	}
+		f.Close()
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	component := IndexPage(datas3ts, datarangesMap)
-	if err := component.Render(r.Context(), w); err != nil {
-		h.log.Error("Failed to render page", "error", err)
-	}
+		fileServer.ServeHTTP(w, r)
+	})
 }
-

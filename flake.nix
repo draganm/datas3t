@@ -2,14 +2,13 @@
   description = "Datas3t";
   inputs = {
 
-    nixpkgs = { url = "github:NixOS/nixpkgs/nixos-25.05"; };
-    nixpkgs-unstable = { url = "github:NixOS/nixpkgs/nixos-unstable"; };
+    nixpkgs = { url = "github:NixOS/nixpkgs/nixos-25.11"; };
     
     systems.url = "github:nix-systems/default";
 
   };
 
-  outputs = { self, nixpkgs, nixpkgs-unstable, systems, ... }@inputs:
+  outputs = { self, nixpkgs, systems, ... }@inputs:
     let
       eachSystem = f:
         nixpkgs.lib.genAttrs (import systems) (system:
@@ -18,13 +17,10 @@
               inherit system;
               config = { allowUnfree = true; };
             };
-            pkgs-unstable = import nixpkgs-unstable {
-              inherit system;
-              config = { allowUnfree = true; };
-            };
-          in f { inherit pkgs pkgs-unstable; });
+            
+          in f { inherit pkgs; });
     in {
-      devShells = eachSystem ({ pkgs, pkgs-unstable }: {
+      devShells = eachSystem ({ pkgs }: {
         default = pkgs.mkShell {
           shellHook = ''
             # Set here the env vars you want to be available in the shell
@@ -33,11 +29,11 @@
 
           packages = with pkgs; [
             go
+            nodejs
             shellcheck
             sqlc
             minio
             docker
-            pkgs-unstable.claude-code
           ];
         };
       });

@@ -1,0 +1,118 @@
+<h2>SolidJS Component Tree & Data Flow</h2>
+<p class="subtitle">How data flows from API to rendered UI</p>
+
+<div class="mockup">
+  <div class="mockup-header">Component Tree</div>
+  <div class="mockup-body" style="font-family: monospace; font-size: 13px; padding: 20px;">
+    <div style="max-width: 700px; margin: 0 auto;">
+      <!-- App -->
+      <div style="border: 2px solid #60a5fa; border-radius: 8px; padding: 12px; background: #1e293b;">
+        <div style="color: #60a5fa; font-weight: bold; margin-bottom: 4px;">App.tsx</div>
+        <div style="color: #94a3b8; font-size: 11px; margin-bottom: 12px;">Layout wrapper: container, heading</div>
+
+        <!-- Dashboard -->
+        <div style="border: 2px solid #a78bfa; border-radius: 8px; padding: 12px; background: #0f172a; margin-left: 16px;">
+          <div style="color: #a78bfa; font-weight: bold; margin-bottom: 4px;">Dashboard.tsx</div>
+          <div style="color: #94a3b8; font-size: 11px; margin-bottom: 4px;">
+            <span style="background: #1e40af; color: #bfdbfe; padding: 2px 6px; border-radius: 3px; font-size: 10px;">createResource</span>
+            fetch /api/v1/datas3ts
+          </div>
+          <div style="color: #94a3b8; font-size: 11px; margin-bottom: 12px;">Handles: loading | error | empty | data</div>
+
+          <!-- Datas3tTable -->
+          <div style="border: 2px solid #34d399; border-radius: 8px; padding: 12px; background: #1e293b; margin-left: 16px;">
+            <div style="color: #34d399; font-weight: bold; margin-bottom: 4px;">Datas3tTable.tsx</div>
+            <div style="color: #94a3b8; font-size: 11px; margin-bottom: 4px;">Props: datas3ts: Datas3tInfo[]</div>
+            <div style="color: #94a3b8; font-size: 11px; margin-bottom: 12px;">Renders table with &lt;For each={}&gt;</div>
+
+            <!-- Table structure -->
+            <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin-bottom: 12px;">
+              <div style="background: #334155; padding: 4px 6px; border-radius: 3px; color: #cbd5e1; font-size: 10px; text-align: center;">Name</div>
+              <div style="background: #334155; padding: 4px 6px; border-radius: 3px; color: #cbd5e1; font-size: 10px; text-align: center;">Bucket</div>
+              <div style="background: #334155; padding: 4px 6px; border-radius: 3px; color: #cbd5e1; font-size: 10px; text-align: center;">Points</div>
+              <div style="background: #334155; padding: 4px 6px; border-radius: 3px; color: #cbd5e1; font-size: 10px; text-align: center;">Ranges</div>
+              <div style="background: #334155; padding: 4px 6px; border-radius: 3px; color: #cbd5e1; font-size: 10px; text-align: center;">Size</div>
+              <div style="background: #334155; padding: 4px 6px; border-radius: 3px; color: #cbd5e1; font-size: 10px; text-align: center;">Chart ↓</div>
+            </div>
+
+            <!-- DatarangeSizeChart -->
+            <div style="border: 2px solid #fbbf24; border-radius: 8px; padding: 12px; background: #0f172a; margin-left: 16px;">
+              <div style="color: #fbbf24; font-weight: bold; margin-bottom: 4px;">DatarangeSizeChart.tsx</div>
+              <div style="color: #94a3b8; font-size: 11px; margin-bottom: 4px;">
+                <span style="background: #1e40af; color: #bfdbfe; padding: 2px 6px; border-radius: 3px; font-size: 10px;">createResource</span>
+                fetch /api/v1/dataranges?datas3t_name=X
+              </div>
+              <div style="color: #94a3b8; font-size: 11px; margin-bottom: 8px;">Props: datas3tName, datarangeCount</div>
+              <div style="display: flex; gap: 4px; align-items: flex-end; height: 40px;">
+                <div style="background: rgba(59, 130, 246, 0.5); border: 1px solid #3b82f6; width: 20px; height: 30px; border-radius: 2px;"></div>
+                <div style="background: rgba(59, 130, 246, 0.5); border: 1px solid #3b82f6; width: 20px; height: 20px; border-radius: 2px;"></div>
+                <div style="background: rgba(59, 130, 246, 0.5); border: 1px solid #3b82f6; width: 20px; height: 35px; border-radius: 2px;"></div>
+                <div style="background: rgba(59, 130, 246, 0.5); border: 1px solid #3b82f6; width: 20px; height: 15px; border-radius: 2px;"></div>
+                <div style="background: rgba(59, 130, 246, 0.5); border: 1px solid #3b82f6; width: 20px; height: 25px; border-radius: 2px;"></div>
+                <div style="color: #94a3b8; font-size: 10px; margin-left: 8px;">← uPlot bar chart</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top: 20px;">
+  <h3>File Structure</h3>
+  <div class="mockup">
+    <div class="mockup-header">ui/ directory layout</div>
+    <div class="mockup-body" style="font-family: monospace; font-size: 13px; padding: 16px; line-height: 1.8;">
+      <div style="max-width: 500px; margin: 0 auto;">
+        <div style="color: #fbbf24;">ui/</div>
+        <div style="color: #94a3b8; padding-left: 16px;">├── package.json</div>
+        <div style="color: #94a3b8; padding-left: 16px;">├── tsconfig.json</div>
+        <div style="color: #94a3b8; padding-left: 16px;">├── vite.config.ts</div>
+        <div style="color: #94a3b8; padding-left: 16px;">├── index.html</div>
+        <div style="color: #fbbf24; padding-left: 16px;">└── src/</div>
+        <div style="color: #86efac; padding-left: 40px;">├── index.tsx</div>
+        <div style="color: #86efac; padding-left: 40px;">├── App.tsx</div>
+        <div style="color: #fbbf24; padding-left: 40px;">├── styles/</div>
+        <div style="color: #94a3b8; padding-left: 64px;">└── index.css <span style="color: #64748b;">(@import "tailwindcss")</span></div>
+        <div style="color: #fbbf24; padding-left: 40px;">├── api/</div>
+        <div style="color: #60a5fa; padding-left: 64px;">├── types.ts <span style="color: #64748b;">(mirrors Go JSON structs)</span></div>
+        <div style="color: #60a5fa; padding-left: 64px;">└── client.ts <span style="color: #64748b;">(fetch wrappers)</span></div>
+        <div style="color: #fbbf24; padding-left: 40px;">└── components/</div>
+        <div style="color: #a78bfa; padding-left: 64px;">├── Dashboard.tsx</div>
+        <div style="color: #34d399; padding-left: 64px;">├── Datas3tTable.tsx</div>
+        <div style="color: #fbbf24; padding-left: 64px;">├── DatarangeSizeChart.tsx</div>
+        <div style="color: #94a3b8; padding-left: 64px;">├── EmptyState.tsx</div>
+        <div style="color: #94a3b8; padding-left: 64px;">└── FormatBytes.ts</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top: 20px;">
+  <h3>Data Flow</h3>
+  <div class="mockup">
+    <div class="mockup-header">Async loading per component</div>
+    <div class="mockup-body" style="font-family: monospace; font-size: 13px; padding: 16px;">
+      <div style="max-width: 600px; margin: 0 auto;">
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+          <div style="background: #a78bfa; color: white; padding: 6px 12px; border-radius: 6px; font-size: 12px;">Dashboard mounts</div>
+          <div style="color: #888;">→</div>
+          <div style="background: #1e40af; color: #bfdbfe; padding: 6px 12px; border-radius: 6px; font-size: 12px;">GET /api/v1/datas3ts</div>
+          <div style="color: #888;">→</div>
+          <div style="background: #166534; color: #bbf7d0; padding: 6px 12px; border-radius: 6px; font-size: 12px;">Render table</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+          <div style="background: #fbbf24; color: #1e293b; padding: 6px 12px; border-radius: 6px; font-size: 12px;">Each chart mounts</div>
+          <div style="color: #888;">→</div>
+          <div style="background: #1e40af; color: #bfdbfe; padding: 6px 12px; border-radius: 6px; font-size: 12px;">GET /api/v1/dataranges?name=X</div>
+          <div style="color: #888;">→</div>
+          <div style="background: #166534; color: #bbf7d0; padding: 6px 12px; border-radius: 6px; font-size: 12px;">Render uPlot</div>
+        </div>
+        <div style="color: #94a3b8; font-size: 11px; margin-top: 12px; padding-left: 8px;">
+          ↳ Charts load independently — table appears instantly, charts fill in as data arrives
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

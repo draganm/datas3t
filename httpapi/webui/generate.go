@@ -1,3 +1,3 @@
 package webui
 
-//go:generate go tool templ generate
+//go:generate sh -c "cd ../../ui && npm ci && npm run build"

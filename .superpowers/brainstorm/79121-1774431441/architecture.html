@@ -1,0 +1,95 @@
+<h2>Current vs Proposed Architecture</h2>
+<p class="subtitle">How the web UI integrates with the Go backend</p>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">Current: Server-Side Rendered (templ)</div>
+    <div class="mockup-body" style="font-family: monospace; font-size: 13px; line-height: 1.6;">
+      <div style="padding: 12px;">
+        <div style="color: #888; margin-bottom: 8px;">Browser request → GET /</div>
+        <div style="background: #1e293b; color: #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+          <div style="color: #60a5fa; font-weight: bold; margin-bottom: 8px;">Go Server</div>
+          <div style="border: 1px solid #475569; border-radius: 4px; padding: 8px; margin-bottom: 8px;">
+            <div style="color: #fbbf24;">handler.go</div>
+            <div style="color: #94a3b8; font-size: 11px;">Calls server.ListDatas3ts()</div>
+            <div style="color: #94a3b8; font-size: 11px;">Calls server.ListDataranges() × N</div>
+          </div>
+          <div style="text-align: center; color: #64748b;">↓</div>
+          <div style="border: 1px solid #475569; border-radius: 4px; padding: 8px; margin-bottom: 8px;">
+            <div style="color: #fbbf24;">components.templ</div>
+            <div style="color: #94a3b8; font-size: 11px;">Server-side HTML + inline Chart.js</div>
+          </div>
+          <div style="text-align: center; color: #64748b;">↓</div>
+          <div style="background: #334155; border-radius: 4px; padding: 8px; text-align: center;">
+            <div style="color: #86efac;">Full HTML response</div>
+          </div>
+        </div>
+        <div style="color: #ef4444; font-size: 12px;">
+          ⚠ Blocks until ALL data fetched<br>
+          ⚠ No loading states<br>
+          ⚠ Chart.js 200KB CDN
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mockup">
+    <div class="mockup-header">Proposed: SolidJS SPA (embedded)</div>
+    <div class="mockup-body" style="font-family: monospace; font-size: 13px; line-height: 1.6;">
+      <div style="padding: 12px;">
+        <div style="color: #888; margin-bottom: 8px;">Browser request → GET /</div>
+        <div style="background: #1e293b; color: #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+          <div style="color: #60a5fa; font-weight: bold; margin-bottom: 8px;">Go Server</div>
+          <div style="border: 1px solid #475569; border-radius: 4px; padding: 8px; margin-bottom: 8px;">
+            <div style="color: #fbbf24;">handler.go (static file server)</div>
+            <div style="color: #94a3b8; font-size: 11px;">Serves go:embed dist/* assets</div>
+            <div style="color: #94a3b8; font-size: 11px;">SPA fallback → index.html</div>
+          </div>
+        </div>
+        <div style="background: #0f172a; color: #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+          <div style="color: #a78bfa; font-weight: bold; margin-bottom: 8px;">SolidJS SPA (in browser)</div>
+          <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+            <div style="flex:1; border: 1px solid #475569; border-radius: 4px; padding: 6px;">
+              <div style="color: #fbbf24; font-size: 11px;">Dashboard</div>
+              <div style="color: #94a3b8; font-size: 10px;">fetch /api/v1/datas3ts</div>
+            </div>
+            <div style="flex:1; border: 1px solid #475569; border-radius: 4px; padding: 6px;">
+              <div style="color: #fbbf24; font-size: 11px;">Charts (uPlot)</div>
+              <div style="color: #94a3b8; font-size: 10px;">fetch /api/v1/dataranges</div>
+            </div>
+          </div>
+        </div>
+        <div style="color: #22c55e; font-size: 12px;">
+          ✓ Instant page load, async data<br>
+          ✓ Loading states per component<br>
+          ✓ uPlot ~35KB bundled
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top: 24px;">
+  <h3>Build Pipeline</h3>
+  <div class="mockup">
+    <div class="mockup-header">go generate → npm build → go:embed → single binary</div>
+    <div class="mockup-body" style="font-family: monospace; font-size: 13px;">
+      <div style="padding: 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: center;">
+        <div style="background: #fef3c7; color: #92400e; padding: 8px 14px; border-radius: 6px; text-align: center;">
+          <div style="font-weight: bold;">ui/src/</div>
+          <div style="font-size: 11px;">SolidJS + Tailwind</div>
+        </div>
+        <div style="color: #888;">→ <span style="font-size: 11px;">vite build</span> →</div>
+        <div style="background: #dbeafe; color: #1e40af; padding: 8px 14px; border-radius: 6px; text-align: center;">
+          <div style="font-weight: bold;">httpapi/webui/dist/</div>
+          <div style="font-size: 11px;">Static assets</div>
+        </div>
+        <div style="color: #888;">→ <span style="font-size: 11px;">go:embed</span> →</div>
+        <div style="background: #dcfce7; color: #166534; padding: 8px 14px; border-radius: 6px; text-align: center;">
+          <div style="font-weight: bold;">datas3t binary</div>
+          <div style="font-size: 11px;">Single deployable</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
