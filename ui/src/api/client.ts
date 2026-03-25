@@ -1,4 +1,4 @@
-import type { Datas3tInfo, ListDatarangesResponse } from "./types";
+import type { BucketInfo, Datas3tInfo, ListDatarangesResponse } from "./types";
 
 export async function fetchDatas3ts(): Promise<Datas3tInfo[]> {
   const res = await fetch("/api/v1/datas3ts");
@@ -15,4 +15,25 @@ export async function fetchDataranges(
   if (!res.ok)
     throw new Error(`Failed to fetch dataranges: ${res.statusText}`);
   return res.json();
+}
+
+export async function fetchBuckets(): Promise<BucketInfo[]> {
+  const res = await fetch("/api/v1/buckets");
+  if (!res.ok) throw new Error(`Failed to fetch buckets: ${res.statusText}`);
+  return res.json();
+}
+
+export async function createDatas3t(
+  name: string,
+  bucket: string,
+): Promise<void> {
+  const res = await fetch("/api/v1/datas3ts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, bucket }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Failed to create datas3t: ${res.statusText}`);
+  }
 }

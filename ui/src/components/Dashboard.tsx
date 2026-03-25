@@ -1,25 +1,27 @@
-import { createResource, Show } from "solid-js";
-import { fetchDatas3ts } from "../api/client";
-import Datas3tTable from "./Datas3tTable";
+import { Show, type Resource } from "solid-js";
+import type { Datas3tInfo } from "../api/types";
+import Datas3tCards from "./Datas3tCards";
 import EmptyState from "./EmptyState";
 
-export default function Dashboard() {
-  const [datas3ts] = createResource(fetchDatas3ts);
+interface Props {
+  datas3ts: Resource<Datas3tInfo[]>;
+}
 
+export default function Dashboard(props: Props) {
   return (
     <>
-      <Show when={datas3ts.loading}>
+      <Show when={props.datas3ts.loading}>
         <div class="text-center py-8 text-gray-500">Loading...</div>
       </Show>
-      <Show when={datas3ts.error}>
+      <Show when={props.datas3ts.error}>
         <div class="text-center py-8 text-red-500">
-          Failed to load datas3ts: {datas3ts.error?.message}
+          Failed to load datas3ts: {props.datas3ts.error?.message}
         </div>
       </Show>
-      <Show when={datas3ts()}>
+      <Show when={props.datas3ts()}>
         {(data) => (
           <Show when={data().length > 0} fallback={<EmptyState />}>
-            <Datas3tTable datas3ts={data()} />
+            <Datas3tCards datas3ts={data()} />
           </Show>
         )}
       </Show>

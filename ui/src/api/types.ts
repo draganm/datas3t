@@ -20,3 +20,9 @@ export interface DatarangeInfo {
 export interface ListDatarangesResponse {
   dataranges: DatarangeInfo[];
 }
+
+export interface BucketInfo {
+  name: string;
+  endpoint: string;
+  bucket: string;
+}
