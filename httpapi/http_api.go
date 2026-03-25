@@ -18,8 +18,7 @@ func NewHTTPAPI(s *server.Server, log *slog.Logger) *http.ServeMux {
 	a := &api{s: s, log: log}
 
 	// Web UI routes
-	webHandler := webui.NewHandler(s, log)
-	mux.HandleFunc("GET /", webHandler.IndexPage)
+	mux.Handle("GET /", webui.NewHandler())
 
 	// API routes
 	mux.HandleFunc("GET /api/v1/buckets", a.listBuckets)

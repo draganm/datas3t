@@ -7,10 +7,7 @@ ADD . /build/
 # Create output directory
 RUN mkdir /out
 
-# Generate code (templ and sqlc)
-RUN go generate ./...
-
-# Build all binaries with CGO enabled and static linking
+# Build binary (all generated files are committed to git)
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod/ \
     CGO_ENABLED=1 go build -ldflags="-w -s -linkmode external -extldflags '-static'" -o /out/datas3t ./cmd/datas3t
